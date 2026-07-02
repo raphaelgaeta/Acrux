@@ -1,0 +1,78 @@
+
+# Gerenciador do Secret -> Sempre ter
+BuildSecret.cs
+
+
+
+# Build results
+bin/
+obj/
+[Bb]uild/
+[Ll]og/
+[Ll]ogs/
+
+
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Arquivos temporários
+*.tmp
+*.temp
+*.xlsx
+*.parquet
+*.json
+*.csv
+*.log
+*.cache
+*.bak
+*.exe
+*.orig
+
+# NuGet
+*.nupkg
+packages/
+project.lock.json
+project.assets.json
+*.nuget.props
+*.nuget.targets
+
+# Testes / coverage
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+coverage.cobertura.xml
+
+# Publicação
+publish/
+*.Publish.xml
+*.pubxml.user
+
+# ASP.NET / configurações locais
+appsettings.Development.json
+appsettings.Local.json
+secrets.json
+
+# Entity Framework / SQLite local
+*.db
+*.sqlite
+*.sqlite3
+
+# Arquivos do sistema operacional
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+
+
