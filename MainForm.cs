@@ -10,27 +10,17 @@ using Polars.CSharp;
 using Apache.Arrow;
 using Apache.Arrow.Ipc;
 namespace PolarsGridViewer;
-public static class DataFrameProvider
-{
-    public static async Task<DataFrame> GetDataFrameAsync(string parquetPath, CancellationToken cancellationToken = default)
-    {
-        if (!File.Exists(parquetPath))
-            throw new FileNotFoundException("Arquivo .parquet não encontrado.", parquetPath);
-
-        return await Task.Run(() => DataFrame.ReadParquet(parquetPath), cancellationToken);
-    }
-}
 
 public partial class MainForm : Form
 {
     private readonly DataGridView _grid;
-    private readonly TextBox _txtFilter;
     private readonly Button _btnLoad;
-    private readonly Button _btnClear;
+    private readonly Button _btnClearFilters;
     private readonly FormsLabel _lblInfo;
 
-    private DataTable? _originalTable;
-    private DataView? _dataView;
+    private string? _parquetPath;
+    private readonly Dictionary<string, ColumnFilter> _activeFilters = new();
+    private CancellationTokenSource? _filterCts;
 
     
 
@@ -57,35 +47,26 @@ public MainForm()
     };
     _btnLoad.Click += BtnLoad_Click;
 
-    _txtFilter = new TextBox
+    _btnClearFilters = new Button
     {
-        Width = 320,
-        Left = 155,
-        Top = 17,
-        PlaceholderText = "Digite um texto para filtrar..."
-    };
-    _txtFilter.TextChanged += TxtFilter_TextChanged;
-
-    _btnClear = new Button
-    {
-        Text = "Limpar filtro",
+        Text = "Limpar todos os filtros",
         AutoSize = true,
-        Left = 490,
-        Top = 15
+        Left = 165,
+        Top = 15,
+        Enabled = false
     };
-    _btnClear.Click += BtnClear_Click;
+    _btnClearFilters.Click += BtnClearFilters_Click;
 
     _lblInfo = new FormsLabel
     {
         AutoSize = true,
-        Left = 630,
+        Left = 340,
         Top = 20,
         Text = "Nenhum dado carregado"
     };
 
     topPanel.Controls.Add(_btnLoad);
-    topPanel.Controls.Add(_txtFilter);
-    topPanel.Controls.Add(_btnClear);
+    topPanel.Controls.Add(_btnClearFilters);
     topPanel.Controls.Add(_lblInfo);
 
     _grid = new DataGridView
@@ -129,11 +110,13 @@ public MainForm()
     // Fornece valor apenas para células visíveis
     _grid.CellValueNeeded += Grid_CellValueNeeded;
 
+    // Clique no cabeçalho abre o filtro da coluna (estilo Excel)
+    _grid.ColumnHeaderMouseClick += Grid_ColumnHeaderMouseClick;
+
     Controls.Add(_grid);
     Controls.Add(topPanel);
 }
 
-private object[]?[] _columnCache = System.Array.Empty<object[]?>();  // colunas materializadas sob demanda
 private int[]?      _filteredRows;      // índices das linhas filtradas (null = sem filtro)
 private int         _rowCount;
 
@@ -142,12 +125,9 @@ private void Grid_CellValueNeeded(object sender, DataGridViewCellValueEventArgs 
 {
     if (_batch is null) return;
 
-    // Materializa a coluna só na primeira vez que alguma célula dela fica visível
-    var column = _columnCache[e.ColumnIndex]
-        ??= PolarsTableAdapter.ExtractColumn(_batch.Column(e.ColumnIndex), _rowCount);
-
+    // Lê a célula direto do buffer Arrow (O(1), sem materializar a coluna)
     int dataRow = _filteredRows is null ? e.RowIndex : _filteredRows[e.RowIndex];
-    e.Value = column[dataRow];
+    e.Value = PolarsTableAdapter.GetCellValue(_batch.Column(e.ColumnIndex), dataRow);
 }
 private async void BtnLoad_Click(object? sender, EventArgs e)
 {
@@ -163,26 +143,51 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
     try
     {
         _btnLoad.Enabled = false;
+        _lblInfo.Text = "Lendo schema...";
+
+        // Só metadados: rápido mesmo em arquivos grandes
+        var columnNames = await DataFrameProvider.GetColumnNamesAsync(dialog.FileName);
+
+        string[] selectedColumns;
+        using (var selector = new ColumnSelectorForm(columnNames))
+        {
+            if (selector.ShowDialog(this) != DialogResult.OK)
+            {
+                _lblInfo.Text = "Carregamento cancelado";
+                return;
+            }
+            selectedColumns = selector.SelectedColumns;
+        }
+
         _lblInfo.Text = "Carregando...";
 
-        // Leitura do parquet e conversão para Arrow fora da thread de UI
+        // Coleta apenas as colunas escolhidas (projection pushdown) e
+        // converte para Arrow fora da thread de UI. O DataFrame do Polars
+        // é descartado após a conversão para não manter duas cópias.
         var df_arrow = await Task.Run(async () =>
         {
-            DataFrame df_ = await DataFrameProvider.GetDataFrameAsync(dialog.FileName);
+            using DataFrame df_ = await DataFrameProvider.GetDataFrameAsync(dialog.FileName, selectedColumns);
             return df_.ToArrow();
         });
+
+        // Esvazia o grid antes de descartar o batch anterior
+        // (Rows.Clear é O(1); RowCount = 0 removeria linha a linha)
+        _grid.Rows.Clear();
+        _grid.Columns.Clear();
+        _batch?.Dispose();
 
         _batch = df_arrow;
         _rowCount = df_arrow.Length;
         _filteredRows = null;
 
-        // Cache vazio: cada coluna só é extraída quando aparece na tela
-        _columnCache = new object[]?[df_arrow.ColumnCount];
+        // Novo arquivo: filtros anteriores não se aplicam
+        _filterCts?.Cancel();
+        _activeFilters.Clear();
+        _parquetPath = dialog.FileName;
+        _btnClearFilters.Enabled = false;
 
         // Popula o grid
         _grid.SuspendLayout();
-        _grid.RowCount = 0;
-        _grid.Columns.Clear();
 
         var gridColumns = df_arrow.Schema.FieldsList
             .Select(field => (DataGridViewColumn)new DataGridViewTextBoxColumn
@@ -217,38 +222,114 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
     }
 }
 
-    private void TxtFilter_TextChanged(object? sender, EventArgs e)
+    private async void Grid_ColumnHeaderMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
     {
-        ApplyFilter(_txtFilter.Text);
-    }
-
-    private void BtnClear_Click(object? sender, EventArgs e)
-    {
-        _txtFilter.Text = string.Empty;
-        ApplyFilter(string.Empty);
-    }
-
-    private void ApplyFilter(string text)
-    {
-        if (_dataView is null || _originalTable is null)
+        if (_batch is null || _parquetPath is null ||
+            e.Button != MouseButtons.Left || e.ColumnIndex < 0)
             return;
 
-        if (string.IsNullOrWhiteSpace(text))
+        var column = _grid.Columns[e.ColumnIndex].Name;   // Name é sempre o nome real da coluna
+
+        try
         {
-            _dataView.RowFilter = string.Empty;
-            UpdateInfo();
-            return;
+            _lblInfo.Text = $"Lendo valores de \"{column}\"...";
+
+            var (values, hasBlanks, capped) = await FilterEngine.GetDistinctValuesAsync(
+                _parquetPath, column, _activeFilters);
+
+            using var popup = new FilterPopupForm(
+                column, values, hasBlanks, capped,
+                _activeFilters.GetValueOrDefault(column));
+
+            // Posiciona o popup logo abaixo do cabeçalho clicado
+            var headerRect = _grid.GetCellDisplayRectangle(e.ColumnIndex, -1, false);
+            var screenPos = _grid.PointToScreen(new Point(headerRect.Left, headerRect.Bottom));
+            var screen = Screen.FromControl(this).WorkingArea;
+            screenPos.X = Math.Min(screenPos.X, screen.Right - popup.Width);
+            screenPos.Y = Math.Min(screenPos.Y, screen.Bottom - popup.Height);
+            popup.Location = screenPos;
+
+            if (popup.ShowDialog(this) != DialogResult.OK)
+            {
+                UpdateInfo();
+                return;
+            }
+
+            if (popup.ResultFilter is null)
+                _activeFilters.Remove(column);
+            else
+                _activeFilters[column] = popup.ResultFilter;
+
+            await ReapplyFiltersAsync();
         }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Erro ao filtrar coluna \"{column}\":\n\n{ex.Message}",
+                "Erro",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            UpdateInfo();
+        }
+    }
 
-        var escaped = EscapeLikeValue(text.Trim());
+    private async void BtnClearFilters_Click(object? sender, EventArgs e)
+    {
+        if (_activeFilters.Count == 0) return;
+        _activeFilters.Clear();
+        await ReapplyFiltersAsync();
+    }
 
-        var clauses = _originalTable.Columns
-            .Cast<DataColumn>()
-            .Select(c => $"CONVERT([{c.ColumnName}], 'System.String') LIKE '%{escaped}%'")
-            .ToArray();
+    /// <summary>
+    /// Recalcula os índices visíveis a partir dos filtros ativos (sempre
+    /// sobre o dado original) e atualiza o grid via indireção de linhas.
+    /// </summary>
+    private async Task ReapplyFiltersAsync()
+    {
+        if (_parquetPath is null) return;
 
-        _dataView.RowFilter = string.Join(" OR ", clauses);
-        UpdateInfo();
+        _filterCts?.Cancel();
+        var cts = _filterCts = new CancellationTokenSource();
+
+        _lblInfo.Text = "Aplicando filtros...";
+        try
+        {
+            var swQuery = System.Diagnostics.Stopwatch.StartNew();
+            var rows = await FilterEngine.GetVisibleRowsAsync(_parquetPath, _activeFilters, cts.Token);
+            swQuery.Stop();
+            if (cts.Token.IsCancellationRequested) return;   // outra interação assumiu
+
+            var swGrid = System.Diagnostics.Stopwatch.StartNew();
+            _filteredRows = rows;
+
+            // Diminuir RowCount remove linha a linha (lentíssimo com milhões
+            // de linhas); Rows.Clear() é um reset O(1) e recriar é em bloco.
+            _grid.Rows.Clear();
+            int newCount = rows?.Length ?? _rowCount;
+            if (newCount > 0)
+                _grid.RowCount = newCount;
+            swGrid.Stop();
+
+            UpdateHeaderIndicators();
+            _btnClearFilters.Enabled = _activeFilters.Count > 0;
+            UpdateInfo();
+            _lblInfo.Text += $"  [consulta {swQuery.ElapsedMilliseconds} ms | grid {swGrid.ElapsedMilliseconds} ms]";
+        }
+        catch (OperationCanceledException)
+        {
+            // consulta obsoleta, descartada
+        }
+    }
+
+    /// <summary>Sufixo ▼ no cabeçalho das colunas com filtro ativo.</summary>
+    private void UpdateHeaderIndicators()
+    {
+        foreach (DataGridViewColumn col in _grid.Columns)
+        {
+            var wanted = _activeFilters.ContainsKey(col.Name) ? col.Name + " ▼" : col.Name;
+            if (col.HeaderText != wanted)
+                col.HeaderText = wanted;
+        }
     }
 
 private void UpdateInfo()
@@ -262,13 +343,5 @@ private void UpdateInfo()
         : $"{total:N0} linhas × {colunas} colunas";
 }
 
-    private static string EscapeLikeValue(string value)
-    {
-        return value
-            .Replace("'", "''")
-            .Replace("[", "[[]")
-            .Replace("%", "[%]")
-            .Replace("*", "[*]");
-    }
 }
 

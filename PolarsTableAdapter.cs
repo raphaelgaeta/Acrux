@@ -13,7 +13,7 @@ public static class PolarsTableAdapter
     {
 
         DataTable table = new DataTable();
-
+        
         for (int i = 0; i < polarsDataFrame.Height; i++) {
             DataRow row = table.NewRow();
             for (int c = 0; c < polarsDataFrame.Width; c++) {
@@ -30,6 +30,7 @@ public static class PolarsTableAdapter
 public static DataTable RecordBatchToDataTableColumnar(RecordBatch batch)
 {
     var dt = new DataTable();
+    
     int rowCount = batch.Length;
 
     // 1. Cria colunas e pré-aloca linhas vazias
@@ -52,34 +53,29 @@ public static DataTable RecordBatchToDataTableColumnar(RecordBatch batch)
 
     dt.EndLoadData();
     return dt;
-}private static object? GetValue(IArrowArray array, int index)
+}
+
+
+// Acesso O(1) direto ao buffer Arrow, sem materializar a coluna.
+// É o que o CellValueNeeded usa: só as células visíveis são convertidas.
+public static object GetCellValue(IArrowArray array, int index)
 {
-    if (array.IsNull(index)) return null;
+    if (array.IsNull(index)) return DBNull.Value;
 
     return array switch
     {
-        Int32Array   a => a.GetStringValue(index),
-        Int64Array   a => a.GetStringValue(index),
-        FloatArray   a => a.GetStringValue(index),
-        DoubleArray  a => a.GetStringValue(index),
-        BooleanArray a => a.GetStringValue(index),
-        StringArray  a => a.GetStringValue(index),
-        Date32Array  a => a.GetDateTimeOffset(index).Value.DateTime.ToShortDateString(),
-        TimestampArray a => a.GetTimestamp(index),
-        _              => array.ToString()
+        StringArray a     => a.GetString(index),
+        StringViewArray a => a.GetString(index),
+        Int32Array a      => a.GetValue(index)!,
+        Int64Array a      => a.GetValue(index)!,
+        DoubleArray a     => a.GetValue(index)!,
+        FloatArray a      => a.GetValue(index)!,
+        BooleanArray a    => a.GetValue(index)!,
+        Date32Array a     => a.GetDateTimeOffset(index)!.Value.DateTime,
+        TimestampArray a  => (object?)a.GetTimestamp(index) ?? DBNull.Value,
+        _                 => array.ToString()!
     };
 }
-public static class DataFrameProvider
-{
-    public static async Task<DataFrame> GetDataFrameAsync(string parquetPath, CancellationToken cancellationToken = default)
-    {
-        if (!File.Exists(parquetPath))
-            throw new FileNotFoundException("Arquivo .parquet não encontrado.", parquetPath);
-
-        return await Task.Run(() => DataFrame.ReadParquet(parquetPath), cancellationToken);
-    }
-}
-
 
 public static  object[] ExtractColumn(IArrowArray array, int rowCount)
 {
