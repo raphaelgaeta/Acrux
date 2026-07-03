@@ -35,9 +35,11 @@ materialização). Este arquivo é a fonte de verdade.
 ## Arquitetura
 
 Fluxo: `OpenFileDialog` (parquet ou CSV) → CSV é convertido **uma única vez**
-para parquet temporário (`DataFrameProvider.EnsureParquetAsync`: detecção de
-separador na 1ª linha, `decimalComma` quando `;`, `ScanCsv` → `SinkParquet`
-streaming; temp em `%TEMP%\PolarsGridViewer`, apagado na troca/fechamento) —
+para parquet temporário (`DataFrameProvider.EnsureParquetAsync`: valida UTF-8
+por amostra e transcodifica cp1252/UTF-16 se preciso — ver armadilha abaixo —,
+detecção de separador na 1ª linha, `decimalComma` quando `;`, `ScanCsv` →
+`SinkParquet` streaming; temp em `%TEMP%\PolarsGridViewer`, apagado na
+troca/fechamento) —
 o app opera **somente sobre parquet** daí em diante, preservando o re-scan
 barato → `GetColumnNamesAsync` (só schema) → `ColumnSelectorForm` (usuário
 escolhe colunas) → `GetDataFrameAsync` (`Select` + `Collect`, projection
@@ -99,6 +101,12 @@ aceitar fonte lazy genérica).
 
 ### Polars.NET 0.6.0 (upgrade da 0.4.0 validado por probe em 2026-07)
 - `PolarsSchema.ToDictionary()` **foi removido** → usar `ToFrozenDictionary()`.
+- **O leitor CSV do Polars exige UTF-8 estrito**: CSV "ANSI" do Excel
+  (Windows-1252, o formato do "Salvar como CSV" sem UTF-8) falha com
+  "invalid utf-8 sequence". O enum `CsvEncoding` só tem `UTF8` e `LossyUTF8`,
+  e o lossy **troca acentos por �** (validado) — não usar. A solução é a
+  transcodificação streaming em `EnsureParquetAsync` (cp1252 sem BOM,
+  UTF-16 via BOM; exige o pacote `System.Text.Encoding.CodePages`).
 - **`Collect()` consome o handle do `LazyFrame`** (o 2º parâmetro bool do
   `Collect(Engine, bool)` permite reuso): acessar `Schema` ou qualquer membro
   do LazyFrame após o `Collect` dá `PolarsException` "Handle is invalid".
