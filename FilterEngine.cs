@@ -38,14 +38,15 @@ public static class FilterEngine
             if (predicate is not null)
                 lf = lf.Filter(predicate);
 
-            // +1 além do cap para detectar corte
+            // +1 além do cap para detectar corte. Engine.Streaming: ~2× mais
+            // rápida que Auto/InMemory neste formato Unique+Sort+Limit
+            // (benchmark no arquivo de 700col×5M; demais consultas empatam)
             using var df = lf
                 .Select(Col(column).Cast(DataType.String).Alias("v"))
                 .Unique()
                 .Sort("v")
                 .Limit((uint)DistinctCap + 1)
-                .Collect();
-
+                .Collect(Engine.Streaming);
             var batch = df.ToArrow();
             var array = batch.Column(0);
 
@@ -60,7 +61,6 @@ public static class FilterEngine
                 }
                 values.Add((string)PolarsTableAdapter.GetCellValue(array, i));
             }
-
             bool capped = values.Count > DistinctCap;
             if (capped)
                 values.RemoveRange(DistinctCap, values.Count - DistinctCap);
