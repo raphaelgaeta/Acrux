@@ -16,11 +16,18 @@ public partial class MainForm : Form
     private readonly DataGridView _grid;
     private readonly Button _btnLoad;
     private readonly Button _btnClearFilters;
+    private readonly Button _btnTerminal;
+    private readonly Button _btnRestore;
     private readonly FormsLabel _lblInfo;
+    private readonly SplitContainer _split;
+    private readonly ScriptTerminalPanel _terminal;
 
     private string? _parquetPath;
+    private string[] _selectedColumns = [];
+    private bool _scriptMode;
     private readonly Dictionary<string, ColumnFilter> _activeFilters = new();
     private CancellationTokenSource? _filterCts;
+    private CancellationTokenSource? _scriptCts;
 
     
 
@@ -57,16 +64,38 @@ public MainForm()
     };
     _btnClearFilters.Click += BtnClearFilters_Click;
 
+    _btnTerminal = new Button
+    {
+        Text = "Terminal C#",
+        AutoSize = true,
+        Left = 340,
+        Top = 15,
+        Enabled = false
+    };
+    _btnTerminal.Click += (_, _) => ToggleTerminal();
+
+    _btnRestore = new Button
+    {
+        Text = "Restaurar arquivo",
+        AutoSize = true,
+        Left = 460,
+        Top = 15,
+        Visible = false
+    };
+    _btnRestore.Click += BtnRestore_Click;
+
     _lblInfo = new FormsLabel
     {
         AutoSize = true,
-        Left = 340,
+        Left = 620,
         Top = 20,
         Text = "Nenhum dado carregado"
     };
 
     topPanel.Controls.Add(_btnLoad);
     topPanel.Controls.Add(_btnClearFilters);
+    topPanel.Controls.Add(_btnTerminal);
+    topPanel.Controls.Add(_btnRestore);
     topPanel.Controls.Add(_lblInfo);
 
     _grid = new DataGridView
@@ -113,8 +142,32 @@ public MainForm()
     // Clique no cabeçalho abre o filtro da coluna (estilo Excel)
     _grid.ColumnHeaderMouseClick += Grid_ColumnHeaderMouseClick;
 
-    Controls.Add(_grid);
+    _terminal = new ScriptTerminalPanel();
+    _terminal.ExecuteRequested += Terminal_ExecuteRequested;
+
+    _split = new SplitContainer
+    {
+        Dock = DockStyle.Fill,
+        Orientation = Orientation.Horizontal,
+        Panel2Collapsed = true,
+        SplitterWidth = 6
+    };
+    _split.Panel1.Controls.Add(_grid);
+    _split.Panel2.Controls.Add(_terminal);
+
+    Controls.Add(_split);
     Controls.Add(topPanel);
+}
+
+private void ToggleTerminal()
+{
+    _split.Panel2Collapsed = !_split.Panel2Collapsed;
+    if (!_split.Panel2Collapsed)
+    {
+        try { _split.SplitterDistance = Math.Max(120, _split.Height * 60 / 100); }
+        catch (InvalidOperationException) { /* janela pequena demais, fica no default */ }
+        _terminal.FocusInput();
+    }
 }
 
 private int[]?      _filteredRows;      // índices das linhas filtradas (null = sem filtro)
@@ -170,41 +223,18 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
             return df_.ToArrow();
         });
 
-        // Esvazia o grid antes de descartar o batch anterior
-        // (Rows.Clear é O(1); RowCount = 0 removeria linha a linha)
-        _grid.Rows.Clear();
-        _grid.Columns.Clear();
-        _batch?.Dispose();
-
-        _batch = df_arrow;
-        _rowCount = df_arrow.Length;
-        _filteredRows = null;
-
-        // Novo arquivo: filtros anteriores não se aplicam
+        // Novo arquivo: filtros e modo script anteriores não se aplicam
         _filterCts?.Cancel();
+        _scriptCts?.Cancel();
         _activeFilters.Clear();
         _parquetPath = dialog.FileName;
+        _selectedColumns = selectedColumns;
         _btnClearFilters.Enabled = false;
+        _scriptMode = false;
+        _btnRestore.Visible = false;
+        _btnTerminal.Enabled = true;
 
-        // Popula o grid
-        _grid.SuspendLayout();
-
-        var gridColumns = df_arrow.Schema.FieldsList
-            .Select(field => (DataGridViewColumn)new DataGridViewTextBoxColumn
-            {
-                Name       = field.Name,
-                HeaderText = field.Name,
-                Width      = 120,
-                SortMode   = DataGridViewColumnSortMode.Programmatic,
-                FillWeight = 1   // padrão é 100; a soma não pode passar de 65535
-            })
-            .ToArray();
-
-        _grid.Columns.AddRange(gridColumns);
-
-        _grid.RowCount = _rowCount;   // ← não popula células, só registra total
-        _grid.ResumeLayout();
-
+        DisplayBatch(df_arrow);
         UpdateInfo();
     }
     catch (Exception ex)
@@ -222,11 +252,159 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
     }
 }
 
+    /// <summary>
+    /// Troca o conteúdo do grid pelo batch dado (posse transferida para o form).
+    /// Caminho único de exibição: carga do arquivo, restauração e scripts.
+    /// </summary>
+    private void DisplayBatch(RecordBatch batch)
+    {
+        // Esvazia o grid antes de descartar o batch anterior
+        // (Rows.Clear é O(1); RowCount = 0 removeria linha a linha)
+        _grid.Rows.Clear();
+        _grid.Columns.Clear();
+        _batch?.Dispose();
+
+        _batch = batch;
+        _rowCount = batch.Length;
+        _filteredRows = null;
+
+        _grid.SuspendLayout();
+
+        var gridColumns = batch.Schema.FieldsList
+            .Select(field => (DataGridViewColumn)new DataGridViewTextBoxColumn
+            {
+                Name       = field.Name,
+                HeaderText = field.Name,
+                Width      = 120,
+                SortMode   = DataGridViewColumnSortMode.Programmatic,
+                FillWeight = 1   // padrão é 100; a soma não pode passar de 65535
+            })
+            .ToArray();
+
+        _grid.Columns.AddRange(gridColumns);
+
+        if (_rowCount > 0)
+            _grid.RowCount = _rowCount;   // ← não popula células, só registra total
+        _grid.ResumeLayout();
+    }
+
+    private async void Terminal_ExecuteRequested(string code, bool applyRowCap)
+    {
+        if (_parquetPath is null)
+        {
+            _terminal.AppendError("Abra um arquivo .parquet antes de executar scripts.");
+            return;
+        }
+
+        _scriptCts?.Cancel();
+        var cts = _scriptCts = new CancellationTokenSource();
+
+        _terminal.AppendCode(code);
+        _terminal.SetBusy(true);
+        _lblInfo.Text = "Executando script...";
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var batch = await ScriptHost.RunAsync(code, _parquetPath, applyRowCap, cts.Token);
+            if (cts.Token.IsCancellationRequested)
+            {
+                batch.Dispose();
+                return;
+            }
+
+            DisplayBatch(batch);
+            EnterScriptMode();
+
+            var capped = applyRowCap && batch.Length == ScriptHost.RowCap
+                ? $" — resultado limitado a {ScriptHost.RowCap:N0} linhas"
+                : "";
+            _terminal.AppendResult(
+                $"{batch.Length:N0} linhas × {batch.ColumnCount} colunas em {sw.ElapsedMilliseconds:N0} ms{capped}");
+            UpdateInfo();
+        }
+        catch (OperationCanceledException)
+        {
+            // execução obsoleta, descartada
+        }
+        catch (Microsoft.CodeAnalysis.Scripting.CompilationErrorException ex)
+        {
+            _terminal.AppendError(string.Join(Environment.NewLine, ex.Diagnostics));
+            UpdateInfo();
+        }
+        catch (Exception ex)
+        {
+            _terminal.AppendError(ex.Message);
+            UpdateInfo();
+        }
+        finally
+        {
+            _terminal.SetBusy(false);
+            _terminal.FocusInput();
+        }
+    }
+
+    /// <summary>
+    /// Grid mostrando resultado de script: os filtros de cabeçalho perdem a
+    /// premissa de que o grid espelha o arquivo, então ficam desativados até
+    /// "Restaurar arquivo" (decisão de desenho V1).
+    /// </summary>
+    private void EnterScriptMode()
+    {
+        _scriptMode = true;
+        _filterCts?.Cancel();
+        _activeFilters.Clear();
+        _btnClearFilters.Enabled = false;
+        _btnRestore.Visible = true;
+    }
+
+    private async void BtnRestore_Click(object? sender, EventArgs e)
+    {
+        if (_parquetPath is null) return;
+
+        try
+        {
+            _btnRestore.Enabled = false;
+            _lblInfo.Text = "Recarregando arquivo...";
+
+            var path = _parquetPath;
+            var columns = _selectedColumns;
+            var batch = await Task.Run(async () =>
+            {
+                using var df = await DataFrameProvider.GetDataFrameAsync(path, columns);
+                return df.ToArrow();
+            });
+
+            DisplayBatch(batch);
+            _scriptMode = false;
+            _btnRestore.Visible = false;
+            UpdateInfo();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Erro ao restaurar o arquivo:\n\n{ex.Message}",
+                "Erro",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            _lblInfo.Text = "Falha ao restaurar";
+        }
+        finally
+        {
+            _btnRestore.Enabled = true;
+        }
+    }
+
     private async void Grid_ColumnHeaderMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
     {
         if (_batch is null || _parquetPath is null ||
             e.Button != MouseButtons.Left || e.ColumnIndex < 0)
             return;
+
+        if (_scriptMode)
+        {
+            _lblInfo.Text = "Filtros de cabeçalho desativados no modo script — use \"Restaurar arquivo\"";
+            return;
+        }
 
         var column = _grid.Columns[e.ColumnIndex].Name;   // Name é sempre o nome real da coluna
 
@@ -286,7 +464,7 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
     /// </summary>
     private async Task ReapplyFiltersAsync()
     {
-        if (_parquetPath is null) return;
+        if (_parquetPath is null || _scriptMode) return;
 
         _filterCts?.Cancel();
         var cts = _filterCts = new CancellationTokenSource();
@@ -338,9 +516,11 @@ private void UpdateInfo()
     var exibindo  = _filteredRows?.Length ?? total;
     var colunas   = _batch?.ColumnCount ?? 0;
 
-    _lblInfo.Text = _filteredRows is not null
-        ? $"{exibindo:N0} de {total:N0} linhas × {colunas} colunas (filtrado)"
-        : $"{total:N0} linhas × {colunas} colunas";
+    _lblInfo.Text = _scriptMode
+        ? $"[script] {total:N0} linhas × {colunas} colunas"
+        : _filteredRows is not null
+            ? $"{exibindo:N0} de {total:N0} linhas × {colunas} colunas (filtrado)"
+            : $"{total:N0} linhas × {colunas} colunas";
 }
 
 }
