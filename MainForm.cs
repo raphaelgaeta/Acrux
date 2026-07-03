@@ -205,7 +205,8 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
 
         // CSV: conversão única para parquet temporário; o app opera sobre parquet
         _lblInfo.Text = isCsv ? "Convertendo CSV para parquet..." : "Lendo schema...";
-        (sourcePath, sourceIsTemp) = await DataFrameProvider.EnsureParquetAsync(dialog.FileName);
+        var progress = new Progress<string>(msg => _lblInfo.Text = msg);
+        (sourcePath, sourceIsTemp) = await DataFrameProvider.EnsureParquetAsync(dialog.FileName, progress);
 
         // Só metadados: rápido mesmo em arquivos grandes
         var columnNames = await DataFrameProvider.GetColumnNamesAsync(sourcePath);

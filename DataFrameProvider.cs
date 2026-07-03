@@ -18,8 +18,16 @@ public static class DataFrameProvider
     /// preservando o princípio de re-scan barato dos filtros e scripts.
     /// Retorna o caminho da fonte e se ela é temporária (chamador apaga).
     /// </summary>
+    // Amostras para a inferência de tipos do CSV. O padrão do Polars (100
+    // linhas) erra fácil (int que vira float na linha 200 → "could not parse");
+    // 10k custa ~centenas de ms em CSV de 100 MB (medido). Se ainda assim
+    // errar, re-tentamos com 1M — caro (~15 s/100 MB), mas só paga quem
+    // precisa. NÃO usar ulong.MaxValue: "capacity overflow" nativo (validado).
+    private const ulong InferSchemaRows = 10_000;
+    private const ulong InferSchemaRowsRetry = 1_000_000;
+
     public static async Task<(string ParquetPath, bool IsTemp)> EnsureParquetAsync(
-        string path, CancellationToken cancellationToken = default)
+        string path, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
     {
         if (!File.Exists(path))
             throw new FileNotFoundException("Arquivo não encontrado.", path);
@@ -40,14 +48,31 @@ public static class DataFrameProvider
             try
             {
                 var separator = DetectCsvSeparator(utf8Csv);
-                var temp = Path.Combine(
-                    tempDir, $"{Path.GetFileNameWithoutExtension(path)}_{Guid.NewGuid():N}.parquet");
+                var decimalComma = DetectDecimalComma(utf8Csv, separator);
+                var baseName = Path.GetFileNameWithoutExtension(path);
+                try
+                {
+                    return (ConvertCsv(utf8Csv, separator, decimalComma, InferSchemaRows, tempDir, baseName), true);
+                }
+                catch (Exception ex) when (
+                    ex.Message.Contains("could not parse") ||
+                    ex.Message.Contains("invalid primitive value"))
+                {
+                    // A amostra errou um tipo (ex.: coluna int que vira float
+                    // adiante) — re-tenta com amostra muito maior. O valor que
+                    // falhou vem na mensagem: se ele contradiz a convenção
+                    // decimal escolhida (ex.: `8.1` com decimalComma ligado),
+                    // inverte — senão a coluna viraria string SILENCIOSAMENTE.
+                    var offender = System.Text.RegularExpressions.Regex
+                        .Match(ex.Message, "could not parse `\"?([^`\"]+)\"?`").Groups[1].Value;
+                    if (decimalComma && System.Text.RegularExpressions.Regex.IsMatch(offender, @"^-?\d+\.\d+$"))
+                        decimalComma = false;
+                    else if (!decimalComma && System.Text.RegularExpressions.Regex.IsMatch(offender, @"^-?\d+,\d+$"))
+                        decimalComma = true;
 
-                // decimalComma acompanha o ';' (CSV Excel-BR usa "1.234,56")
-                using var lf = LazyFrame.ScanCsv(
-                    utf8Csv, separator: separator, decimalComma: separator == ';', tryParseDates: true);
-                lf.SinkParquet(temp);
-                return (temp, true);
+                    progress?.Report("Refinando tipos do CSV (amostra ampliada)...");
+                    return (ConvertCsv(utf8Csv, separator, decimalComma, InferSchemaRowsRetry, tempDir, baseName), true);
+                }
             }
             finally
             {
@@ -55,6 +80,57 @@ public static class DataFrameProvider
                     File.Delete(utf8Csv);
             }
         }, cancellationToken);
+    }
+
+    private static string ConvertCsv(
+        string utf8Csv, char separator, bool decimalComma, ulong inferRows, string tempDir, string baseName)
+    {
+        var temp = Path.Combine(tempDir, $"{baseName}_{Guid.NewGuid():N}.parquet");
+        try
+        {
+            using var lf = LazyFrame.ScanCsv(
+                utf8Csv, separator: separator, decimalComma: decimalComma,
+                tryParseDates: true, inferSchemaLength: inferRows);
+            lf.SinkParquet(temp);
+            return temp;
+        }
+        catch
+        {
+            // sink pode deixar parquet parcial/vazio para trás (o nativo tenta
+            // um "fallback to Eager Write" antes de lançar)
+            try { File.Delete(temp); } catch (IOException) { }
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Fareja a convenção decimal nos dados (não deduzir do separador: existe
+    /// CSV com `;` e ponto decimal — e com decimalComma errado a coluna vira
+    /// string SILENCIOSAMENTE). Conta campos "12,34" vs "12.34" em ~200 linhas;
+    /// maioria decide, empate cai na convenção do separador (`;` → vírgula).
+    /// Separador `,` nunca tem decimal vírgula sem aspas → sempre false.
+    /// </summary>
+    private static bool DetectDecimalComma(string path, char separator)
+    {
+        if (separator == ',')
+            return false;
+
+        int comma = 0, dot = 0;
+        foreach (var line in File.ReadLines(path).Skip(1).Take(200))
+        {
+            foreach (var field in line.Split(separator))
+            {
+                var f = field.Trim().Trim('"');
+                if (System.Text.RegularExpressions.Regex.IsMatch(f, @"^-?\d+,\d+$"))
+                    comma++;
+                else if (System.Text.RegularExpressions.Regex.IsMatch(f, @"^-?\d+\.\d+$"))
+                    dot++;
+            }
+        }
+
+        if (comma != dot)
+            return comma > dot;
+        return separator == ';';
     }
 
     /// <summary>

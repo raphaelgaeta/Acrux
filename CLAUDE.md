@@ -101,6 +101,16 @@ aceitar fonte lazy genérica).
 
 ### Polars.NET 0.6.0 (upgrade da 0.4.0 validado por probe em 2026-07)
 - `PolarsSchema.ToDictionary()` **foi removido** → usar `ToFrozenDictionary()`.
+- **Inferência de schema do CSV é por amostra** (default 100 linhas): int que
+  vira float depois da amostra → "could not parse `8.1` as dtype `i64`" no
+  sink. `inferSchemaLength: null` NÃO significa "arquivo todo" (cai no
+  default, diferente do Python) e `ulong.MaxValue` dá "capacity overflow"
+  nativo. Estratégia do app (EnsureParquetAsync): amostra de 10k (~235 ms em
+  104 MB) + retry com 1M (~15 s) só quando falha. `decimalComma` errado NÃO
+  dá erro — a coluna vira string silenciosamente; por isso a convenção
+  decimal é farejada nos dados e, no retry, o valor ofensor da mensagem de
+  erro pode invertê-la. O sink que falha imprime ruído no stderr
+  ("Attempting fallback to Eager Write") e deixa parquet vazio — apagar.
 - **O leitor CSV do Polars exige UTF-8 estrito**: CSV "ANSI" do Excel
   (Windows-1252, o formato do "Salvar como CSV" sem UTF-8) falha com
   "invalid utf-8 sequence". O enum `CsvEncoding` só tem `UTF8` e `LossyUTF8`,
