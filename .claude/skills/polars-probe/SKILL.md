@@ -72,6 +72,11 @@ aproveitável.
 - `WithRowIndex(nome)` e `ArgWhere(expr)` existem; índices como `UInt32Array`.
 - Strings → `StringViewArray`; `Unique()` preserva null (detecção de vazias).
 - `Sort(string)` e `Limit(uint)` funcionam com parâmetros default no LazyFrame.
+- `Collect()` **consome o handle** do LazyFrame (2º param bool = reuso);
+  membros acessados depois dão "Handle is invalid" — `Schema` antes de coletar.
+- `DataFrame.Lazy()` funciona e o plano sobrevive ao Dispose do DataFrame.
+- `ScanCsv(path, separator:, decimalComma:, tryParseDates:)` + `SinkParquet`
+  convertem CSV→parquet em streaming; vírgula decimal e datas validadas.
 - `DataType.String/Int64/...` existem como estáticos, fora do XML doc.
 - `Collect(Engine)`: enum `[Auto, InMemory, Streaming, Gpu]`; no Windows,
   `Gpu` cai para CPU em silêncio (sem DLL CUDA no processo, sem exceção) —

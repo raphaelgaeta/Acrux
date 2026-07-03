@@ -23,8 +23,10 @@ public partial class MainForm : Form
     private readonly ScriptTerminalPanel _terminal;
 
     private string? _parquetPath;
+    private string? _tempParquetPath;   // parquet convertido de CSV (apagar ao trocar/fechar)
     private string[] _selectedColumns = [];
     private bool _scriptMode;
+    private readonly List<string> _scriptChain = new();
     private readonly Dictionary<string, ColumnFilter> _activeFilters = new();
     private CancellationTokenSource? _filterCts;
     private CancellationTokenSource? _scriptCts;
@@ -144,6 +146,7 @@ public MainForm()
 
     _terminal = new ScriptTerminalPanel();
     _terminal.ExecuteRequested += Terminal_ExecuteRequested;
+    _terminal.UndoRequested += Terminal_UndoRequested;
 
     _split = new SplitContainer
     {
@@ -186,26 +189,33 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
 {
     using var dialog = new OpenFileDialog
     {
-        Title = "Selecione um arquivo Parquet",
-        Filter = "Arquivos Parquet (*.parquet)|*.parquet|Todos os arquivos (*.*)|*.*"
+        Title = "Selecione um arquivo Parquet ou CSV",
+        Filter = DataFrameProvider.OpenDialogFilter
     };
 
     if (dialog.ShowDialog(this) != DialogResult.OK)
         return;
 
+    var isCsv = dialog.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
+    string sourcePath = dialog.FileName;
+    bool sourceIsTemp = false;
     try
     {
         _btnLoad.Enabled = false;
-        _lblInfo.Text = "Lendo schema...";
+
+        // CSV: conversão única para parquet temporário; o app opera sobre parquet
+        _lblInfo.Text = isCsv ? "Convertendo CSV para parquet..." : "Lendo schema...";
+        (sourcePath, sourceIsTemp) = await DataFrameProvider.EnsureParquetAsync(dialog.FileName);
 
         // Só metadados: rápido mesmo em arquivos grandes
-        var columnNames = await DataFrameProvider.GetColumnNamesAsync(dialog.FileName);
+        var columnNames = await DataFrameProvider.GetColumnNamesAsync(sourcePath);
 
         string[] selectedColumns;
         using (var selector = new ColumnSelectorForm(columnNames))
         {
             if (selector.ShowDialog(this) != DialogResult.OK)
             {
+                if (sourceIsTemp) TryDeleteTemp(sourcePath);
                 _lblInfo.Text = "Carregamento cancelado";
                 return;
             }
@@ -219,7 +229,7 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
         // é descartado após a conversão para não manter duas cópias.
         var df_arrow = await Task.Run(async () =>
         {
-            using DataFrame df_ = await DataFrameProvider.GetDataFrameAsync(dialog.FileName, selectedColumns);
+            using DataFrame df_ = await DataFrameProvider.GetDataFrameAsync(sourcePath, selectedColumns);
             return df_.ToArrow();
         });
 
@@ -227,7 +237,14 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
         _filterCts?.Cancel();
         _scriptCts?.Cancel();
         _activeFilters.Clear();
-        _parquetPath = dialog.FileName;
+        _scriptChain.Clear();
+
+        // sucesso: o temp anterior (se houver) pode ir embora
+        if (_tempParquetPath is not null)
+            TryDeleteTemp(_tempParquetPath);
+        _tempParquetPath = sourceIsTemp ? sourcePath : null;
+
+        _parquetPath = sourcePath;
         _selectedColumns = selectedColumns;
         _btnClearFilters.Enabled = false;
         _scriptMode = false;
@@ -239,6 +256,9 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
     }
     catch (Exception ex)
     {
+        // falha: não deixa órfão o temp recém-convertido (se não virou o ativo)
+        if (sourceIsTemp && !ReferenceEquals(sourcePath, _tempParquetPath) && sourcePath != _tempParquetPath)
+            TryDeleteTemp(sourcePath);
         MessageBox.Show(
             $"Erro ao carregar DataFrame:\n\n{ex.Message}",
             "Erro",
@@ -250,6 +270,20 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
     {
         _btnLoad.Enabled = true;
     }
+}
+
+private static void TryDeleteTemp(string path)
+{
+    try { File.Delete(path); }
+    catch (IOException) { /* ainda em uso; fica para a limpeza do SO */ }
+    catch (UnauthorizedAccessException) { }
+}
+
+protected override void OnFormClosed(FormClosedEventArgs e)
+{
+    if (_tempParquetPath is not null)
+        TryDeleteTemp(_tempParquetPath);
+    base.OnFormClosed(e);
 }
 
     /// <summary>
@@ -296,21 +330,56 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
             return;
         }
 
+        _terminal.AppendCode(code);
+        await RunChainAsync(appendStep: code, applyRowCap);
+    }
+
+    private async void Terminal_UndoRequested()
+    {
+        if (_scriptChain.Count == 0) return;
+
+        _scriptChain.RemoveAt(_scriptChain.Count - 1);
+
+        if (_scriptChain.Count == 0)
+        {
+            _terminal.AppendResult("cadeia vazia — restaurando o arquivo original");
+            await RestoreFileAsync();
+            return;
+        }
+
+        await RunChainAsync(appendStep: null, _terminal.LimitEnabled);
+    }
+
+    /// <summary>
+    /// Replay da cadeia de scripts (mais um passo candidato, se houver) sobre
+    /// um scan fresco do arquivo. O passo só entra na cadeia se a execução
+    /// inteira der certo — um erro deixa a cadeia como estava.
+    /// </summary>
+    private async Task RunChainAsync(string? appendStep, bool applyRowCap)
+    {
+        if (_parquetPath is null) return;
+
         _scriptCts?.Cancel();
         var cts = _scriptCts = new CancellationTokenSource();
 
-        _terminal.AppendCode(code);
         _terminal.SetBusy(true);
         _lblInfo.Text = "Executando script...";
         var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            var batch = await ScriptHost.RunAsync(code, _parquetPath, applyRowCap, cts.Token);
+            var steps = new List<string>(_scriptChain);
+            if (appendStep is not null)
+                steps.Add(appendStep);
+
+            var batch = await ScriptHost.RunChainAsync(steps, _parquetPath, applyRowCap, cts.Token);
             if (cts.Token.IsCancellationRequested)
             {
                 batch.Dispose();
                 return;
             }
+
+            if (appendStep is not null)
+                _scriptChain.Add(appendStep);
 
             DisplayBatch(batch);
             EnterScriptMode();
@@ -319,7 +388,7 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
                 ? $" — resultado limitado a {ScriptHost.RowCap:N0} linhas"
                 : "";
             _terminal.AppendResult(
-                $"{batch.Length:N0} linhas × {batch.ColumnCount} colunas em {sw.ElapsedMilliseconds:N0} ms{capped}");
+                $"passo {_scriptChain.Count}: {batch.Length:N0} linhas × {batch.ColumnCount} colunas em {sw.ElapsedMilliseconds:N0} ms{capped}");
             UpdateInfo();
         }
         catch (OperationCanceledException)
@@ -358,6 +427,12 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
     }
 
     private async void BtnRestore_Click(object? sender, EventArgs e)
+    {
+        _scriptChain.Clear();
+        await RestoreFileAsync();
+    }
+
+    private async Task RestoreFileAsync()
     {
         if (_parquetPath is null) return;
 
@@ -517,7 +592,7 @@ private void UpdateInfo()
     var colunas   = _batch?.ColumnCount ?? 0;
 
     _lblInfo.Text = _scriptMode
-        ? $"[script] {total:N0} linhas × {colunas} colunas"
+        ? $"[script, passo {_scriptChain.Count}] {total:N0} linhas × {colunas} colunas"
         : _filteredRows is not null
             ? $"{exibindo:N0} de {total:N0} linhas × {colunas} colunas (filtrado)"
             : $"{total:N0} linhas × {colunas} colunas";

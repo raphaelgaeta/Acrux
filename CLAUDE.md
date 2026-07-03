@@ -34,10 +34,14 @@ materialização). Este arquivo é a fonte de verdade.
 
 ## Arquitetura
 
-Fluxo: `OpenFileDialog` → `DataFrameProvider.GetColumnNamesAsync` (só schema,
-via `LazyFrame.ScanParquet`) → `ColumnSelectorForm` (usuário escolhe colunas) →
-`GetDataFrameAsync` (`Select` + `Collect`, projection pushdown) → `ToArrow()` →
-grid virtual.
+Fluxo: `OpenFileDialog` (parquet ou CSV) → CSV é convertido **uma única vez**
+para parquet temporário (`DataFrameProvider.EnsureParquetAsync`: detecção de
+separador na 1ª linha, `decimalComma` quando `;`, `ScanCsv` → `SinkParquet`
+streaming; temp em `%TEMP%\PolarsGridViewer`, apagado na troca/fechamento) —
+o app opera **somente sobre parquet** daí em diante, preservando o re-scan
+barato → `GetColumnNamesAsync` (só schema) → `ColumnSelectorForm` (usuário
+escolhe colunas) → `GetDataFrameAsync` (`Select` + `Collect`, projection
+pushdown) → `ToArrow()` → grid virtual.
 
 Fluxo de filtro: clique no cabeçalho → `FilterEngine.GetDistinctValuesAsync`
 (semântica Excel: aplica os filtros das *outras* colunas antes de coletar os
@@ -45,14 +49,20 @@ distintos; dropdown limitado a `DistinctCap = 10.000`) → `FilterPopupForm` →
 `GetVisibleRowsAsync` (máscara booleana varrida em C#) → `_filteredRows`.
 Filtros concorrentes são cancelados via `_filterCts`.
 
-Terminal C# (botão "Terminal C#"): script Roslyn stateless com global `lf`
-(`ScanParquet` fresco) e imports de `Polars.CSharp` (+ estáticos `Col`/`Lit`);
-a última expressão deve ser `LazyFrame` ou `DataFrame` → `Collect` +
-`ToArrow` → `DisplayBatch` (caminho único de exibição, extraído do load).
-Com o limite ligado, aplica-se `Limit(ScriptHost.RowCap)` ao resultado lazy.
-Em modo script (`_scriptMode`) os filtros de cabeçalho ficam desativados —
-o grid não espelha mais o arquivo — até "Restaurar arquivo" (decisão V1;
-a V2 composável exigiria FilterEngine aceitar fonte lazy genérica).
+Terminal C# (botão "Terminal C#"): scripts Roslyn encadeados por **replay** —
+`MainForm._scriptChain` guarda os textos dos passos; cada execução re-roda a
+cadeia inteira sobre um `ScanParquet` fresco, com o passo N recebendo em `lf`
+o `LazyFrame` (plano lazy, não dados) do passo N-1. Nada é coletado no meio:
+a cadeia compõe um único plano, coletado só no fim (`Limit(ScriptHost.RowCap)`
+opcional) → `ToArrow` → `DisplayBatch` (caminho único de exibição). Passo que
+termina em `DataFrame` (ex.: `.Collect()`) volta ao lazy via `df.Lazy()`
+(validado; os dados dele ficam materializados no plano durante o replay).
+Um passo com erro não entra na cadeia. "Voltar um passo" remove o último e
+re-executa; "Restaurar arquivo" zera a cadeia. Imports do script:
+`Polars.CSharp` + estáticos (`Col`/`Lit`). Em modo script (`_scriptMode`) os
+filtros de cabeçalho ficam desativados — o grid não espelha mais o arquivo —
+até "Restaurar arquivo" (decisão V1; a V2 composável exigiria FilterEngine
+aceitar fonte lazy genérica).
 
 | Arquivo | Papel |
 |---|---|
@@ -89,6 +99,10 @@ a V2 composável exigiria FilterEngine aceitar fonte lazy genérica).
 
 ### Polars.NET 0.6.0 (upgrade da 0.4.0 validado por probe em 2026-07)
 - `PolarsSchema.ToDictionary()` **foi removido** → usar `ToFrozenDictionary()`.
+- **`Collect()` consome o handle do `LazyFrame`** (o 2º parâmetro bool do
+  `Collect(Engine, bool)` permite reuso): acessar `Schema` ou qualquer membro
+  do LazyFrame após o `Collect` dá `PolarsException` "Handle is invalid".
+  Ler o `Schema` antes de coletar.
 - `DataFrame.FromArrow(RecordBatch)` crashava na 0.4.0; na 0.6.0 **funciona**
   (validado). Ainda assim não usar para filtrar em memória (princípio 1).
 - `Expr.IsIn`: o estilo antigo `IsIn(Lit(Series.From(...)).Implode())`

@@ -38,51 +38,74 @@ public static class ScriptHost
         .WithImports("System", "System.Linq", "Polars.CSharp", "Polars.CSharp.Polars"));
 
     /// <summary>
-    /// Roda o script e devolve o resultado como RecordBatch (posse do chamador).
-    /// Lança <see cref="CompilationErrorException"/> para erro de sintaxe e a
+    /// Roda a cadeia de scripts por replay: o passo 1 recebe em <c>lf</c> o
+    /// scan do arquivo e cada passo seguinte recebe o LazyFrame resultante do
+    /// anterior. Nada é coletado no meio — os passos compõem um único plano
+    /// lazy, coletado só no final (com <see cref="RowCap"/> opcional).
+    /// Devolve o RecordBatch do resultado (posse do chamador). Lança
+    /// <see cref="CompilationErrorException"/> para erro de sintaxe e a
     /// exceção do Polars para erros de consulta (ex.: coluna inexistente).
     /// </summary>
-    public static async Task<RecordBatch> RunAsync(
-        string code, string parquetPath, bool applyRowCap, CancellationToken cancellationToken)
+    public static async Task<RecordBatch> RunChainAsync(
+        IReadOnlyList<string> steps, string parquetPath, bool applyRowCap, CancellationToken cancellationToken)
     {
+        if (steps.Count == 0)
+            throw new ArgumentException("Cadeia de scripts vazia.", nameof(steps));
+
         return await Task.Run(async () =>
         {
-            using var lf = LazyFrame.ScanParquet(parquetPath);
-            var state = await CSharpScript.RunAsync(
-                code, Options.Value, new ScriptGlobals { lf = lf }, typeof(ScriptGlobals), cancellationToken);
-
-            switch (state.ReturnValue)
+            var lf = LazyFrame.ScanParquet(parquetPath);
+            try
             {
-                case LazyFrame result:
-                    using (result)
+                for (int i = 0; i < steps.Count; i++)
+                {
+                    var state = await CSharpScript.RunAsync(
+                        steps[i], Options.Value, new ScriptGlobals { lf = lf }, typeof(ScriptGlobals), cancellationToken);
+
+                    var next = state.ReturnValue switch
                     {
-                        // validado por probe: coletar um LazyFrame derivado após o
-                        // Dispose da origem é seguro nesta versão
-                        var query = applyRowCap ? result.Limit(RowCap) : result;
-                        try
-                        {
-                            using var df = query.Collect();
-                            return df.ToArrow();
-                        }
-                        finally
-                        {
-                            if (!ReferenceEquals(query, result))
-                                query.Dispose();
-                        }
+                        LazyFrame result => result,
+                        // passo com .Collect(): volta ao lazy via df.Lazy() —
+                        // validado por probe que o plano sobrevive ao Dispose do
+                        // DataFrame; os dados coletados ficam materializados no
+                        // plano até o fim do replay (prefira passos lazy)
+                        DataFrame df => Relazify(df),
+                        null => throw new InvalidOperationException(
+                            $"O passo {i + 1} não retornou nada. Termine com uma expressão LazyFrame ou DataFrame (sem ponto e vírgula no final)."),
+                        var other => throw new InvalidOperationException(
+                            $"O passo {i + 1} deve terminar numa expressão LazyFrame ou DataFrame; recebi {other.GetType().Name}.")
+                    };
+
+                    // validado por probe: derivar/coletar após Dispose da origem é seguro
+                    if (!ReferenceEquals(next, lf))
+                    {
+                        lf.Dispose();
+                        lf = next;
                     }
+                }
 
-                case DataFrame df:
-                    using (df)
-                        return df.ToArrow();
-
-                case null:
-                    throw new InvalidOperationException(
-                        "O script não retornou nada. Termine com uma expressão LazyFrame ou DataFrame (sem ponto e vírgula no final).");
-
-                default:
-                    throw new InvalidOperationException(
-                        $"O script deve terminar numa expressão LazyFrame ou DataFrame; recebi {state.ReturnValue.GetType().Name}.");
+                var query = applyRowCap ? lf.Limit(RowCap) : lf;
+                try
+                {
+                    using var df = query.Collect();
+                    return df.ToArrow();
+                }
+                finally
+                {
+                    if (!ReferenceEquals(query, lf))
+                        query.Dispose();
+                }
+            }
+            finally
+            {
+                lf.Dispose();
             }
         }, cancellationToken);
+    }
+
+    private static LazyFrame Relazify(DataFrame df)
+    {
+        using (df)
+            return df.Lazy();
     }
 }

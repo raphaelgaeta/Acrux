@@ -13,10 +13,17 @@ public sealed class ScriptTerminalPanel : Panel
     private readonly RichTextBox _history;
     private readonly TextBox _input;
     private readonly Button _btnRun;
+    private readonly Button _btnUndo;
     private readonly CheckBox _chkLimit;
 
     /// <summary>(código, aplicar limite de linhas)</summary>
     public event Action<string, bool>? ExecuteRequested;
+
+    /// <summary>Desfazer o último passo da cadeia.</summary>
+    public event Action? UndoRequested;
+
+    /// <summary>Estado atual da caixa "Limitar linhas".</summary>
+    public bool LimitEnabled => _chkLimit.Checked;
 
     public ScriptTerminalPanel()
     {
@@ -30,7 +37,8 @@ public sealed class ScriptTerminalPanel : Panel
             BackColor = Color.White,
             Font = mono,
             BorderStyle = BorderStyle.None,
-            Text = "// Terminal C# Polars — `lf` é o LazyFrame do arquivo aberto.\n" +
+            Text = "// Terminal C# Polars — `lf` é o resultado do passo anterior\n" +
+                   "// (na 1ª execução, o LazyFrame do arquivo aberto).\n" +
                    "// Termine com uma expressão LazyFrame ou DataFrame. Ex.:\n" +
                    "//   lf.Filter(Col(\"valor\") > 1000).Sort(\"valor\", descending: true)\n\n"
         };
@@ -64,7 +72,11 @@ public sealed class ScriptTerminalPanel : Panel
             Padding = new Padding(0, 6, 0, 0)
         };
 
+        _btnUndo = new Button { Text = "Voltar um passo", AutoSize = true, Dock = DockStyle.Top };
+        _btnUndo.Click += (_, _) => UndoRequested?.Invoke();
+
         var side = new Panel { Dock = DockStyle.Right, Width = 175, Padding = new Padding(8, 0, 0, 0) };
+        side.Controls.Add(_btnUndo);
         side.Controls.Add(_chkLimit);
         side.Controls.Add(_btnRun);
 
@@ -81,6 +93,7 @@ public sealed class ScriptTerminalPanel : Panel
     public void SetBusy(bool busy)
     {
         _btnRun.Enabled = !busy;
+        _btnUndo.Enabled = !busy;
         _input.Enabled = !busy;
     }
 
