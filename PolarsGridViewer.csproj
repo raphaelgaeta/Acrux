@@ -1,20 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- Obrigatório para o terminal C# em publish single-file: o Roslyn
+         resolve referências via Assembly.Location, que só existe se os
+         assemblies forem extraídos para disco (dotnet/roslyn#50719) -->
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <GarbageCollectionAdaptationMode>1</GarbageCollectionAdaptationMode>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Apache.Arrow" Version="22.1.0" />
-    <PackageReference Include="Polars.NET" Version="0.4.0" />
-    <PackageReference Include="Polars.NET.Linq" Version="0.4.0" />
-    <PackageReference Include="Polars.NET.Native.win-x64" Version="0.4.0" />
+    <PackageReference Include="Apache.Arrow" Version="23.0.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.6.0" />
+    <PackageReference Include="Polars.NET" Version="0.6.0" />
+    <PackageReference Include="Polars.NET.Linq" Version="0.6.0" />
+    <PackageReference Include="Polars.NET.ML" Version="0.6.0" />
+    <PackageReference Include="Polars.NET.Native.win-x64" Version="0.6.0" />
 
   </ItemGroup>
 

@@ -15,7 +15,7 @@ public static class DataFrameProvider
         return await Task.Run(() =>
         {
             using var lf = LazyFrame.ScanParquet(parquetPath);
-            return lf.Schema.ToDictionary().Keys.ToArray();
+            return lf.Schema.ToFrozenDictionary().Keys.ToArray();
         }, cancellationToken);
     }
 
