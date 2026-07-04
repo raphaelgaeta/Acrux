@@ -8,16 +8,24 @@ with a grid that never loads the data it isn't showing.
 
 ## Why this exists
 
-This started at work. I kept receiving analytical exports that no spreadsheet
-tool would open — one of them had 700 columns and 5 million rows — and all I
-wanted was to *look* at the data: scroll it, filter a column, sum a group.
-Opening a notebook and typing `pl.read_parquet(...)` every time felt like
-overkill for what should be a double-click.
+When I started working with data, I got used to how fast Polars and pandas read
+large volumes in Python. For big database extracts — especially Parquet files —
+I fell into a habit: open the Python terminal, load the file, and write custom
+filters to pull out exactly the rows I needed. Doing the same thing in Excel was
+frustrating by comparison: rigid built-in functions, heavy processing, and the
+long wait just to *open* the file.
 
-So I built the tool I wanted: open the file, see the grid, click a header to
-filter like in Excel, and — when clicking isn't enough — drop into a terminal
-and query with real code. That reference file (8.4 GB of parquet) opens in
-seconds here, and filters answer in tens of milliseconds.
+But the terminal habit had its own gap. Sometimes I didn't want to write code —
+I just wanted to *see* the data: scroll it, click a column, filter it visually,
+without spinning up an interpreter for a quick look.
+
+When I found [Polars.NET](https://www.nuget.org/packages/Polars.NET) — the same
+Rust engine, now reachable from C# — I saw the read performance I was used to,
+and a way to close that gap: a simple, flexible visual environment for the work
+I do every day. Open the file, see the grid, click a header to filter like in
+Excel, and — when clicking isn't enough — drop into a terminal and query with
+real code. My reference file (8.4 GB of Parquet, 700 columns × 5 million rows)
+opens in seconds here, and filters answer in tens of milliseconds.
 
 ## The name
 
