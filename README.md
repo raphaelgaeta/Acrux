@@ -4,7 +4,7 @@ A Windows desktop viewer for Parquet and CSV files that are too big for Excel �
 hundreds of columns, millions of rows — built on [Polars.NET](https://www.nuget.org/packages/Polars.NET)
 with a grid that never loads the data it isn't showing.
 
-<!-- TODO: screenshot / GIF of the grid + filter + terminal here -->
+![Opening and filtering a large parquet file](assets/open_grid.gif)
 
 ## Why this exists
 
@@ -19,13 +19,12 @@ But the terminal habit had its own gap. Sometimes I didn't want to write code �
 I just wanted to *see* the data: scroll it, click a column, filter it visually,
 without spinning up an interpreter for a quick look.
 
-When I found [Polars.NET](https://www.nuget.org/packages/Polars.NET) — the same
+As soon as I found [Polars.NET](https://www.nuget.org/packages/Polars.NET) — the same
 Rust engine, now reachable from C# — I saw the read performance I was used to,
 and a way to close that gap: a simple, flexible visual environment for the work
 I do every day. Open the file, see the grid, click a header to filter like in
 Excel, and — when clicking isn't enough — drop into a terminal and query with
-real code. My reference file (8.4 GB of Parquet, 700 columns × 5 million rows)
-opens in seconds here, and filters answer in tens of milliseconds.
+real code.
 
 ## The name
 
@@ -57,6 +56,8 @@ under. Yes, the Polars mascot is a polar bear and polar bears live under the
   Each command chains on the previous result — applied steps, Power Query
   style — with one-click undo and restore. An optional 1M-row cap saves you
   from accidentally collecting the whole file.
+
+  ![Chaining Polars queries in the C# terminal](assets/script_terminal.gif)
 
 ## How it stays fast
 
@@ -90,6 +91,18 @@ WinForms doesn't support `PublishTrimmed`, and the terminal needs
 `IncludeAllContentForSelfExtract` (Roslyn resolves references through
 `Assembly.Location`, which is empty inside a pure single-file bundle).
 
+## Dependencies
+
+Everything is restored automatically by `dotnet build` — nothing to install by
+hand. The self-contained publish bundles the runtime too, so end users need
+nothing at all.
+
+| Package | Version | What it's for |
+|---|---|---|
+| [Polars.NET](https://www.nuget.org/packages/Polars.NET) (+ `Linq`, `ML`, `Native.win-x64`) | 0.6.0 | The data engine — Rust Polars, reachable from C# |
+| [Apache.Arrow](https://www.nuget.org/packages/Apache.Arrow) | 23.0.0 | The in-memory columnar format the grid reads cells from (Polars.NET 0.6.0 requires ≥ 23) |
+| [Microsoft.CodeAnalysis.CSharp.Scripting](https://www.nuget.org/packages/Microsoft.CodeAnalysis.CSharp.Scripting) | 5.6.0 | Roslyn — compiles the terminal's C# scripts at runtime |
+
 ## Under the hood
 
 | File | Role |
@@ -104,9 +117,7 @@ WinForms doesn't support `PublishTrimmed`, and the terminal needs
 | `ScriptTerminalPanel.cs` | Terminal UI (bottom dock) |
 
 The deeper docs live in [CLAUDE.md](CLAUDE.md): the design principles above in
-their strict form, and a catalog of Polars.NET pitfalls I hit along the way —
-a GPU engine flag that silently runs on CPU, schema handles consumed by
-`Collect()`, encodings that eat accents. I develop this with
+their strict form, and a catalog of Polars.NET pitfalls. I develop this with
 [Claude Code](https://claude.com/claude-code), and every API quirk in that
 file was validated in an isolated probe before the app relied on it.
 
