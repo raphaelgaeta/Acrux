@@ -90,3 +90,7 @@ traps) was validated empirically before being relied on.
 
 Personal project, maintained as time allows — issues and PRs are welcome, but
 there's no SLA. Windows-only by design (WinForms).
+
+## License
+
+[MIT](LICENSE)
