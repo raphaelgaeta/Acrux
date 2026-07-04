@@ -17,8 +17,6 @@
   <ItemGroup>
     <PackageReference Include="Apache.Arrow" Version="23.0.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.6.0" />
-    <!-- Windows-1252 para transcodificar CSV "ANSI" do Excel (não existe no .NET Core sem provider) -->
-    <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.9" />
     <PackageReference Include="Polars.NET" Version="0.6.0" />
     <PackageReference Include="Polars.NET.Linq" Version="0.6.0" />
     <PackageReference Include="Polars.NET.ML" Version="0.6.0" />

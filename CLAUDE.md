@@ -83,9 +83,6 @@ aceitar fonte lazy genérica).
    (`_batch`). Células são lidas por demanda em `CellValueNeeded` via
    `PolarsTableAdapter.GetCellValue`. NUNCA converter colunas inteiras em
    `object[]` — com milhões de linhas isso esgota a RAM e trava a máquina.
-   (`ToDataTable`, `RecordBatchToDataTableColumnar` e `ExtractColumn` em
-   `PolarsTableAdapter.cs` são resquícios do esqueleto que violam este
-   princípio — código morto, não usar.)
 2. **Indireção de índices**: filtros (e futura ordenação) produzem `int[]`
    de índices (`_filteredRows`), nunca cópias dos dados. Recalculados sempre
    a partir do original + conjunto de filtros ativos (`_activeFilters`),
@@ -116,7 +113,9 @@ aceitar fonte lazy genérica).
   "invalid utf-8 sequence". O enum `CsvEncoding` só tem `UTF8` e `LossyUTF8`,
   e o lossy **troca acentos por �** (validado) — não usar. A solução é a
   transcodificação streaming em `EnsureParquetAsync` (cp1252 sem BOM,
-  UTF-16 via BOM; exige o pacote `System.Text.Encoding.CodePages`).
+  UTF-16 via BOM). No net10.0 o `CodePagesEncodingProvider` já vem no
+  framework — o pacote `System.Text.Encoding.CodePages` é desnecessário
+  (aviso NU1510 se adicionado).
 - **`Collect()` consome o handle do `LazyFrame`** (o 2º parâmetro bool do
   `Collect(Engine, bool)` permite reuso): acessar `Schema` ou qualquer membro
   do LazyFrame após o `Collect` dá `PolarsException` "Handle is invalid".
