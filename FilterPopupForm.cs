@@ -6,8 +6,9 @@ using System.Windows.Forms;
 namespace PolarsGridViewer;
 
 /// <summary>
-/// Popup de filtro de coluna estilo Excel: busca, lista de valores com
-/// checkbox, "(Vazias)" para nulls e limpar filtro. Aberto sob o cabeçalho.
+/// Excel-style column filter popup: search box, checkable value list,
+/// "(Blanks)" for nulls and a clear-filter action. Positioned by the caller
+/// under the clicked header.
 /// </summary>
 public sealed class FilterPopupForm : Form
 {
@@ -27,10 +28,7 @@ public sealed class FilterPopupForm : Form
     private readonly bool _capped;
     private bool _rebuilding;
 
-    /// <summary>
-    /// Filtro resultante após OK: null significa "sem filtro nesta coluna"
-    /// (tudo marcado ou filtro limpo).
-    /// </summary>
+    /// <summary>Filter after OK; null means "no filter on this column".</summary>
     public ColumnFilter? ResultFilter { get; private set; }
 
     public FilterPopupForm(string column, string[] values, bool hasBlanks, bool capped, ColumnFilter? current)
@@ -39,14 +37,14 @@ public sealed class FilterPopupForm : Form
         _hasBlanks = hasBlanks;
         _capped = capped;
 
-        // Sem filtro ativo = tudo marcado (comportamento Excel)
+        // no active filter = everything checked (Excel behavior)
         _checked = current is null
             ? new HashSet<string>(values)
             : new HashSet<string>(values.Where(current.SelectedValues.Contains));
 
-        Text = $"Filtrar: {column}";
+        Text = $"Filter: {column}";
         FormBorderStyle = FormBorderStyle.FixedToolWindow;
-        StartPosition = FormStartPosition.Manual;   // posicionado pelo chamador
+        StartPosition = FormStartPosition.Manual;   // positioned by the caller
         ShowInTaskbar = false;
         Width = 340;
         Height = 460;
@@ -55,7 +53,7 @@ public sealed class FilterPopupForm : Form
         _txtSearch = new TextBox
         {
             Dock = DockStyle.Top,
-            PlaceholderText = "Buscar valor..."
+            PlaceholderText = "Search values..."
         };
         _txtSearch.TextChanged += (_, _) => RebuildList();
 
@@ -65,9 +63,9 @@ public sealed class FilterPopupForm : Form
             AutoSize = true,
             Padding = new Padding(0, 4, 0, 4)
         };
-        _btnCheckAll = new Button { Text = "Marcar todas", AutoSize = true };
+        _btnCheckAll = new Button { Text = "Check all", AutoSize = true };
         _btnCheckAll.Click += (_, _) => SetVisibleChecked(true);
-        _btnUncheckAll = new Button { Text = "Desmarcar todas", AutoSize = true };
+        _btnUncheckAll = new Button { Text = "Uncheck all", AutoSize = true };
         _btnUncheckAll.Click += (_, _) => SetVisibleChecked(false);
         topButtons.Controls.Add(_btnCheckAll);
         topButtons.Controls.Add(_btnUncheckAll);
@@ -83,7 +81,7 @@ public sealed class FilterPopupForm : Form
         _chkBlanks = new CheckBox
         {
             Dock = DockStyle.Bottom,
-            Text = "(Vazias)",
+            Text = "(Blanks)",
             Checked = current?.IncludeBlanks ?? true,
             Visible = hasBlanks,
             Height = 24
@@ -107,10 +105,10 @@ public sealed class FilterPopupForm : Form
         };
         _btnOk = new Button { Text = "OK", AutoSize = true, DialogResult = DialogResult.OK };
         _btnOk.Click += BtnOk_Click;
-        _btnCancel = new Button { Text = "Cancelar", AutoSize = true, DialogResult = DialogResult.Cancel };
+        _btnCancel = new Button { Text = "Cancel", AutoSize = true, DialogResult = DialogResult.Cancel };
         _btnClearFilter = new Button
         {
-            Text = "Limpar filtro",
+            Text = "Clear filter",
             AutoSize = true,
             DialogResult = DialogResult.OK,
             Enabled = current is not null
@@ -135,8 +133,8 @@ public sealed class FilterPopupForm : Form
 
     private void BtnOk_Click(object? sender, EventArgs e)
     {
-        // Tudo marcado = coluna sem filtro. Com a lista cortada no cap não
-        // dá para representar "todos os valores", então também vira sem filtro.
+        // Everything checked = no filter. A capped list can't represent
+        // "all values", so it also resolves to no filter.
         bool allChecked = _checked.Count == _allValues.Length &&
                           (!_hasBlanks || _chkBlanks.Checked);
 
@@ -159,7 +157,7 @@ public sealed class FilterPopupForm : Form
         else
             _checked.Remove(value);
 
-        // ItemCheck dispara antes da mudança ser aplicada
+        // ItemCheck fires before the change is applied
         BeginInvoke(UpdateStatus);
     }
 
@@ -184,7 +182,7 @@ public sealed class FilterPopupForm : Form
         UpdateStatus();
     }
 
-    /// <summary>Marca/desmarca apenas os itens visíveis (respeitando a busca).</summary>
+    /// <summary>Checks/unchecks only the visible (search-matched) items.</summary>
     private void SetVisibleChecked(bool value)
     {
         _rebuilding = true;
@@ -203,9 +201,9 @@ public sealed class FilterPopupForm : Form
 
     private void UpdateStatus()
     {
-        var text = $"{_checked.Count:N0} de {_allValues.Length:N0} valores marcados";
+        var text = $"{_checked.Count:N0} of {_allValues.Length:N0} values checked";
         if (_capped)
-            text += $"\nMostrando os primeiros {FilterEngine.DistinctCap:N0} valores";
+            text += $"\nShowing the first {FilterEngine.DistinctCap:N0} values";
         _lblStatus.Text = text;
 
         _btnOk.Enabled = _checked.Count > 0 || (_hasBlanks && _chkBlanks.Checked);

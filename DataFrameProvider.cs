@@ -4,33 +4,33 @@ namespace PolarsGridViewer;
 
 public static class DataFrameProvider
 {
-    /// <summary>Filtro do diálogo de abertura (parquet + csv).</summary>
+    /// <summary>Open-dialog filter (parquet + csv).</summary>
     public const string OpenDialogFilter =
-        "Arquivos de dados (*.parquet;*.csv)|*.parquet;*.csv|" +
-        "Arquivos Parquet (*.parquet)|*.parquet|" +
-        "Arquivos CSV (*.csv)|*.csv|" +
-        "Todos os arquivos (*.*)|*.*";
+        "Data files (*.parquet;*.csv)|*.parquet;*.csv|" +
+        "Parquet files (*.parquet)|*.parquet|" +
+        "CSV files (*.csv)|*.csv|" +
+        "All files (*.*)|*.*";
 
-    /// <summary>
-    /// Garante uma fonte parquet: .parquet passa direto; .csv é convertido uma
-    /// única vez para um parquet temporário (ScanCsv → SinkParquet, streaming,
-    /// sem materializar na RAM) e o app segue operando 100% sobre parquet —
-    /// preservando o princípio de re-scan barato dos filtros e scripts.
-    /// Retorna o caminho da fonte e se ela é temporária (chamador apaga).
-    /// </summary>
-    // Amostras para a inferência de tipos do CSV. O padrão do Polars (100
-    // linhas) erra fácil (int que vira float na linha 200 → "could not parse");
-    // 10k custa ~centenas de ms em CSV de 100 MB (medido). Se ainda assim
-    // errar, re-tentamos com 1M — caro (~15 s/100 MB), mas só paga quem
-    // precisa. NÃO usar ulong.MaxValue: "capacity overflow" nativo (validado).
+    // CSV type-inference samples. Polars' default (100 rows) misfires easily
+    // (an int column turning float at row 200 → "could not parse"); 10k costs
+    // ~hundreds of ms on a 100 MB CSV (measured). If it still misfires, retry
+    // with 1M — expensive (~15 s/100 MB) but only paid when needed.
+    // Do NOT use ulong.MaxValue: native "capacity overflow" (validated).
     private const ulong InferSchemaRows = 10_000;
     private const ulong InferSchemaRowsRetry = 1_000_000;
 
+    /// <summary>
+    /// Guarantees a parquet source: .parquet passes through; .csv is converted
+    /// once to a temporary parquet (ScanCsv → SinkParquet, streaming, RAM-
+    /// bounded) so the app keeps operating on parquet only — preserving the
+    /// cheap-rescan design of filters and scripts. Returns the source path and
+    /// whether it is temporary (caller deletes).
+    /// </summary>
     public static async Task<(string ParquetPath, bool IsTemp)> EnsureParquetAsync(
         string path, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
     {
         if (!File.Exists(path))
-            throw new FileNotFoundException("Arquivo não encontrado.", path);
+            throw new FileNotFoundException("File not found.", path);
 
         if (!path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
             return (path, false);
@@ -40,10 +40,10 @@ public static class DataFrameProvider
             var tempDir = Path.Combine(Path.GetTempPath(), "PolarsGridViewer");
             Directory.CreateDirectory(tempDir);
 
-            // O leitor CSV do Polars exige UTF-8. Excel salvo como "CSV" simples
-            // usa Windows-1252 (ç/ã viram "invalid utf-8 sequence"); o
-            // CsvEncoding.LossyUTF8 leria, mas destrói os acentos (validado por
-            // probe) — então transcodificamos para um CSV UTF-8 temporário.
+            // Polars' CSV reader requires strict UTF-8. Excel's plain "CSV"
+            // save uses Windows-1252 (ç/ã → "invalid utf-8 sequence"), and
+            // CsvEncoding.LossyUTF8 would read it but destroys accents
+            // (probe-validated) — so transcode to a temporary UTF-8 CSV instead.
             var utf8Csv = IsValidUtf8(path) ? path : TranscodeToUtf8(path, tempDir);
             try
             {
@@ -58,11 +58,11 @@ public static class DataFrameProvider
                     ex.Message.Contains("could not parse") ||
                     ex.Message.Contains("invalid primitive value"))
                 {
-                    // A amostra errou um tipo (ex.: coluna int que vira float
-                    // adiante) — re-tenta com amostra muito maior. O valor que
-                    // falhou vem na mensagem: se ele contradiz a convenção
-                    // decimal escolhida (ex.: `8.1` com decimalComma ligado),
-                    // inverte — senão a coluna viraria string SILENCIOSAMENTE.
+                    // The sample got a type wrong (e.g. an int column that turns
+                    // float later) — retry with a much larger sample. The failed
+                    // value comes in the message: if it contradicts the chosen
+                    // decimal convention (e.g. `8.1` with decimalComma on), flip
+                    // it — otherwise the column would silently become a string.
                     var offender = System.Text.RegularExpressions.Regex
                         .Match(ex.Message, "could not parse `\"?([^`\"]+)\"?`").Groups[1].Value;
                     if (decimalComma && System.Text.RegularExpressions.Regex.IsMatch(offender, @"^-?\d+\.\d+$"))
@@ -70,7 +70,7 @@ public static class DataFrameProvider
                     else if (!decimalComma && System.Text.RegularExpressions.Regex.IsMatch(offender, @"^-?\d+,\d+$"))
                         decimalComma = true;
 
-                    progress?.Report("Refinando tipos do CSV (amostra ampliada)...");
+                    progress?.Report("Refining CSV types (larger sample)...");
                     return (ConvertCsv(utf8Csv, separator, decimalComma, InferSchemaRowsRetry, tempDir, baseName), true);
                 }
             }
@@ -96,19 +96,35 @@ public static class DataFrameProvider
         }
         catch
         {
-            // sink pode deixar parquet parcial/vazio para trás (o nativo tenta
-            // um "fallback to Eager Write" antes de lançar)
+            // a failed sink can leave a partial/empty parquet behind (the
+            // native layer attempts an eager-write fallback before throwing)
             try { File.Delete(temp); } catch (IOException) { }
             throw;
         }
     }
 
     /// <summary>
-    /// Fareja a convenção decimal nos dados (não deduzir do separador: existe
-    /// CSV com `;` e ponto decimal — e com decimalComma errado a coluna vira
-    /// string SILENCIOSAMENTE). Conta campos "12,34" vs "12.34" em ~200 linhas;
-    /// maioria decide, empate cai na convenção do separador (`;` → vírgula).
-    /// Separador `,` nunca tem decimal vírgula sem aspas → sempre false.
+    /// Heuristic: the separator with the most hits on the header line. The
+    /// header is the cleanest line in the file — data fields may contain
+    /// separators inside quotes.
+    /// </summary>
+    private static char DetectCsvSeparator(string path)
+    {
+        var header = File.ReadLines(path).FirstOrDefault() ?? "";
+        var best = new[] { ';', ',', '\t' }
+            .Select(c => (Sep: c, Count: header.Count(ch => ch == c)))
+            .OrderByDescending(t => t.Count)
+            .First();
+        return best.Count > 0 ? best.Sep : ',';
+    }
+
+    /// <summary>
+    /// Sniffs the decimal convention from the data (don't infer it from the
+    /// separator: `;` files with dot decimals exist — and with the wrong
+    /// decimalComma the column becomes a string SILENTLY). Counts "12,34" vs
+    /// "12.34" fields over ~200 lines; majority wins, ties fall back to the
+    /// separator convention (`;` → comma). A `,` separator can't carry unquoted
+    /// decimal commas → always false.
     /// </summary>
     private static bool DetectDecimalComma(string path, char separator)
     {
@@ -134,9 +150,9 @@ public static class DataFrameProvider
     }
 
     /// <summary>
-    /// Valida uma amostra do arquivo como UTF-8 (4 MB bastam: o primeiro
-    /// acento em cp1252 já falha). Recua até 3 bytes no fim da amostra para
-    /// não condenar um caractere multi-byte cortado ao meio.
+    /// Validates a sample of the file as UTF-8 (4 MB is plenty: the first
+    /// cp1252 accent already fails). Backs off up to 3 bytes at the end of the
+    /// sample so a multi-byte char cut at the boundary isn't misjudged.
     /// </summary>
     private static bool IsValidUtf8(string path)
     {
@@ -148,9 +164,9 @@ public static class DataFrameProvider
         {
             int end = len;
             while (end > 0 && (buffer[end - 1] & 0b1100_0000) == 0b1000_0000)
-                end--;                        // continuações de um char cortado
+                end--;                        // continuation bytes of a cut char
             if (end > 0 && buffer[end - 1] >= 0b1100_0000)
-                end--;                        // o byte líder do char cortado
+                end--;                        // the cut char's lead byte
             len = end;
         }
 
@@ -158,8 +174,8 @@ public static class DataFrameProvider
     }
 
     /// <summary>
-    /// Reescreve o CSV como UTF-8, em streaming. BOM UTF-16 é honrado pelo
-    /// StreamReader; sem BOM, assume Windows-1252 (o "ANSI" do Excel pt-BR).
+    /// Rewrites the CSV as UTF-8, streaming. UTF-16 BOMs are honored by the
+    /// StreamReader; without a BOM, assumes Windows-1252 (Excel's "ANSI").
     /// </summary>
     private static string TranscodeToUtf8(string path, string tempDir)
     {
@@ -177,24 +193,13 @@ public static class DataFrameProvider
         return temp;
     }
 
-    /// <summary>Heurística: separador com mais ocorrências na 1ª linha.</summary>
-    private static char DetectCsvSeparator(string path)
-    {
-        var header = File.ReadLines(path).FirstOrDefault() ?? "";
-        var best = new[] { ';', ',', '\t' }
-            .Select(c => (Sep: c, Count: header.Count(ch => ch == c)))
-            .OrderByDescending(t => t.Count)
-            .First();
-        return best.Count > 0 ? best.Sep : ',';
-    }
-
     /// <summary>
-    /// Lê apenas o schema do parquet (metadados — não carrega dados).
+    /// Reads only the parquet schema (metadata — no data is loaded).
     /// </summary>
     public static async Task<string[]> GetColumnNamesAsync(string parquetPath, CancellationToken cancellationToken = default)
     {
         if (!File.Exists(parquetPath))
-            throw new FileNotFoundException("Arquivo .parquet não encontrado.", parquetPath);
+            throw new FileNotFoundException("Parquet file not found.", parquetPath);
 
         return await Task.Run(() =>
         {
@@ -204,13 +209,13 @@ public static class DataFrameProvider
     }
 
     /// <summary>
-    /// Coleta do parquet apenas as colunas pedidas (projection pushdown:
-    /// o Polars só lê do disco as colunas do Select).
+    /// Collects only the requested columns (projection pushdown: Polars reads
+    /// just the selected columns from disk).
     /// </summary>
     public static async Task<DataFrame> GetDataFrameAsync(string parquetPath, string[] columns, CancellationToken cancellationToken = default)
     {
         if (!File.Exists(parquetPath))
-            throw new FileNotFoundException("Arquivo .parquet não encontrado.", parquetPath);
+            throw new FileNotFoundException("Parquet file not found.", parquetPath);
 
         return await Task.Run(() =>
         {

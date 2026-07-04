@@ -4,8 +4,8 @@ namespace PolarsGridViewer;
 
 public static class PolarsTableAdapter
 {
-    // Acesso O(1) direto ao buffer Arrow, sem materializar a coluna.
-    // É o que o CellValueNeeded usa: só as células visíveis são convertidas.
+    // O(1) read straight from the Arrow buffer, no column materialization.
+    // This is what CellValueNeeded uses: only visible cells get converted.
     public static object GetCellValue(IArrowArray array, int index)
     {
         if (array.IsNull(index)) return DBNull.Value;

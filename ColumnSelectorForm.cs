@@ -6,8 +6,8 @@ using System.Windows.Forms;
 namespace PolarsGridViewer;
 
 /// <summary>
-/// Diálogo que lista as colunas do parquet para o usuário escolher
-/// quais serão coletadas e exibidas no grid.
+/// Dialog shown on open: pick which columns get collected and displayed.
+/// Only the selected columns are read from disk (projection pushdown).
 /// </summary>
 public sealed class ColumnSelectorForm : Form
 {
@@ -23,16 +23,16 @@ public sealed class ColumnSelectorForm : Form
     private readonly HashSet<string> _checked;
     private bool _rebuilding;
 
-    /// <summary>Colunas marcadas, na ordem original do parquet.</summary>
+    /// <summary>Checked columns, in the file's original order.</summary>
     public string[] SelectedColumns =>
         _allColumns.Where(c => _checked.Contains(c)).ToArray();
 
     public ColumnSelectorForm(string[] columns)
     {
         _allColumns = columns;
-        _checked = new HashSet<string>(columns);   // todas marcadas por padrão
+        _checked = new HashSet<string>(columns);   // all checked by default
 
-        Text = "Selecionar colunas";
+        Text = "Select columns";
         Width = 420;
         Height = 560;
         MinimumSize = new Size(320, 400);
@@ -45,7 +45,7 @@ public sealed class ColumnSelectorForm : Form
         _txtSearch = new TextBox
         {
             Dock = DockStyle.Top,
-            PlaceholderText = "Buscar coluna..."
+            PlaceholderText = "Search columns..."
         };
         _txtSearch.TextChanged += (_, _) => RebuildList();
 
@@ -63,9 +63,9 @@ public sealed class ColumnSelectorForm : Form
             AutoSize = true,
             Padding = new Padding(0, 4, 0, 4)
         };
-        _btnCheckAll = new Button { Text = "Marcar todas", AutoSize = true };
+        _btnCheckAll = new Button { Text = "Check all", AutoSize = true };
         _btnCheckAll.Click += (_, _) => SetVisibleChecked(true);
-        _btnUncheckAll = new Button { Text = "Desmarcar todas", AutoSize = true };
+        _btnUncheckAll = new Button { Text = "Uncheck all", AutoSize = true };
         _btnUncheckAll.Click += (_, _) => SetVisibleChecked(false);
         topButtons.Controls.Add(_btnCheckAll);
         topButtons.Controls.Add(_btnUncheckAll);
@@ -85,8 +85,8 @@ public sealed class ColumnSelectorForm : Form
             AutoSize = true,
             Padding = new Padding(0, 4, 0, 4)
         };
-        _btnOk = new Button { Text = "Carregar", AutoSize = true, DialogResult = DialogResult.OK };
-        _btnCancel = new Button { Text = "Cancelar", AutoSize = true, DialogResult = DialogResult.Cancel };
+        _btnOk = new Button { Text = "Load", AutoSize = true, DialogResult = DialogResult.OK };
+        _btnCancel = new Button { Text = "Cancel", AutoSize = true, DialogResult = DialogResult.Cancel };
         bottomButtons.Controls.Add(_btnOk);
         bottomButtons.Controls.Add(_btnCancel);
 
@@ -114,7 +114,7 @@ public sealed class ColumnSelectorForm : Form
         else
             _checked.Remove(name);
 
-        // ItemCheck dispara antes da mudança ser aplicada
+        // ItemCheck fires before the change is applied
         BeginInvoke(UpdateCount);
     }
 
@@ -139,7 +139,7 @@ public sealed class ColumnSelectorForm : Form
         UpdateCount();
     }
 
-    /// <summary>Marca/desmarca apenas os itens visíveis (respeitando a busca).</summary>
+    /// <summary>Checks/unchecks only the visible (search-matched) items.</summary>
     private void SetVisibleChecked(bool value)
     {
         _rebuilding = true;
@@ -158,7 +158,7 @@ public sealed class ColumnSelectorForm : Form
 
     private void UpdateCount()
     {
-        _lblCount.Text = $"{_checked.Count:N0} de {_allColumns.Length:N0} colunas selecionadas";
+        _lblCount.Text = $"{_checked.Count:N0} of {_allColumns.Length:N0} columns selected";
         _btnOk.Enabled = _checked.Count > 0;
     }
 }

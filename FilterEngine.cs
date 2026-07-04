@@ -4,7 +4,7 @@ using static Polars.CSharp.Polars;
 
 namespace PolarsGridViewer;
 
-/// <summary>Filtro ativo de uma coluna (estilo Excel: valores marcados + vazias).</summary>
+/// <summary>Active filter for one column (Excel-style: checked values + blanks).</summary>
 public sealed class ColumnFilter
 {
     public required HashSet<string> SelectedValues { get; init; }
@@ -12,17 +12,17 @@ public sealed class ColumnFilter
 }
 
 /// <summary>
-/// Consultas de filtro sobre o arquivo parquet via LazyFrame.
-/// O rescan usa projection pushdown (só lê as colunas do predicado),
-/// mantendo o uso de memória do app plano.
+/// Filter queries over the parquet file via LazyFrame. Rescans use projection
+/// pushdown (only the predicate's columns are read), keeping the app's memory
+/// flat regardless of file size.
 /// </summary>
 public static class FilterEngine
 {
     public const int DistinctCap = 10_000;
 
     /// <summary>
-    /// Valores distintos da coluna para o dropdown, já como string e ordenados.
-    /// Semântica Excel: aplica os filtros das OUTRAS colunas antes de coletar.
+    /// Distinct column values for the dropdown, stringified and sorted.
+    /// Excel semantics: filters on the OTHER columns apply before collecting.
     /// </summary>
     public static async Task<(string[] Values, bool HasBlanks, bool Capped)> GetDistinctValuesAsync(
         string parquetPath,
@@ -38,9 +38,9 @@ public static class FilterEngine
             if (predicate is not null)
                 lf = lf.Filter(predicate);
 
-            // +1 além do cap para detectar corte. Engine.Streaming: ~2× mais
-            // rápida que Auto/InMemory neste formato Unique+Sort+Limit
-            // (benchmark no arquivo de 700col×5M; demais consultas empatam)
+            // +1 past the cap to detect truncation. Engine.Streaming: ~2x
+            // faster than Auto/InMemory for this Unique+Sort+Limit shape
+            // (benchmarked on a 700col x 5M file; every other query ties)
             using var df = lf
                 .Select(Col(column).Cast(DataType.String).Alias("v"))
                 .Unique()
@@ -61,6 +61,7 @@ public static class FilterEngine
                 }
                 values.Add((string)PolarsTableAdapter.GetCellValue(array, i));
             }
+
             bool capped = values.Count > DistinctCap;
             if (capped)
                 values.RemoveRange(DistinctCap, values.Count - DistinctCap);
@@ -70,8 +71,8 @@ public static class FilterEngine
     }
 
     /// <summary>
-    /// Índices (0-based, na ordem do arquivo) das linhas que passam em TODOS
-    /// os filtros ativos. Retorna null quando não há filtro (grid mostra tudo).
+    /// Indices (0-based, file order) of the rows passing ALL active filters.
+    /// Returns null when no filter is active (grid shows everything).
     /// </summary>
     public static async Task<int[]?> GetVisibleRowsAsync(
         string parquetPath,
@@ -98,7 +99,7 @@ public static class FilterEngine
                 if ((i & 0xFFFF) == 0)
                     cancellationToken.ThrowIfCancellationRequested();
 
-                // null (linha vazia numa coluna filtrada sem "(Vazias)") conta como falso
+                // null (blank row in a filtered column without "(Blanks)") counts as false
                 if (mask.GetValue(i) == true)
                     indices.Add(i);
             }
@@ -108,8 +109,8 @@ public static class FilterEngine
     }
 
     /// <summary>
-    /// AND de todas as colunas filtradas; dentro de cada coluna,
-    /// IsIn(valores) OR IsNull() quando "(Vazias)" está marcado.
+    /// AND across the filtered columns; within each column,
+    /// IsIn(values) OR IsNull() when "(Blanks)" is checked.
     /// </summary>
     private static Expr? BuildPredicate(
         IReadOnlyDictionary<string, ColumnFilter> filters,

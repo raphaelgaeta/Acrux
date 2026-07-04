@@ -23,7 +23,7 @@ public partial class MainForm : Form
     private readonly ScriptTerminalPanel _terminal;
 
     private string? _parquetPath;
-    private string? _tempParquetPath;   // parquet convertido de CSV (apagar ao trocar/fechar)
+    private string? _tempParquetPath;   // parquet converted from CSV (delete on switch/close)
     private string[] _selectedColumns = [];
     private bool _scriptMode;
     private readonly List<string> _scriptChain = new();
@@ -31,11 +31,11 @@ public partial class MainForm : Form
     private CancellationTokenSource? _filterCts;
     private CancellationTokenSource? _scriptCts;
 
-    
+
 
 public MainForm()
 {
-    Text = "Visualizador Parquet ReadOnly";
+    Text = "Parquet Grid Viewer";
     Width = 1280;
     Height = 760;
     StartPosition = FormStartPosition.CenterScreen;
@@ -49,7 +49,7 @@ public MainForm()
 
     _btnLoad = new Button
     {
-        Text = "Abrir arquivo .parquet",
+        Text = "Open file",
         AutoSize = true,
         Left = 10,
         Top = 15
@@ -58,7 +58,7 @@ public MainForm()
 
     _btnClearFilters = new Button
     {
-        Text = "Limpar todos os filtros",
+        Text = "Clear all filters",
         AutoSize = true,
         Left = 165,
         Top = 15,
@@ -68,7 +68,7 @@ public MainForm()
 
     _btnTerminal = new Button
     {
-        Text = "Terminal C#",
+        Text = "C# terminal",
         AutoSize = true,
         Left = 340,
         Top = 15,
@@ -78,7 +78,7 @@ public MainForm()
 
     _btnRestore = new Button
     {
-        Text = "Restaurar arquivo",
+        Text = "Restore file",
         AutoSize = true,
         Left = 460,
         Top = 15,
@@ -91,7 +91,7 @@ public MainForm()
         AutoSize = true,
         Left = 620,
         Top = 20,
-        Text = "Nenhum dado carregado"
+        Text = "No data loaded"
     };
 
     topPanel.Controls.Add(_btnLoad);
@@ -113,35 +113,34 @@ public MainForm()
         BackgroundColor = Color.White,
         BorderStyle = BorderStyle.None,
 
-        // ── Otimizações ──────────────────────────────
-        VirtualMode = true,                          // só renderiza células visíveis
-        AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,      // ← CRÍTICO, evita recalculo constante
-        RowHeadersVisible = false,                   // remove coluna de índice (custo de render)
+        // ── virtual-mode tuning ──────────────────────────
+        VirtualMode = true,                          // only visible cells are rendered
+        AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,      // CRITICAL: avoids constant re-measuring
+        RowHeadersVisible = false,                   // index column costs render time
         RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing,
         ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
-        AllowUserToResizeRows = false,               // evita recalculo de altura
+        AllowUserToResizeRows = false,               // avoids per-row height recalc
     };
 
-    // DoubleBuffered via reflection (propriedade protegida)
+    // DoubleBuffered via reflection (protected property)
     typeof(DataGridView)
         .GetProperty("DoubleBuffered",
             System.Reflection.BindingFlags.NonPublic |
             System.Reflection.BindingFlags.Instance)!
         .SetValue(_grid, true);
 
-    // Altura fixa de linha — evita recalculo por linha
+    // fixed row height — avoids per-row measuring
     _grid.RowTemplate.Height = 24;
     _grid.RowTemplate.Resizable = DataGridViewTriState.False;
 
-    // Fonte
     _grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 10, FontStyle.Bold);
     _grid.DefaultCellStyle.Font = new Font("Segoe UI", 10);
     _grid.DefaultCellStyle.WrapMode = DataGridViewTriState.False;
 
-    // Fornece valor apenas para células visíveis
+    // supplies values only for visible cells
     _grid.CellValueNeeded += Grid_CellValueNeeded;
 
-    // Clique no cabeçalho abre o filtro da coluna (estilo Excel)
+    // header click opens the Excel-style column filter
     _grid.ColumnHeaderMouseClick += Grid_ColumnHeaderMouseClick;
 
     _terminal = new ScriptTerminalPanel();
@@ -168,12 +167,12 @@ private void ToggleTerminal()
     if (!_split.Panel2Collapsed)
     {
         try { _split.SplitterDistance = Math.Max(120, _split.Height * 60 / 100); }
-        catch (InvalidOperationException) { /* janela pequena demais, fica no default */ }
+        catch (InvalidOperationException) { /* window too small, keep the default */ }
         _terminal.FocusInput();
     }
 }
 
-private int[]?      _filteredRows;      // índices das linhas filtradas (null = sem filtro)
+private int[]?      _filteredRows;      // filtered row indices (null = no filter)
 private int         _rowCount;
 
 private RecordBatch? _batch;
@@ -181,7 +180,7 @@ private void Grid_CellValueNeeded(object sender, DataGridViewCellValueEventArgs 
 {
     if (_batch is null) return;
 
-    // Lê a célula direto do buffer Arrow (O(1), sem materializar a coluna)
+    // reads the cell straight from the Arrow buffer (O(1), no column materialization)
     int dataRow = _filteredRows is null ? e.RowIndex : _filteredRows[e.RowIndex];
     e.Value = PolarsTableAdapter.GetCellValue(_batch.Column(e.ColumnIndex), dataRow);
 }
@@ -189,7 +188,7 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
 {
     using var dialog = new OpenFileDialog
     {
-        Title = "Selecione um arquivo Parquet ou CSV",
+        Title = "Select a Parquet or CSV file",
         Filter = DataFrameProvider.OpenDialogFilter
     };
 
@@ -203,12 +202,12 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
     {
         _btnLoad.Enabled = false;
 
-        // CSV: conversão única para parquet temporário; o app opera sobre parquet
-        _lblInfo.Text = isCsv ? "Convertendo CSV para parquet..." : "Lendo schema...";
+        // CSV: one-time conversion to a temp parquet; the app operates on parquet
+        _lblInfo.Text = isCsv ? "Converting CSV to parquet..." : "Reading schema...";
         var progress = new Progress<string>(msg => _lblInfo.Text = msg);
         (sourcePath, sourceIsTemp) = await DataFrameProvider.EnsureParquetAsync(dialog.FileName, progress);
 
-        // Só metadados: rápido mesmo em arquivos grandes
+        // metadata only: fast even on huge files
         var columnNames = await DataFrameProvider.GetColumnNamesAsync(sourcePath);
 
         string[] selectedColumns;
@@ -217,30 +216,30 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
             if (selector.ShowDialog(this) != DialogResult.OK)
             {
                 if (sourceIsTemp) TryDeleteTemp(sourcePath);
-                _lblInfo.Text = "Carregamento cancelado";
+                _lblInfo.Text = "Load canceled";
                 return;
             }
             selectedColumns = selector.SelectedColumns;
         }
 
-        _lblInfo.Text = "Carregando...";
+        _lblInfo.Text = "Loading...";
 
-        // Coleta apenas as colunas escolhidas (projection pushdown) e
-        // converte para Arrow fora da thread de UI. O DataFrame do Polars
-        // é descartado após a conversão para não manter duas cópias.
+        // Collects only the chosen columns (projection pushdown) and converts
+        // to Arrow off the UI thread. The Polars DataFrame is discarded right
+        // after the conversion so we never hold two copies.
         var df_arrow = await Task.Run(async () =>
         {
             using DataFrame df_ = await DataFrameProvider.GetDataFrameAsync(sourcePath, selectedColumns);
             return df_.ToArrow();
         });
 
-        // Novo arquivo: filtros e modo script anteriores não se aplicam
+        // new file: previous filters and script mode no longer apply
         _filterCts?.Cancel();
         _scriptCts?.Cancel();
         _activeFilters.Clear();
         _scriptChain.Clear();
 
-        // sucesso: o temp anterior (se houver) pode ir embora
+        // success: the previous temp (if any) can go
         if (_tempParquetPath is not null)
             TryDeleteTemp(_tempParquetPath);
         _tempParquetPath = sourceIsTemp ? sourcePath : null;
@@ -257,15 +256,15 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
     }
     catch (Exception ex)
     {
-        // falha: não deixa órfão o temp recém-convertido (se não virou o ativo)
+        // failure: don't orphan the freshly converted temp (unless it became the active one)
         if (sourceIsTemp && !ReferenceEquals(sourcePath, _tempParquetPath) && sourcePath != _tempParquetPath)
             TryDeleteTemp(sourcePath);
         MessageBox.Show(
-            $"Erro ao carregar DataFrame:\n\n{ex.Message}",
-            "Erro",
+            $"Error loading DataFrame:\n\n{ex.Message}",
+            "Error",
             MessageBoxButtons.OK,
             MessageBoxIcon.Error);
-        _lblInfo.Text = "Falha ao carregar";
+        _lblInfo.Text = "Load failed";
     }
     finally
     {
@@ -276,7 +275,7 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
 private static void TryDeleteTemp(string path)
 {
     try { File.Delete(path); }
-    catch (IOException) { /* ainda em uso; fica para a limpeza do SO */ }
+    catch (IOException) { /* still in use; left for OS cleanup */ }
     catch (UnauthorizedAccessException) { }
 }
 
@@ -288,13 +287,13 @@ protected override void OnFormClosed(FormClosedEventArgs e)
 }
 
     /// <summary>
-    /// Troca o conteúdo do grid pelo batch dado (posse transferida para o form).
-    /// Caminho único de exibição: carga do arquivo, restauração e scripts.
+    /// Swaps the grid content for the given batch (ownership transfers to the
+    /// form). Single display path: file load, restore and scripts.
     /// </summary>
     private void DisplayBatch(RecordBatch batch)
     {
-        // Esvazia o grid antes de descartar o batch anterior
-        // (Rows.Clear é O(1); RowCount = 0 removeria linha a linha)
+        // Empty the grid before disposing the previous batch
+        // (Rows.Clear is O(1); RowCount = 0 would remove row by row)
         _grid.Rows.Clear();
         _grid.Columns.Clear();
         _batch?.Dispose();
@@ -312,14 +311,14 @@ protected override void OnFormClosed(FormClosedEventArgs e)
                 HeaderText = field.Name,
                 Width      = 120,
                 SortMode   = DataGridViewColumnSortMode.Programmatic,
-                FillWeight = 1   // padrão é 100; a soma não pode passar de 65535
+                FillWeight = 1   // default is 100 and the sum caps at 65535
             })
             .ToArray();
 
         _grid.Columns.AddRange(gridColumns);
 
         if (_rowCount > 0)
-            _grid.RowCount = _rowCount;   // ← não popula células, só registra total
+            _grid.RowCount = _rowCount;   // registers the total; no cells are populated
         _grid.ResumeLayout();
     }
 
@@ -327,7 +326,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
     {
         if (_parquetPath is null)
         {
-            _terminal.AppendError("Abra um arquivo .parquet antes de executar scripts.");
+            _terminal.AppendError("Open a file before running scripts.");
             return;
         }
 
@@ -343,7 +342,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
 
         if (_scriptChain.Count == 0)
         {
-            _terminal.AppendResult("cadeia vazia — restaurando o arquivo original");
+            _terminal.AppendResult("empty chain — restoring the original file");
             await RestoreFileAsync();
             return;
         }
@@ -352,9 +351,9 @@ protected override void OnFormClosed(FormClosedEventArgs e)
     }
 
     /// <summary>
-    /// Replay da cadeia de scripts (mais um passo candidato, se houver) sobre
-    /// um scan fresco do arquivo. O passo só entra na cadeia se a execução
-    /// inteira der certo — um erro deixa a cadeia como estava.
+    /// Replays the script chain (plus a candidate step, if any) over a fresh
+    /// scan of the file. The step only joins the chain if the whole run
+    /// succeeds — an error leaves the chain untouched.
     /// </summary>
     private async Task RunChainAsync(string? appendStep, bool applyRowCap)
     {
@@ -364,7 +363,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         var cts = _scriptCts = new CancellationTokenSource();
 
         _terminal.SetBusy(true);
-        _lblInfo.Text = "Executando script...";
+        _lblInfo.Text = "Running script...";
         var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
@@ -386,15 +385,15 @@ protected override void OnFormClosed(FormClosedEventArgs e)
             EnterScriptMode();
 
             var capped = applyRowCap && batch.Length == ScriptHost.RowCap
-                ? $" — resultado limitado a {ScriptHost.RowCap:N0} linhas"
+                ? $" — result capped at {ScriptHost.RowCap:N0} rows"
                 : "";
             _terminal.AppendResult(
-                $"passo {_scriptChain.Count}: {batch.Length:N0} linhas × {batch.ColumnCount} colunas em {sw.ElapsedMilliseconds:N0} ms{capped}");
+                $"step {_scriptChain.Count}: {batch.Length:N0} rows × {batch.ColumnCount} columns in {sw.ElapsedMilliseconds:N0} ms{capped}");
             UpdateInfo();
         }
         catch (OperationCanceledException)
         {
-            // execução obsoleta, descartada
+            // stale run, discarded
         }
         catch (Microsoft.CodeAnalysis.Scripting.CompilationErrorException ex)
         {
@@ -414,9 +413,9 @@ protected override void OnFormClosed(FormClosedEventArgs e)
     }
 
     /// <summary>
-    /// Grid mostrando resultado de script: os filtros de cabeçalho perdem a
-    /// premissa de que o grid espelha o arquivo, então ficam desativados até
-    /// "Restaurar arquivo" (decisão de desenho V1).
+    /// Grid showing a script result: header filters lose the premise that the
+    /// grid mirrors the file, so they stay disabled until "Restore file"
+    /// (V1 design decision).
     /// </summary>
     private void EnterScriptMode()
     {
@@ -440,7 +439,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         try
         {
             _btnRestore.Enabled = false;
-            _lblInfo.Text = "Recarregando arquivo...";
+            _lblInfo.Text = "Reloading file...";
 
             var path = _parquetPath;
             var columns = _selectedColumns;
@@ -458,11 +457,11 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         catch (Exception ex)
         {
             MessageBox.Show(
-                $"Erro ao restaurar o arquivo:\n\n{ex.Message}",
-                "Erro",
+                $"Error restoring the file:\n\n{ex.Message}",
+                "Error",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
-            _lblInfo.Text = "Falha ao restaurar";
+            _lblInfo.Text = "Restore failed";
         }
         finally
         {
@@ -478,15 +477,15 @@ protected override void OnFormClosed(FormClosedEventArgs e)
 
         if (_scriptMode)
         {
-            _lblInfo.Text = "Filtros de cabeçalho desativados no modo script — use \"Restaurar arquivo\"";
+            _lblInfo.Text = "Header filters are disabled in script mode — use \"Restore file\"";
             return;
         }
 
-        var column = _grid.Columns[e.ColumnIndex].Name;   // Name é sempre o nome real da coluna
+        var column = _grid.Columns[e.ColumnIndex].Name;   // Name is always the real column name
 
         try
         {
-            _lblInfo.Text = $"Lendo valores de \"{column}\"...";
+            _lblInfo.Text = $"Reading values of \"{column}\"...";
 
             var (values, hasBlanks, capped) = await FilterEngine.GetDistinctValuesAsync(
                 _parquetPath, column, _activeFilters);
@@ -495,7 +494,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
                 column, values, hasBlanks, capped,
                 _activeFilters.GetValueOrDefault(column));
 
-            // Posiciona o popup logo abaixo do cabeçalho clicado
+            // position the popup right under the clicked header
             var headerRect = _grid.GetCellDisplayRectangle(e.ColumnIndex, -1, false);
             var screenPos = _grid.PointToScreen(new Point(headerRect.Left, headerRect.Bottom));
             var screen = Screen.FromControl(this).WorkingArea;
@@ -519,8 +518,8 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         catch (Exception ex)
         {
             MessageBox.Show(
-                $"Erro ao filtrar coluna \"{column}\":\n\n{ex.Message}",
-                "Erro",
+                $"Error filtering column \"{column}\":\n\n{ex.Message}",
+                "Error",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
             UpdateInfo();
@@ -535,8 +534,8 @@ protected override void OnFormClosed(FormClosedEventArgs e)
     }
 
     /// <summary>
-    /// Recalcula os índices visíveis a partir dos filtros ativos (sempre
-    /// sobre o dado original) e atualiza o grid via indireção de linhas.
+    /// Recomputes the visible indices from the active filter set (always
+    /// against the original data) and updates the grid via row indirection.
     /// </summary>
     private async Task ReapplyFiltersAsync()
     {
@@ -545,19 +544,19 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         _filterCts?.Cancel();
         var cts = _filterCts = new CancellationTokenSource();
 
-        _lblInfo.Text = "Aplicando filtros...";
+        _lblInfo.Text = "Applying filters...";
         try
         {
             var swQuery = System.Diagnostics.Stopwatch.StartNew();
             var rows = await FilterEngine.GetVisibleRowsAsync(_parquetPath, _activeFilters, cts.Token);
             swQuery.Stop();
-            if (cts.Token.IsCancellationRequested) return;   // outra interação assumiu
+            if (cts.Token.IsCancellationRequested) return;   // another interaction took over
 
             var swGrid = System.Diagnostics.Stopwatch.StartNew();
             _filteredRows = rows;
 
-            // Diminuir RowCount remove linha a linha (lentíssimo com milhões
-            // de linhas); Rows.Clear() é um reset O(1) e recriar é em bloco.
+            // Shrinking RowCount removes rows one by one (minutes on millions
+            // of rows); Rows.Clear() is an O(1) reset and re-adding is bulk.
             _grid.Rows.Clear();
             int newCount = rows?.Length ?? _rowCount;
             if (newCount > 0)
@@ -567,15 +566,15 @@ protected override void OnFormClosed(FormClosedEventArgs e)
             UpdateHeaderIndicators();
             _btnClearFilters.Enabled = _activeFilters.Count > 0;
             UpdateInfo();
-            _lblInfo.Text += $"  [consulta {swQuery.ElapsedMilliseconds} ms | grid {swGrid.ElapsedMilliseconds} ms]";
+            _lblInfo.Text += $"  [query {swQuery.ElapsedMilliseconds} ms | grid {swGrid.ElapsedMilliseconds} ms]";
         }
         catch (OperationCanceledException)
         {
-            // consulta obsoleta, descartada
+            // stale query, discarded
         }
     }
 
-    /// <summary>Sufixo ▼ no cabeçalho das colunas com filtro ativo.</summary>
+    /// <summary>▼ suffix on the headers of columns with an active filter.</summary>
     private void UpdateHeaderIndicators()
     {
         foreach (DataGridViewColumn col in _grid.Columns)
@@ -588,16 +587,15 @@ protected override void OnFormClosed(FormClosedEventArgs e)
 
 private void UpdateInfo()
 {
-    var total     = _rowCount;
-    var exibindo  = _filteredRows?.Length ?? total;
-    var colunas   = _batch?.ColumnCount ?? 0;
+    var total   = _rowCount;
+    var showing = _filteredRows?.Length ?? total;
+    var columns = _batch?.ColumnCount ?? 0;
 
     _lblInfo.Text = _scriptMode
-        ? $"[script, passo {_scriptChain.Count}] {total:N0} linhas × {colunas} colunas"
+        ? $"[script, step {_scriptChain.Count}] {total:N0} rows × {columns} columns"
         : _filteredRows is not null
-            ? $"{exibindo:N0} de {total:N0} linhas × {colunas} colunas (filtrado)"
-            : $"{total:N0} linhas × {colunas} colunas";
+            ? $"{showing:N0} of {total:N0} rows × {columns} columns (filtered)"
+            : $"{total:N0} rows × {columns} columns";
 }
 
 }
-

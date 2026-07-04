@@ -4,9 +4,9 @@ using System.Windows.Forms;
 namespace PolarsGridViewer;
 
 /// <summary>
-/// Painel do terminal C# Polars (dock inferior do MainForm). Só UI: o
-/// MainForm assina <see cref="ExecuteRequested"/> e devolve o resultado
-/// via <see cref="AppendResult"/>/<see cref="AppendError"/>.
+/// C# Polars terminal panel (docked at the bottom of MainForm). UI only:
+/// MainForm subscribes to <see cref="ExecuteRequested"/> and reports back
+/// through <see cref="AppendResult"/>/<see cref="AppendError"/>.
 /// </summary>
 public sealed class ScriptTerminalPanel : Panel
 {
@@ -16,13 +16,13 @@ public sealed class ScriptTerminalPanel : Panel
     private readonly Button _btnUndo;
     private readonly CheckBox _chkLimit;
 
-    /// <summary>(código, aplicar limite de linhas)</summary>
+    /// <summary>(code, apply row cap)</summary>
     public event Action<string, bool>? ExecuteRequested;
 
-    /// <summary>Desfazer o último passo da cadeia.</summary>
+    /// <summary>Undo the last chain step.</summary>
     public event Action? UndoRequested;
 
-    /// <summary>Estado atual da caixa "Limitar linhas".</summary>
+    /// <summary>Current state of the row-cap checkbox.</summary>
     public bool LimitEnabled => _chkLimit.Checked;
 
     public ScriptTerminalPanel()
@@ -37,10 +37,10 @@ public sealed class ScriptTerminalPanel : Panel
             BackColor = Color.White,
             Font = mono,
             BorderStyle = BorderStyle.None,
-            Text = "// Terminal C# Polars — `lf` é o resultado do passo anterior\n" +
-                   "// (na 1ª execução, o LazyFrame do arquivo aberto).\n" +
-                   "// Termine com uma expressão LazyFrame ou DataFrame. Ex.:\n" +
-                   "//   lf.Filter(Col(\"valor\") > 1000).Sort(\"valor\", descending: true)\n\n"
+            Text = "// C# Polars terminal — `lf` is the previous step's result\n" +
+                   "// (on the first run, the LazyFrame of the open file).\n" +
+                   "// End with a LazyFrame or DataFrame expression. E.g.:\n" +
+                   "//   lf.Filter(Col(\"value\") > 1000).Sort(\"value\", descending: true)\n\n"
         };
 
         _input = new TextBox
@@ -60,19 +60,19 @@ public sealed class ScriptTerminalPanel : Panel
             }
         };
 
-        _btnRun = new Button { Text = "Executar (Ctrl+Enter)", AutoSize = true, Dock = DockStyle.Top };
+        _btnRun = new Button { Text = "Run (Ctrl+Enter)", AutoSize = true, Dock = DockStyle.Top };
         _btnRun.Click += (_, _) => RequestExecute();
 
         _chkLimit = new CheckBox
         {
-            Text = $"Limitar a {ScriptHost.RowCap:N0} linhas",
+            Text = $"Limit to {ScriptHost.RowCap:N0} rows",
             Checked = true,
             AutoSize = true,
             Dock = DockStyle.Top,
             Padding = new Padding(0, 6, 0, 0)
         };
 
-        _btnUndo = new Button { Text = "Voltar um passo", AutoSize = true, Dock = DockStyle.Top };
+        _btnUndo = new Button { Text = "Undo step", AutoSize = true, Dock = DockStyle.Top };
         _btnUndo.Click += (_, _) => UndoRequested?.Invoke();
 
         var side = new Panel { Dock = DockStyle.Right, Width = 175, Padding = new Padding(8, 0, 0, 0) };

@@ -51,7 +51,7 @@ distintos; dropdown limitado a `DistinctCap = 10.000`) → `FilterPopupForm` →
 `GetVisibleRowsAsync` (máscara booleana varrida em C#) → `_filteredRows`.
 Filtros concorrentes são cancelados via `_filterCts`.
 
-Terminal C# (botão "Terminal C#"): scripts Roslyn encadeados por **replay** —
+Terminal C# (botão "C# terminal"): scripts Roslyn encadeados por **replay** —
 `MainForm._scriptChain` guarda os textos dos passos; cada execução re-roda a
 cadeia inteira sobre um `ScanParquet` fresco, com o passo N recebendo em `lf`
 o `LazyFrame` (plano lazy, não dados) do passo N-1. Nada é coletado no meio:
@@ -59,11 +59,11 @@ a cadeia compõe um único plano, coletado só no fim (`Limit(ScriptHost.RowCap)
 opcional) → `ToArrow` → `DisplayBatch` (caminho único de exibição). Passo que
 termina em `DataFrame` (ex.: `.Collect()`) volta ao lazy via `df.Lazy()`
 (validado; os dados dele ficam materializados no plano durante o replay).
-Um passo com erro não entra na cadeia. "Voltar um passo" remove o último e
-re-executa; "Restaurar arquivo" zera a cadeia. Imports do script:
+Um passo com erro não entra na cadeia. "Undo step" remove o último e
+re-executa; "Restore file" zera a cadeia. Imports do script:
 `Polars.CSharp` + estáticos (`Col`/`Lit`). Em modo script (`_scriptMode`) os
 filtros de cabeçalho ficam desativados — o grid não espelha mais o arquivo —
-até "Restaurar arquivo" (decisão V1; a V2 composável exigiria FilterEngine
+até "Restore file" (decisão V1; a V2 composável exigiria FilterEngine
 aceitar fonte lazy genérica).
 
 | Arquivo | Papel |
@@ -153,8 +153,9 @@ aceitar fonte lazy genérica).
 
 ## Convenções
 
-- Comunicação com o usuário em **português (PT-BR)**; código e mensagens de
-  commit em inglês.
+- Comunicação com o usuário em **português (PT-BR)**; código, comentários,
+  strings de GUI e mensagens de commit em **inglês** (repo público).
+  Comentários enxutos: explicar o *porquê*/a restrição, nunca narrar a linha.
 - Trabalho e push na branch `master`. Confira o nome do remote com
   `git remote -v` antes do push (neste clone é `origin`; já se chamou
   `ParquetGridViewer` em outro checkout).
