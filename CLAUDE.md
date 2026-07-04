@@ -28,9 +28,9 @@ explícitas, mas não a do corlib interno) — validado por harness em 2026-07.
 O csproj traz tuning intencional de GC para desktop (workstation concurrent +
 DATAS via `GarbageCollectionAdaptationMode=1`) — não reverter sem motivo.
 
-O `README.md` descreve o esqueleto original do projeto e está desatualizado
-(fala em converter para `DataTable`, o que hoje viola o princípio de zero
-materialização). Este arquivo é a fonte de verdade.
+O `README.md` (em inglês, voltado ao público do repositório) resume features e
+arquitetura; este arquivo segue sendo a fonte de verdade técnica — ao mudar
+comportamento visível, atualizar os dois.
 
 ## Arquitetura
 
@@ -159,9 +159,6 @@ aceitar fonte lazy genérica).
 - Trabalho e push na branch `master`. Confira o nome do remote com
   `git remote -v` antes do push (neste clone é `origin`; já se chamou
   `ParquetGridViewer` em outro checkout).
-- `BuildSecret.cs` (na raiz, gitignored, pode estar ausente neste clone)
-  contém credenciais de uma integração SharePoint removida — nunca commitar
-  nem deletar sem confirmação.
 - Fluxo de trabalho do dono do projeto: ele valida o desenho antes do código.
   Para features novas, apresente a arquitetura/avaliação primeiro e aguarde o
   aval antes de implementar.
