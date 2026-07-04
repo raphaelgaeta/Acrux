@@ -9,7 +9,7 @@ using Polars.CSharp;
 
 using Apache.Arrow;
 using Apache.Arrow.Ipc;
-namespace PolarsGridViewer;
+namespace Acrux;
 
 public partial class MainForm : Form
 {
@@ -35,7 +35,7 @@ public partial class MainForm : Form
 
 public MainForm()
 {
-    Text = "Parquet Grid Viewer";
+    Text = "Acrux";
     Width = 1280;
     Height = 760;
     StartPosition = FormStartPosition.CenterScreen;

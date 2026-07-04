@@ -1,6 +1,6 @@
 using Polars.CSharp;
 
-namespace PolarsGridViewer;
+namespace Acrux;
 
 public static class DataFrameProvider
 {
@@ -37,7 +37,7 @@ public static class DataFrameProvider
 
         return await Task.Run(() =>
         {
-            var tempDir = Path.Combine(Path.GetTempPath(), "PolarsGridViewer");
+            var tempDir = Path.Combine(Path.GetTempPath(), "Acrux");
             Directory.CreateDirectory(tempDir);
 
             // Polars' CSV reader requires strict UTF-8. Excel's plain "CSV"

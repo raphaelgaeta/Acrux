@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 
-namespace PolarsGridViewer;
+namespace Acrux;
 
 /// <summary>
 /// Dialog shown on open: pick which columns get collected and displayed.

@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
 using Polars.CSharp;
 
-namespace PolarsGridViewer;
+namespace Acrux;
 
 /// <summary>
 /// Globals exposed to terminal scripts. Must be public so Roslyn can bind to it.

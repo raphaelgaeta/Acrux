@@ -2,7 +2,7 @@ using Apache.Arrow;
 using Polars.CSharp;
 using static Polars.CSharp.Polars;
 
-namespace PolarsGridViewer;
+namespace Acrux;
 
 /// <summary>Active filter for one column (Excel-style: checked values + blanks).</summary>
 public sealed class ColumnFilter

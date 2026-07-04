@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 
-namespace PolarsGridViewer;
+namespace Acrux;
 
 /// <summary>
 /// Excel-style column filter popup: search box, checkable value list,

@@ -1,6 +1,6 @@
 using System;
 using System.Windows.Forms;
-namespace PolarsGridViewer;
+namespace Acrux;
 internal static class Program
 {
     [STAThread]

@@ -1,7 +1,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace PolarsGridViewer;
+namespace Acrux;
 
 /// <summary>
 /// C# Polars terminal panel (docked at the bottom of MainForm). UI only:

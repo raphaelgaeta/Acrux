@@ -1,6 +1,6 @@
 using Apache.Arrow;
 
-namespace PolarsGridViewer;
+namespace Acrux;
 
 public static class PolarsTableAdapter
 {

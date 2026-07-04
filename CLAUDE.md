@@ -1,14 +1,16 @@
-# PolarsGridViewer
+# Acrux
 
-Visualizador WinForms de arquivos .parquet: Polars.NET como motor de dados,
-`DataGridView` em modo virtual como apresentação. Otimizado para arquivos
-grandes (655+ colunas, milhões de linhas).
+Visualizador WinForms de arquivos .parquet e .csv: Polars.NET como motor de
+dados, `DataGridView` em modo virtual como apresentação. Otimizado para
+arquivos grandes (655+ colunas, milhões de linhas). O nome vem de α Crucis,
+a estrela mais brilhante do Cruzeiro do Sul (o repositório já se chamou
+ParquetGridViewer e o projeto, PolarsGridViewer).
 
 ## Build e execução
 
 ```
-dotnet build PolarsGridViewer.csproj
-dotnet run --project PolarsGridViewer.csproj
+dotnet build Acrux.csproj
+dotnet run --project Acrux.csproj
 ```
 
 .NET 10 (net10.0-windows), WinForms. Pacotes: Polars.NET 0.6.0 (+ Native.win-x64,
@@ -38,7 +40,7 @@ Fluxo: `OpenFileDialog` (parquet ou CSV) → CSV é convertido **uma única vez*
 para parquet temporário (`DataFrameProvider.EnsureParquetAsync`: valida UTF-8
 por amostra e transcodifica cp1252/UTF-16 se preciso — ver armadilha abaixo —,
 detecção de separador na 1ª linha, `decimalComma` quando `;`, `ScanCsv` →
-`SinkParquet` streaming; temp em `%TEMP%\PolarsGridViewer`, apagado na
+`SinkParquet` streaming; temp em `%TEMP%\Acrux`, apagado na
 troca/fechamento) —
 o app opera **somente sobre parquet** daí em diante, preservando o re-scan
 barato → `GetColumnNamesAsync` (só schema) → `ColumnSelectorForm` (usuário
