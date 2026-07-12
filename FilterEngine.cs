@@ -109,6 +109,13 @@ public static class FilterEngine
     }
 
     /// <summary>
+    /// AND of all active filters, for callers outside the engine (the script
+    /// chain uses it to inherit the grid's visual state as its base).
+    /// </summary>
+    public static Expr? BuildPredicate(IReadOnlyDictionary<string, ColumnFilter> filters)
+        => BuildPredicate(filters, excludeColumn: null);
+
+    /// <summary>
     /// AND across the filtered columns; within each column,
     /// IsIn(values) OR IsNull() when "(Blanks)" is checked.
     /// </summary>

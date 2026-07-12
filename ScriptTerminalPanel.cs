@@ -37,8 +37,9 @@ public sealed class ScriptTerminalPanel : Panel
             BackColor = Color.White,
             Font = mono,
             BorderStyle = BorderStyle.None,
-            Text = "// C# Polars terminal — `lf` is the previous step's result\n" +
-                   "// (on the first run, the LazyFrame of the open file).\n" +
+            Text = "// C# Polars terminal — `lf` is the previous step's result.\n" +
+                   "// On the first run, `lf` is the file AS SHOWN in the grid:\n" +
+                   "// selected columns and active header filters included.\n" +
                    "// End with a LazyFrame or DataFrame expression. E.g.:\n" +
                    "//   lf.Filter(Col(\"value\") > 1000).Sort(\"value\", descending: true)\n\n"
         };

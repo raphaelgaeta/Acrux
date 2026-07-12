@@ -45,8 +45,9 @@ under. Yes, the Polars mascot is a polar bear and polar bears live under the
   read from disk.
 - **Filters like Excel.** Click a header, get the distinct values (blanks
   included), check what you want. Filters compose across columns.
-- **Has a C# terminal.** The full Polars expression API against the open file,
-  with `lf` as your LazyFrame:
+- **Has a C# terminal.** The full Polars expression API, with `lf` as your
+  LazyFrame — starting from exactly what you see: column selection and active
+  header filters are inherited by the script as an implicit first step:
 
   ```csharp
   lf.Filter(Col("city") == "São Paulo")

@@ -56,7 +56,14 @@ Filtros concorrentes são cancelados via `_filterCts`.
 Terminal C# (botão "C# terminal"): scripts Roslyn encadeados por **replay** —
 `MainForm._scriptChain` guarda os textos dos passos; cada execução re-roda a
 cadeia inteira sobre um `ScanParquet` fresco, com o passo N recebendo em `lf`
-o `LazyFrame` (plano lazy, não dados) do passo N-1. Nada é coletado no meio:
+o `LazyFrame` (plano lazy, não dados) do passo N-1. O passo 1 recebe o arquivo
+**como exibido no grid**: seleção de colunas + filtros ativos aplicados como
+"passo 0" implícito (`FilterEngine.BuildPredicate` público é reutilizado).
+Esse estado visual é **congelado no 1º passo** (`_chainBaseColumns`/
+`_chainBaseFilters`) — obrigatório, pois o replay re-executa tudo a cada
+comando e a base não pode derivar; "Restore file"/novo arquivo zeram a base.
+Os `_activeFilters` NÃO são mais limpos ao entrar em modo script: sobrevivem
+como base da cadeia e são **reaplicados ao restaurar**. Nada é coletado no meio:
 a cadeia compõe um único plano, coletado só no fim (`Limit(ScriptHost.RowCap)`
 opcional) → `ToArrow` → `DisplayBatch` (caminho único de exibição). Passo que
 termina em `DataFrame` (ex.: `.Collect()`) volta ao lazy via `df.Lazy()`

@@ -27,6 +27,10 @@ public partial class MainForm : Form
     private string[] _selectedColumns = [];
     private bool _scriptMode;
     private readonly List<string> _scriptChain = new();
+    // grid state frozen when the chain starts: the replay re-runs every step,
+    // so the base must not drift while the chain is alive
+    private string[]? _chainBaseColumns;
+    private Dictionary<string, ColumnFilter>? _chainBaseFilters;
     private readonly Dictionary<string, ColumnFilter> _activeFilters = new();
     private CancellationTokenSource? _filterCts;
     private CancellationTokenSource? _scriptCts;
@@ -238,6 +242,8 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
         _scriptCts?.Cancel();
         _activeFilters.Clear();
         _scriptChain.Clear();
+        _chainBaseColumns = null;
+        _chainBaseFilters = null;
 
         // success: the previous temp (if any) can go
         if (_tempParquetPath is not null)
@@ -371,7 +377,15 @@ protected override void OnFormClosed(FormClosedEventArgs e)
             if (appendStep is not null)
                 steps.Add(appendStep);
 
-            var batch = await ScriptHost.RunChainAsync(steps, _parquetPath, applyRowCap, cts.Token);
+            // chain start: freeze the grid's visual state as the chain base
+            var startingChain = _scriptChain.Count == 0;
+            var baseColumns = startingChain ? _selectedColumns : _chainBaseColumns;
+            var baseFilters = startingChain
+                ? new Dictionary<string, ColumnFilter>(_activeFilters)
+                : _chainBaseFilters;
+
+            var batch = await ScriptHost.RunChainAsync(
+                steps, _parquetPath, baseColumns, baseFilters, applyRowCap, cts.Token);
             if (cts.Token.IsCancellationRequested)
             {
                 batch.Dispose();
@@ -379,16 +393,26 @@ protected override void OnFormClosed(FormClosedEventArgs e)
             }
 
             if (appendStep is not null)
+            {
                 _scriptChain.Add(appendStep);
+                if (startingChain)
+                {
+                    _chainBaseColumns = baseColumns;
+                    _chainBaseFilters = baseFilters;
+                }
+            }
 
             DisplayBatch(batch);
             EnterScriptMode();
 
+            var inherited = startingChain && baseFilters is { Count: > 0 }
+                ? $" — inheriting {baseFilters.Count} active filter(s)"
+                : "";
             var capped = applyRowCap && batch.Length == ScriptHost.RowCap
                 ? $" — result capped at {ScriptHost.RowCap:N0} rows"
                 : "";
             _terminal.AppendResult(
-                $"step {_scriptChain.Count}: {batch.Length:N0} rows × {batch.ColumnCount} columns in {sw.ElapsedMilliseconds:N0} ms{capped}");
+                $"step {_scriptChain.Count}: {batch.Length:N0} rows × {batch.ColumnCount} columns in {sw.ElapsedMilliseconds:N0} ms{inherited}{capped}");
             UpdateInfo();
         }
         catch (OperationCanceledException)
@@ -415,13 +439,13 @@ protected override void OnFormClosed(FormClosedEventArgs e)
     /// <summary>
     /// Grid showing a script result: header filters lose the premise that the
     /// grid mirrors the file, so they stay disabled until "Restore file"
-    /// (V1 design decision).
+    /// (V1 design decision). Active filters are NOT cleared — they live on as
+    /// the chain's frozen base and come back when the file is restored.
     /// </summary>
     private void EnterScriptMode()
     {
         _scriptMode = true;
         _filterCts?.Cancel();
-        _activeFilters.Clear();
         _btnClearFilters.Enabled = false;
         _btnRestore.Visible = true;
     }
@@ -452,7 +476,13 @@ protected override void OnFormClosed(FormClosedEventArgs e)
             DisplayBatch(batch);
             _scriptMode = false;
             _btnRestore.Visible = false;
+            _chainBaseColumns = null;
+            _chainBaseFilters = null;
             UpdateInfo();
+
+            // bring back the header filters that were active before the script
+            if (_activeFilters.Count > 0)
+                await ReapplyFiltersAsync();
         }
         catch (Exception ex)
         {

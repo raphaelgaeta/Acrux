@@ -38,16 +38,22 @@ public static class ScriptHost
         .WithImports("System", "System.Linq", "Polars.CSharp", "Polars.CSharp.Polars"));
 
     /// <summary>
-    /// Replays the script chain: step 1 receives the file scan in <c>lf</c> and
-    /// every following step receives the previous step's LazyFrame. Nothing is
-    /// collected in between — the steps compose a single lazy plan, collected
-    /// only at the end (optionally capped at <see cref="RowCap"/> rows).
-    /// Returns the result RecordBatch (caller owns it). Throws
-    /// <see cref="CompilationErrorException"/> for syntax errors and the Polars
-    /// exception for query errors (e.g. unknown column).
+    /// Replays the script chain: step 1 receives in <c>lf</c> the file *as
+    /// shown in the grid* — base column selection and base filters applied as
+    /// an implicit step 0 — and every following step receives the previous
+    /// step's LazyFrame. Nothing is collected in between — the steps compose
+    /// a single lazy plan, collected only at the end (optionally capped at
+    /// <see cref="RowCap"/> rows). Returns the result RecordBatch (caller owns
+    /// it). Throws <see cref="CompilationErrorException"/> for syntax errors
+    /// and the Polars exception for query errors (e.g. unknown column).
     /// </summary>
     public static async Task<RecordBatch> RunChainAsync(
-        IReadOnlyList<string> steps, string parquetPath, bool applyRowCap, CancellationToken cancellationToken)
+        IReadOnlyList<string> steps,
+        string parquetPath,
+        string[]? baseColumns,
+        IReadOnlyDictionary<string, ColumnFilter>? baseFilters,
+        bool applyRowCap,
+        CancellationToken cancellationToken)
     {
         if (steps.Count == 0)
             throw new ArgumentException("Empty script chain.", nameof(steps));
@@ -57,6 +63,23 @@ public static class ScriptHost
             var lf = LazyFrame.ScanParquet(parquetPath);
             try
             {
+                // implicit step 0: the grid's visual state. Select first —
+                // header filters can only reference selected columns.
+                if (baseColumns is { Length: > 0 })
+                {
+                    var selected = lf.Select(baseColumns);
+                    lf.Dispose();
+                    lf = selected;
+                }
+
+                if (baseFilters is { Count: > 0 } &&
+                    FilterEngine.BuildPredicate(baseFilters) is { } predicate)
+                {
+                    var filtered = lf.Filter(predicate);
+                    lf.Dispose();
+                    lf = filtered;
+                }
+
                 for (int i = 0; i < steps.Count; i++)
                 {
                     var state = await CSharpScript.RunAsync(
