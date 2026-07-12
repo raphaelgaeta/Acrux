@@ -82,10 +82,46 @@ public static class DataFrameProvider
         }, cancellationToken);
     }
 
+    /// <summary>
+    /// Best-effort sweep of %TEMP%\Acrux leftovers from runs that died before
+    /// their own cleanup. Temp names embed the owner PID: files whose process
+    /// is still alive are skipped, so concurrent instances are safe.
+    /// </summary>
+    public static void CleanStaleTempFiles()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "Acrux");
+        if (!Directory.Exists(tempDir))
+            return;
+
+        foreach (var file in Directory.EnumerateFiles(tempDir))
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(
+                Path.GetFileName(file), @"_pid(\d+)_");
+            if (match.Success && int.TryParse(match.Groups[1].Value, out var pid))
+            {
+                try
+                {
+                    System.Diagnostics.Process.GetProcessById(pid);
+                    continue;   // owner still running
+                }
+                catch (ArgumentException) { /* owner is gone */ }
+            }
+            else if (File.GetLastWriteTimeUtc(file) > DateTime.UtcNow.AddDays(-1))
+            {
+                // old naming scheme without PID: only sweep after a day
+                continue;
+            }
+
+            try { File.Delete(file); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
     private static string ConvertCsv(
         string utf8Csv, char separator, bool decimalComma, ulong inferRows, string tempDir, string baseName)
     {
-        var temp = Path.Combine(tempDir, $"{baseName}_{Guid.NewGuid():N}.parquet");
+        var temp = Path.Combine(tempDir, $"{baseName}_pid{Environment.ProcessId}_{Guid.NewGuid():N}.parquet");
         try
         {
             using var lf = LazyFrame.ScanCsv(
@@ -182,7 +218,7 @@ public static class DataFrameProvider
         System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
         var fallback = System.Text.Encoding.GetEncoding(1252);
 
-        var temp = Path.Combine(tempDir, $"{Path.GetFileNameWithoutExtension(path)}_{Guid.NewGuid():N}_utf8.csv");
+        var temp = Path.Combine(tempDir, $"{Path.GetFileNameWithoutExtension(path)}_pid{Environment.ProcessId}_{Guid.NewGuid():N}_utf8.csv");
         using var reader = new StreamReader(path, fallback, detectEncodingFromByteOrderMarks: true);
         using var writer = new StreamWriter(temp, append: false, new System.Text.UTF8Encoding(false));
 

@@ -47,6 +47,13 @@ barato → `GetColumnNamesAsync` (só schema) → `ColumnSelectorForm` (usuário
 escolhe colunas) → `GetDataFrameAsync` (`Select` + `Collect`, projection
 pushdown) → `ToArrow()` → grid virtual.
 
+Ciclo de vida do processo: `Program.Main` termina com `Environment.Exit(0)`
+(garantia contra threads estrangeiras — Polars/rayon, Roslyn — segurarem um
+processo fantasma; relato de campo em 2026-07, não reproduzido em matriz de
+10 cenários, belt preventivo). Temporários levam o PID no nome
+(`_pid{N}_`) e `CleanStaleTempFiles()` varre órfãos de execuções mortas na
+inicialização, pulando PIDs vivos (multi-instância seguro).
+
 Fluxo de filtro: clique no cabeçalho → `FilterEngine.GetDistinctValuesAsync`
 (semântica Excel: aplica os filtros das *outras* colunas antes de coletar os
 distintos; dropdown limitado a `DistinctCap = 10.000`) → `FilterPopupForm` →
