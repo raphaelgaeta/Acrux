@@ -36,7 +36,12 @@ comportamento visível, atualizar os dois.
 
 ## Arquitetura
 
-Fluxo: `OpenFileDialog` (parquet ou CSV) → CSV é convertido **uma única vez**
+Fluxo: `OpenFileDialog` (parquet, CSV ou xlsx) → xlsx: abas enumeradas via
+ZIP puro (`GetExcelSheetNames` lê `xl/workbook.xml`; 2+ abas abrem o
+`SheetSelectorForm`) e a aba escolhida vira parquet temporário por
+`DataFrame.ReadExcel` (motor calamine; materializa em RAM, limitado a ~1M
+linhas pelo formato; **números chegam como double** — representação interna
+do Excel, validado por probe) → CSV é convertido **uma única vez**
 para parquet temporário (`DataFrameProvider.EnsureParquetAsync`: valida UTF-8
 por amostra e transcodifica cp1252/UTF-16 se preciso — ver armadilha abaixo —,
 detecção de separador na 1ª linha, `decimalComma` quando `;`, `ScanCsv` →

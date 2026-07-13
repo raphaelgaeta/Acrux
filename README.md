@@ -35,12 +35,16 @@ under. Yes, the Polars mascot is a polar bear and polar bears live under the
 
 ## What it does
 
-- **Opens Parquet and CSV.** CSV gets converted once to a temporary parquet
-  (streaming, so RAM stays flat) and the app works on parquet from then on.
-  The converter has survived every real-world file I've thrown at it:
+- **Opens Parquet, CSV and simple Excel files.** CSV and .xlsx get converted
+  once to a temporary parquet and the app works on parquet from then on.
+  The CSV converter has survived every real-world file I've thrown at it:
   `;` vs `,` separators, decimal commas, Excel's "ANSI" (Windows-1252) and
   UTF-16 encodings, and columns that change type a million rows in. Each of
-  those started as a bug report — usually mine.
+  those started as a bug report — usually mine. For .xlsx (read through
+  Polars' native calamine engine) the contract is a simple layout: headers on
+  row 1, rectangular data, no merged cells — you pick the sheet when there's
+  more than one. Note that Excel stores every number as floating point, so
+  integer columns arrive as doubles.
 - **Lets you pick columns before loading.** Only the selected columns are ever
   read from disk.
 - **Filters like Excel.** Click a header, get the distinct values (blanks

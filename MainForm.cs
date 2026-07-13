@@ -192,7 +192,7 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
 {
     using var dialog = new OpenFileDialog
     {
-        Title = "Select a Parquet or CSV file",
+        Title = "Select a Parquet, CSV or Excel file",
         Filter = DataFrameProvider.OpenDialogFilter
     };
 
@@ -200,16 +200,37 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
         return;
 
     var isCsv = dialog.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
+    var isXlsx = dialog.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase);
     string sourcePath = dialog.FileName;
     bool sourceIsTemp = false;
     try
     {
         _btnLoad.Enabled = false;
 
-        // CSV: one-time conversion to a temp parquet; the app operates on parquet
-        _lblInfo.Text = isCsv ? "Converting CSV to parquet..." : "Reading schema...";
+        // xlsx with several sheets: ask which one before converting
+        int sheetIndex = 0;
+        if (isXlsx)
+        {
+            var fileName = dialog.FileName;
+            var sheetNames = await Task.Run(() => DataFrameProvider.GetExcelSheetNames(fileName));
+            if (sheetNames.Length > 1)
+            {
+                using var sheetPicker = new SheetSelectorForm(sheetNames);
+                if (sheetPicker.ShowDialog(this) != DialogResult.OK)
+                {
+                    _lblInfo.Text = "Load canceled";
+                    return;
+                }
+                sheetIndex = sheetPicker.SelectedSheetIndex;
+            }
+        }
+
+        // CSV/xlsx: one-time conversion to a temp parquet; the app operates on parquet
+        _lblInfo.Text = isCsv ? "Converting CSV to parquet..."
+            : isXlsx ? "Converting Excel to parquet..."
+            : "Reading schema...";
         var progress = new Progress<string>(msg => _lblInfo.Text = msg);
-        (sourcePath, sourceIsTemp) = await DataFrameProvider.EnsureParquetAsync(dialog.FileName, progress);
+        (sourcePath, sourceIsTemp) = await DataFrameProvider.EnsureParquetAsync(dialog.FileName, progress, sheetIndex);
 
         // metadata only: fast even on huge files
         var columnNames = await DataFrameProvider.GetColumnNamesAsync(sourcePath);

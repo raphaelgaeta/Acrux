@@ -4,11 +4,12 @@ namespace Acrux;
 
 public static class DataFrameProvider
 {
-    /// <summary>Open-dialog filter (parquet + csv).</summary>
+    /// <summary>Open-dialog filter (parquet + csv + xlsx).</summary>
     public const string OpenDialogFilter =
-        "Data files (*.parquet;*.csv)|*.parquet;*.csv|" +
+        "Data files (*.parquet;*.csv;*.xlsx)|*.parquet;*.csv;*.xlsx|" +
         "Parquet files (*.parquet)|*.parquet|" +
         "CSV files (*.csv)|*.csv|" +
+        "Excel files (*.xlsx)|*.xlsx|" +
         "All files (*.*)|*.*";
 
     // CSV type-inference samples. Polars' default (100 rows) misfires easily
@@ -27,10 +28,22 @@ public static class DataFrameProvider
     /// whether it is temporary (caller deletes).
     /// </summary>
     public static async Task<(string ParquetPath, bool IsTemp)> EnsureParquetAsync(
-        string path, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
+        string path, IProgress<string>? progress = null, int excelSheetIndex = 0,
+        CancellationToken cancellationToken = default)
     {
         if (!File.Exists(path))
             throw new FileNotFoundException("File not found.", path);
+
+        if (path.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
+        {
+            return await Task.Run(() =>
+            {
+                var tempDir = Path.Combine(Path.GetTempPath(), "Acrux");
+                Directory.CreateDirectory(tempDir);
+                return (ConvertExcel(path, excelSheetIndex, tempDir,
+                    Path.GetFileNameWithoutExtension(path)), true);
+            }, cancellationToken);
+        }
 
         if (!path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
             return (path, false);
@@ -80,6 +93,45 @@ public static class DataFrameProvider
                     File.Delete(utf8Csv);
             }
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Sheet names in workbook order (the same order calamine indexes) — read
+    /// straight from xl/workbook.xml inside the xlsx zip, no extra dependency.
+    /// </summary>
+    public static string[] GetExcelSheetNames(string path)
+    {
+        using var zip = System.IO.Compression.ZipFile.OpenRead(path);
+        var entry = zip.GetEntry("xl/workbook.xml")
+            ?? throw new InvalidDataException("Not a valid .xlsx file (xl/workbook.xml missing).");
+        using var stream = entry.Open();
+        var doc = System.Xml.Linq.XDocument.Load(stream);
+        var ns = doc.Root!.GetDefaultNamespace();
+        return doc.Descendants(ns + "sheet")
+            .Select(s => (string?)s.Attribute("name") ?? "?")
+            .ToArray();
+    }
+
+    /// <summary>
+    /// xlsx → temp parquet. ReadExcel (native calamine engine) materializes
+    /// the sheet in RAM, but the xlsx format caps at ~1M rows so the peak is
+    /// bounded. Note: Excel stores every number as floating point, so integer
+    /// columns arrive as double (probe-validated).
+    /// </summary>
+    private static string ConvertExcel(string path, int sheetIndex, string tempDir, string baseName)
+    {
+        var temp = Path.Combine(tempDir, $"{baseName}_pid{Environment.ProcessId}_{Guid.NewGuid():N}.parquet");
+        try
+        {
+            using var df = DataFrame.ReadExcel(path, sheetIndex: (ulong)sheetIndex);
+            df.WriteParquet(temp);
+            return temp;
+        }
+        catch
+        {
+            try { File.Delete(temp); } catch (IOException) { }
+            throw;
+        }
     }
 
     /// <summary>
