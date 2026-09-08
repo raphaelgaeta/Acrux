@@ -223,9 +223,14 @@ aceitar fonte lazy genérica).
 - Comunicação com o usuário em **português (PT-BR)**; código, comentários,
   strings de GUI e mensagens de commit em **inglês** (repo público).
   Comentários enxutos: explicar o *porquê*/a restrição, nunca narrar a linha.
-- Trabalho e push na branch `master`. Confira o nome do remote com
-  `git remote -v` antes do push (neste clone é `origin`; já se chamou
-  `ParquetGridViewer` em outro checkout).
+- Trabalho **sempre em branch** com prefixo (`refactor/`, `feat/`, `docs/`) —
+  **nunca commit direto em `master`**; a integração é por PR.
+- PR com `gh pr create --body-file <arquivo>`: a máquina é headless, `--web`
+  não funciona. Merge com `--merge`, **nunca `--squash`** — os commits
+  separados devem sobreviver no histórico.
+- Movimentação de arquivo com `git mv`, para o histórico acompanhar o arquivo.
+- Confira o nome do remote com `git remote -v` antes do push (neste clone é
+  `origin`; já se chamou `ParquetGridViewer` em outro checkout).
 - `gh` instalado e autenticado (conta `raphaelgaeta`, HTTPS): push e
   `gh pr create` funcionam direto do terminal.
 - Fluxo de trabalho do dono do projeto: ele valida o desenho antes do código.
