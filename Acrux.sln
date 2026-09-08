@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Acrux.Core", "src\Acrux.Cor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Acrux.WinForms", "src\Acrux.WinForms\Acrux.WinForms.csproj", "{74A00A68-389E-432A-9ECA-3743A6008E75}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Acrux.Cli", "src\Acrux.Cli\Acrux.Cli.csproj", "{5FEBBC4B-0630-4FB9-BD59-2068AEEC1729}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -43,6 +45,18 @@ Global
 		{74A00A68-389E-432A-9ECA-3743A6008E75}.Release|x64.Build.0 = Release|Any CPU
 		{74A00A68-389E-432A-9ECA-3743A6008E75}.Release|x86.ActiveCfg = Release|Any CPU
 		{74A00A68-389E-432A-9ECA-3743A6008E75}.Release|x86.Build.0 = Release|Any CPU
+		{5FEBBC4B-0630-4FB9-BD59-2068AEEC1729}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5FEBBC4B-0630-4FB9-BD59-2068AEEC1729}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5FEBBC4B-0630-4FB9-BD59-2068AEEC1729}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{5FEBBC4B-0630-4FB9-BD59-2068AEEC1729}.Debug|x64.Build.0 = Debug|Any CPU
+		{5FEBBC4B-0630-4FB9-BD59-2068AEEC1729}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5FEBBC4B-0630-4FB9-BD59-2068AEEC1729}.Debug|x86.Build.0 = Debug|Any CPU
+		{5FEBBC4B-0630-4FB9-BD59-2068AEEC1729}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5FEBBC4B-0630-4FB9-BD59-2068AEEC1729}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5FEBBC4B-0630-4FB9-BD59-2068AEEC1729}.Release|x64.ActiveCfg = Release|Any CPU
+		{5FEBBC4B-0630-4FB9-BD59-2068AEEC1729}.Release|x64.Build.0 = Release|Any CPU
+		{5FEBBC4B-0630-4FB9-BD59-2068AEEC1729}.Release|x86.ActiveCfg = Release|Any CPU
+		{5FEBBC4B-0630-4FB9-BD59-2068AEEC1729}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -50,5 +64,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{9A6FCA1F-E30C-4F4F-B240-AA1E4B8A814D} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{74A00A68-389E-432A-9ECA-3743A6008E75} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{5FEBBC4B-0630-4FB9-BD59-2068AEEC1729} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal
