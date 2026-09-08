@@ -53,6 +53,22 @@ O `README.md` (em inglês, voltado ao público do repositório) resume features 
 arquitetura; este arquivo segue sendo a fonte de verdade técnica — ao mudar
 comportamento visível, atualizar os dois.
 
+## Porte multiplataforma (em andamento)
+
+Onde estamos:
+
+- `Acrux.Core` já é net10.0 puro, sem dependência de WinForms; só o
+  `Acrux.WinForms` é net10.0-windows.
+- Os dois projetos **compilam** no Linux (`EnableWindowsTargeting`).
+- Nada foi **executado** no Linux ainda — nem o Core, nem o nativo do Polars.
+  O único pacote nativo referenciado é `Polars.NET.Native.win-x64`.
+
+Próximos passos:
+
+1. `Acrux.Cli` (console net10.0) para validar o carregamento do nativo do
+   Polars no Fedora.
+2. Com isso fechado, spike de grid virtualizada no Avalonia.
+
 ## Arquitetura
 
 Fluxo: `OpenFileDialog` (parquet, CSV ou xlsx) → xlsx: abas enumeradas via
@@ -201,6 +217,8 @@ aceitar fonte lazy genérica).
 - Trabalho e push na branch `master`. Confira o nome do remote com
   `git remote -v` antes do push (neste clone é `origin`; já se chamou
   `ParquetGridViewer` em outro checkout).
+- `gh` instalado e autenticado (conta `raphaelgaeta`, HTTPS): push e
+  `gh pr create` funcionam direto do terminal.
 - Fluxo de trabalho do dono do projeto: ele valida o desenho antes do código.
   Para features novas, apresente a arquitetura/avaliação primeiro e aguarde o
   aval antes de implementar.
