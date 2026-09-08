@@ -81,14 +81,17 @@ Three rules, no exceptions:
 ## Building
 
 ```
-dotnet build Acrux.csproj
-dotnet run --project Acrux.csproj
+dotnet build
+dotnet run --project src/Acrux.WinForms
 ```
 
-Needs the .NET 10 SDK, Windows. Single-file publishing works:
+The repo is a two-project solution (`Acrux.sln`): `src/Acrux.Core`, the UI-less
+data layer, and `src/Acrux.WinForms`, the app that references it. Needs the
+.NET 10 SDK; builds on Linux with `EnableWindowsTargeting`, running requires
+Windows. Single-file publishing works — point it at the app project:
 
 ```
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+dotnet publish src/Acrux.WinForms/Acrux.WinForms.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 ```
 
 Two hard-earned rules are baked into the project file — don't fight them:
@@ -112,14 +115,16 @@ nothing at all.
 
 | File | Role |
 |---|---|
-| `MainForm.cs` | Virtual grid, file loading, filter orchestration |
-| `DataFrameProvider.cs` | Parquet reading and CSV→parquet conversion |
-| `ColumnSelectorForm.cs` | Column picker shown on open |
-| `FilterEngine.cs` | Excel-style filters as Polars lazy queries |
-| `FilterPopupForm.cs` | Distinct-values popup |
-| `PolarsTableAdapter.cs` | O(1) per-cell reads from Arrow arrays |
-| `ScriptHost.cs` | Roslyn evaluation of chained Polars scripts |
-| `ScriptTerminalPanel.cs` | Terminal UI (bottom dock) |
+| `src/Acrux.Core/DataFrameProvider.cs` | Parquet reading and CSV→parquet conversion |
+| `src/Acrux.Core/FilterEngine.cs` | Excel-style filters as Polars lazy queries |
+| `src/Acrux.Core/PolarsTableAdapter.cs` | O(1) per-cell reads from Arrow arrays |
+| `src/Acrux.Core/ScriptHost.cs` | Roslyn evaluation of chained Polars scripts |
+| `src/Acrux.WinForms/Program.cs` | Entry point: stale temp sweep and guaranteed process exit |
+| `src/Acrux.WinForms/MainForm.cs` | Virtual grid, file loading, filter orchestration |
+| `src/Acrux.WinForms/ColumnSelectorForm.cs` | Column picker shown on open |
+| `src/Acrux.WinForms/SheetSelectorForm.cs` | Sheet picker for multi-sheet .xlsx |
+| `src/Acrux.WinForms/FilterPopupForm.cs` | Distinct-values popup |
+| `src/Acrux.WinForms/ScriptTerminalPanel.cs` | Terminal UI (bottom dock) |
 
 The deeper docs live in [CLAUDE.md](CLAUDE.md): the design principles above in
 their strict form, and a catalog of Polars.NET pitfalls. I develop this with

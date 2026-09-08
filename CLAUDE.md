@@ -1,7 +1,7 @@
 # Acrux
 
-Visualizador WinForms de arquivos .parquet e .csv: Polars.NET como motor de
-dados, `DataGridView` em modo virtual como apresentação. Otimizado para
+Visualizador WinForms de arquivos .parquet, .csv e .xlsx: Polars.NET como motor
+de dados, `DataGridView` em modo virtual como apresentação. Otimizado para
 arquivos grandes (655+ colunas, milhões de linhas). O nome vem de α Crucis,
 a estrela mais brilhante do Cruzeiro do Sul (o repositório já se chamou
 ParquetGridViewer e o projeto, PolarsGridViewer).
@@ -9,15 +9,33 @@ ParquetGridViewer e o projeto, PolarsGridViewer).
 ## Build e execução
 
 ```
-dotnet build Acrux.csproj
-dotnet run --project Acrux.csproj
+dotnet build                              # solução inteira (Acrux.sln), da raiz
+dotnet run --project src/Acrux.WinForms
 ```
 
-.NET 10 (net10.0-windows), WinForms. Pacotes: Polars.NET 0.6.0 (+ Native.win-x64,
-Linq, ML), Apache.Arrow 23 (a 0.6.0 exige Arrow ≥ 23.0.0 — não fazer downgrade)
-e Microsoft.CodeAnalysis.CSharp.Scripting (terminal C#). Não há projeto de testes.
+Dois projetos sob `src/`, agregados pelo `Acrux.sln` da raiz: `Acrux.Core`
+(net10.0, sem UI — `DataFrameProvider`, `FilterEngine`, `PolarsTableAdapter`,
+`ScriptHost`) e `Acrux.WinForms` (net10.0-windows, WinForms, `AssemblyName`
+mantido como `Acrux`, referencia o Core). `dotnet build` na raiz basta, mas
+**`dotnet run` e `dotnet publish` exigem apontar o projeto**: na raiz o `run`
+não acha projeto ("Couldn't find a project to run") e o `publish` falha com
+**NETSDK1099**, porque tenta aplicar single-file também no Acrux.Core, que é
+biblioteca. O `Directory.Build.props` da raiz liga `EnableWindowsTargeting`:
+baixa os reference assemblies do Windows e permite **compilar** contra a API do
+Windows a partir do Linux — o binário resultante continua rodando só no
+Windows.
 
-Publicação: WinForms **não suporta trimming** — nunca publicar com
+Pacotes: Polars.NET 0.6.0 (+ Native.win-x64, Linq, ML), Apache.Arrow 23 (a
+0.6.0 exige Arrow ≥ 23.0.0 — não fazer downgrade) e
+Microsoft.CodeAnalysis.CSharp.Scripting (terminal C#). Não há projeto de testes.
+
+Publicação — sempre com o caminho do `.csproj` (ver NETSDK1099 acima):
+
+```
+dotnet publish src/Acrux.WinForms/Acrux.WinForms.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+```
+
+WinForms **não suporta trimming** — nunca publicar com
 `PublishTrimmed=true` (erro NETSDK1175). Single-file self-contained funciona,
 mas o terminal C# **exige** `IncludeAllContentForSelfExtract=true` (já setado
 no csproj — não remover): a API de scripting do Roslyn resolve referências,
@@ -27,12 +45,29 @@ for ScriptHost"/`NotSupportedException` de referência de metadados. Não há
 contorno por código (referências via `TryGetRawMetadata` resolvem as
 explícitas, mas não a do corlib interno) — validado por harness em 2026-07.
 
-O csproj traz tuning intencional de GC para desktop (workstation concurrent +
-DATAS via `GarbageCollectionAdaptationMode=1`) — não reverter sem motivo.
+O `Acrux.WinForms.csproj` traz tuning intencional de GC para desktop
+(workstation concurrent + DATAS via `GarbageCollectionAdaptationMode=1`) —
+não reverter sem motivo.
 
 O `README.md` (em inglês, voltado ao público do repositório) resume features e
 arquitetura; este arquivo segue sendo a fonte de verdade técnica — ao mudar
 comportamento visível, atualizar os dois.
+
+## Porte multiplataforma (em andamento)
+
+Onde estamos:
+
+- `Acrux.Core` já é net10.0 puro, sem dependência de WinForms; só o
+  `Acrux.WinForms` é net10.0-windows.
+- Os dois projetos **compilam** no Linux (`EnableWindowsTargeting`).
+- Nada foi **executado** no Linux ainda — nem o Core, nem o nativo do Polars.
+  O único pacote nativo referenciado é `Polars.NET.Native.win-x64`.
+
+Próximos passos:
+
+1. `Acrux.Cli` (console net10.0) para validar o carregamento do nativo do
+   Polars no Fedora.
+2. Com isso fechado, spike de grid virtualizada no Avalonia.
 
 ## Arquitetura
 
@@ -89,14 +124,16 @@ aceitar fonte lazy genérica).
 
 | Arquivo | Papel |
 |---|---|
-| `MainForm.cs` | Grid virtual, carga do arquivo, costura dos filtros |
-| `DataFrameProvider.cs` | Leitura do parquet via LazyFrame |
-| `ColumnSelectorForm.cs` | Diálogo de seleção de colunas na abertura |
-| `FilterEngine.cs` | Filtros estilo Excel via Polars (distintos + máscara) |
-| `FilterPopupForm.cs` | Popup de filtro aberto pelo cabeçalho da coluna |
-| `PolarsTableAdapter.cs` | `GetCellValue`: leitura O(1) por célula do Arrow |
-| `ScriptHost.cs` | Terminal C#: avaliação Roslyn de scripts Polars |
-| `ScriptTerminalPanel.cs` | UI do terminal (painel inferior do MainForm) |
+| `src/Acrux.Core/DataFrameProvider.cs` | Leitura do parquet via LazyFrame |
+| `src/Acrux.Core/FilterEngine.cs` | Filtros estilo Excel via Polars (distintos + máscara) |
+| `src/Acrux.Core/PolarsTableAdapter.cs` | `GetCellValue`: leitura O(1) por célula do Arrow |
+| `src/Acrux.Core/ScriptHost.cs` | Terminal C#: avaliação Roslyn de scripts Polars |
+| `src/Acrux.WinForms/Program.cs` | Entrada do app: limpeza de temporários órfãos e `Environment.Exit(0)` |
+| `src/Acrux.WinForms/MainForm.cs` | Grid virtual, carga do arquivo, costura dos filtros |
+| `src/Acrux.WinForms/ColumnSelectorForm.cs` | Diálogo de seleção de colunas na abertura |
+| `src/Acrux.WinForms/SheetSelectorForm.cs` | Diálogo de escolha da aba do xlsx (2+ abas) |
+| `src/Acrux.WinForms/FilterPopupForm.cs` | Popup de filtro aberto pelo cabeçalho da coluna |
+| `src/Acrux.WinForms/ScriptTerminalPanel.cs` | UI do terminal (painel inferior do MainForm) |
 
 ### Princípios de design (não violar)
 
@@ -180,6 +217,8 @@ aceitar fonte lazy genérica).
 - Trabalho e push na branch `master`. Confira o nome do remote com
   `git remote -v` antes do push (neste clone é `origin`; já se chamou
   `ParquetGridViewer` em outro checkout).
+- `gh` instalado e autenticado (conta `raphaelgaeta`, HTTPS): push e
+  `gh pr create` funcionam direto do terminal.
 - Fluxo de trabalho do dono do projeto: ele valida o desenho antes do código.
   Para features novas, apresente a arquitetura/avaliação primeiro e aguarde o
   aval antes de implementar.

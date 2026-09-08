@@ -3,7 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Acrux", "Acrux.csproj", "{2A4E83F1-9320-4094-9C93-C0F58469949C}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Acrux.Core", "src\Acrux.Core\Acrux.Core.csproj", "{9A6FCA1F-E30C-4F4F-B240-AA1E4B8A814D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Acrux.WinForms", "src\Acrux.WinForms\Acrux.WinForms.csproj", "{74A00A68-389E-432A-9ECA-3743A6008E75}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,20 +19,36 @@ Global
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{2A4E83F1-9320-4094-9C93-C0F58469949C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{2A4E83F1-9320-4094-9C93-C0F58469949C}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{2A4E83F1-9320-4094-9C93-C0F58469949C}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{2A4E83F1-9320-4094-9C93-C0F58469949C}.Debug|x64.Build.0 = Debug|Any CPU
-		{2A4E83F1-9320-4094-9C93-C0F58469949C}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{2A4E83F1-9320-4094-9C93-C0F58469949C}.Debug|x86.Build.0 = Debug|Any CPU
-		{2A4E83F1-9320-4094-9C93-C0F58469949C}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{2A4E83F1-9320-4094-9C93-C0F58469949C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{2A4E83F1-9320-4094-9C93-C0F58469949C}.Release|x64.ActiveCfg = Release|Any CPU
-		{2A4E83F1-9320-4094-9C93-C0F58469949C}.Release|x64.Build.0 = Release|Any CPU
-		{2A4E83F1-9320-4094-9C93-C0F58469949C}.Release|x86.ActiveCfg = Release|Any CPU
-		{2A4E83F1-9320-4094-9C93-C0F58469949C}.Release|x86.Build.0 = Release|Any CPU
+		{9A6FCA1F-E30C-4F4F-B240-AA1E4B8A814D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9A6FCA1F-E30C-4F4F-B240-AA1E4B8A814D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9A6FCA1F-E30C-4F4F-B240-AA1E4B8A814D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9A6FCA1F-E30C-4F4F-B240-AA1E4B8A814D}.Debug|x64.Build.0 = Debug|Any CPU
+		{9A6FCA1F-E30C-4F4F-B240-AA1E4B8A814D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9A6FCA1F-E30C-4F4F-B240-AA1E4B8A814D}.Debug|x86.Build.0 = Debug|Any CPU
+		{9A6FCA1F-E30C-4F4F-B240-AA1E4B8A814D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9A6FCA1F-E30C-4F4F-B240-AA1E4B8A814D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9A6FCA1F-E30C-4F4F-B240-AA1E4B8A814D}.Release|x64.ActiveCfg = Release|Any CPU
+		{9A6FCA1F-E30C-4F4F-B240-AA1E4B8A814D}.Release|x64.Build.0 = Release|Any CPU
+		{9A6FCA1F-E30C-4F4F-B240-AA1E4B8A814D}.Release|x86.ActiveCfg = Release|Any CPU
+		{9A6FCA1F-E30C-4F4F-B240-AA1E4B8A814D}.Release|x86.Build.0 = Release|Any CPU
+		{74A00A68-389E-432A-9ECA-3743A6008E75}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{74A00A68-389E-432A-9ECA-3743A6008E75}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{74A00A68-389E-432A-9ECA-3743A6008E75}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{74A00A68-389E-432A-9ECA-3743A6008E75}.Debug|x64.Build.0 = Debug|Any CPU
+		{74A00A68-389E-432A-9ECA-3743A6008E75}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{74A00A68-389E-432A-9ECA-3743A6008E75}.Debug|x86.Build.0 = Debug|Any CPU
+		{74A00A68-389E-432A-9ECA-3743A6008E75}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{74A00A68-389E-432A-9ECA-3743A6008E75}.Release|Any CPU.Build.0 = Release|Any CPU
+		{74A00A68-389E-432A-9ECA-3743A6008E75}.Release|x64.ActiveCfg = Release|Any CPU
+		{74A00A68-389E-432A-9ECA-3743A6008E75}.Release|x64.Build.0 = Release|Any CPU
+		{74A00A68-389E-432A-9ECA-3743A6008E75}.Release|x86.ActiveCfg = Release|Any CPU
+		{74A00A68-389E-432A-9ECA-3743A6008E75}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{9A6FCA1F-E30C-4F4F-B240-AA1E4B8A814D} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{74A00A68-389E-432A-9ECA-3743A6008E75} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal
