@@ -201,6 +201,30 @@ aceitar fonte lazy genérica).
 - `DataType.String` etc. seguem estáticos e **fora do XML doc** do pacote.
 - Para validar APIs novas do pacote, use a skill `polars-probe`.
 
+### Datasets multi-arquivo (probe em 2026-09, Polars.NET 0.6.0)
+- `ScanParquet` aceita **um único caminho `string`** — não há sobrecarga para
+  lista de arquivos. Glob (`dir/*.parquet`) e diretório funcionam; **diretório
+  recursa, glob simples não** (use `dir/**/*.parquet` para recursivo).
+- **Ler `lf.Schema` sobre glob lê o rodapé de TODOS os arquivos**: ~24 ms por
+  arquivo, linear (100 → 2,4 s; 1.000 → 24,4 s; 6.946 → 221 s). Mitigação
+  obrigatória: ler o schema de **um** shard (~46 ms) e repassá-lo no parâmetro
+  `schema:` — os mesmos 1.000 arquivos caem para **17,9 ms**.
+- **Divergência de schema não é detectada na abertura.** O schema exposto é o
+  do primeiro arquivo; o erro só estoura no `Collect`, depois de o usuário já
+  ter escolhido colunas. Planejar a mensagem de erro para esse momento.
+- `allowMissingColumns: true` resolve **coluna faltando** (preenche null).
+  **Coluna extra não tem escape na 0.6.0**: falha mesmo com esse flag e mesmo
+  projetando só as colunas conhecidas (o erro ocorre ao abrir o arquivo, antes
+  da projeção). O nativo sugere `extra_columns='ignore'`, **não exposto** pela
+  API C# — checar se a 0.7.0 expõe. Tipo divergente na mesma coluna também
+  falha, sem unificação por supertipo.
+- `LazyFrame.Concat(frames, ConcatType.Diagonal)` **unifica** schemas (união de
+  colunas, null onde falta); `Vertical` exige schemas idênticos e `Horizontal`
+  dá erro de coluna duplicada. Diagonal custa N handles nativos e perde o
+  ganho do `schema:` — ver `docs/adr/001-datasets-multi-arquivo.md`.
+- **`Len()` retorna `u32`** (teto de 4,29 bilhões de linhas). A contagem usa só
+  metadados, mas toca um arquivo por vez: 6.946 shards frios = 113,8 s.
+
 ### DataGridView (modo virtual)
 - **Diminuir `RowCount` remove linhas uma a uma** (minutos com milhões de
   linhas). Caminho rápido: `Rows.Clear()` (O(1)) e então setar o novo valor.
@@ -213,12 +237,23 @@ aceitar fonte lazy genérica).
 
 - Comunicação com o usuário em **português (PT-BR)**; código, comentários,
   strings de GUI e mensagens de commit em **inglês** (repo público).
-  Comentários enxutos: explicar o *porquê*/a restrição, nunca narrar a linha.
+- Idioma dos documentos: `README.md` em **inglês** — é a vitrine pública do
+  repositório; `CLAUDE.md` e `docs/` em **português**, são documentação
+  interna.
+- Comentário explica o **porquê**, nunca o **quê**. O modelo é o comentário do
+  `Acrux.WinForms.csproj` sobre `IncludeAllContentForSelfExtract`: ele não
+  descreve o que a propriedade faz — diz por que ela existe e aponta a causa
+  raiz (`dotnet/roslyn#50719`). Comentário que narra a linha é ruído.
+- Assuma **leitor de C# intermediário**: prefira código explícito a construção
+  idiomática compacta. Ao usar algo avançado (`Span`, async streams, `unsafe`,
+  LINQ denso), um comentário explica o que motivou a escolha.
+- Decisões estruturais viram **ADR** em `docs/adr/`, numerados e curtos:
+  contexto, alternativas consideradas, escolha e justificativa.
 - Trabalho e push na branch `master`. Confira o nome do remote com
   `git remote -v` antes do push (neste clone é `origin`; já se chamou
   `ParquetGridViewer` em outro checkout).
 - `gh` instalado e autenticado (conta `raphaelgaeta`, HTTPS): push e
   `gh pr create` funcionam direto do terminal.
 - Fluxo de trabalho do dono do projeto: ele valida o desenho antes do código.
-  Para features novas, apresente a arquitetura/avaliação primeiro e aguarde o
-  aval antes de implementar.
+  Antes de implementar qualquer coisa não trivial, apresente o desenho (ou o
+  ADR) e **espere aprovação** — não comece pelo código.
