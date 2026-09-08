@@ -59,14 +59,23 @@ Onde estamos:
 
 - `Acrux.Core` já é net10.0 puro, sem dependência de WinForms; só o
   `Acrux.WinForms` é net10.0-windows.
-- Os dois projetos **compilam** no Linux (`EnableWindowsTargeting`).
-- Nada foi **executado** no Linux ainda — nem o Core, nem o nativo do Polars.
-  O único pacote nativo referenciado é `Polars.NET.Native.win-x64`.
+- Os três projetos **compilam** no Linux (`EnableWindowsTargeting`).
+- **O Core executa no Linux**: validado no Fedora 44 (RID `fedora.44-x64`)
+  pelo `Acrux.Cli` — caminho CSV → `ScanCsv`/`SinkParquet` → `ScanParquet` →
+  schema, e também um parquet real de 8,2 MB/28 colunas. Sem trava no
+  encerramento, temporários limpos.
+- `src/Acrux.Cli` (console net10.0, referencia o Core) declara os nativos
+  condicionais: `Polars.NET.Native.win-x64` no Windows, `.linux-x64` no
+  Linux. A condicional (`$([MSBuild]::IsOSPlatform(...))`) é resolvida pela
+  **máquina que compila**, não pelo RID do publish — publish cross-RID exige
+  escolha explícita. As versões managed e nativa precisam ser idênticas
+  (divergência dá segfault em runtime, não erro de build); a 0.6.0 existe nos
+  dois RIDs.
 
 Próximos passos:
 
-1. `Acrux.Cli` (console net10.0) para validar o carregamento do nativo do
-   Polars no Fedora.
+1. Expandir o `Acrux.Cli` para exercitar o resto do Core no Linux (filtros do
+   `FilterEngine`, cadeia do `ScriptHost`).
 2. Com isso fechado, spike de grid virtualizada no Avalonia.
 
 ## Arquitetura
@@ -214,9 +223,14 @@ aceitar fonte lazy genérica).
 - Comunicação com o usuário em **português (PT-BR)**; código, comentários,
   strings de GUI e mensagens de commit em **inglês** (repo público).
   Comentários enxutos: explicar o *porquê*/a restrição, nunca narrar a linha.
-- Trabalho e push na branch `master`. Confira o nome do remote com
-  `git remote -v` antes do push (neste clone é `origin`; já se chamou
-  `ParquetGridViewer` em outro checkout).
+- Trabalho **sempre em branch** com prefixo (`refactor/`, `feat/`, `docs/`) —
+  **nunca commit direto em `master`**; a integração é por PR.
+- PR com `gh pr create --body-file <arquivo>`: a máquina é headless, `--web`
+  não funciona. Merge com `--merge`, **nunca `--squash`** — os commits
+  separados devem sobreviver no histórico.
+- Movimentação de arquivo com `git mv`, para o histórico acompanhar o arquivo.
+- Confira o nome do remote com `git remote -v` antes do push (neste clone é
+  `origin`; já se chamou `ParquetGridViewer` em outro checkout).
 - `gh` instalado e autenticado (conta `raphaelgaeta`, HTTPS): push e
   `gh pr create` funcionam direto do terminal.
 - Fluxo de trabalho do dono do projeto: ele valida o desenho antes do código.

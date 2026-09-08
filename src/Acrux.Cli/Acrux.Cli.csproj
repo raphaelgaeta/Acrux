@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Native engine picked from the machine doing the build: the managed
+         Polars.NET comes transitively from Acrux.Core, but the native library
+         is a per-RID package. Cross-RID publish would need an explicit choice. -->
+    <PackageReference Include="Polars.NET.Native.win-x64" Version="0.6.0"
+                      Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+    <PackageReference Include="Polars.NET.Native.linux-x64" Version="0.6.0"
+                      Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Acrux.Core/Acrux.Core.csproj" />
+  </ItemGroup>
+</Project>
