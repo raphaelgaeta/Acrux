@@ -2,6 +2,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <AssemblyName>Acrux</AssemblyName>
+    <ApplicationIcon>acrux.ico</ApplicationIcon>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
@@ -26,6 +27,10 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Acrux.Core/Acrux.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- ApplicationIcon only reaches the .exe; AppIcon.cs loads this copy for the windows -->
+    <EmbeddedResource Include="acrux.ico" LogicalName="Acrux.AppIcon.ico" />
   </ItemGroup>
 
 </Project>

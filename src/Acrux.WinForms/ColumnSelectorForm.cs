@@ -33,6 +33,7 @@ public sealed class ColumnSelectorForm : Form
         _checked = new HashSet<string>(columns);   // all checked by default
 
         Text = "Select columns";
+        Icon = AppIcon.Value;
         Width = 420;
         Height = 560;
         MinimumSize = new Size(320, 400);

@@ -40,6 +40,7 @@ public partial class MainForm : Form
 public MainForm()
 {
     Text = "Acrux";
+    Icon = AppIcon.Value;
     Width = 1280;
     Height = 760;
     StartPosition = FormStartPosition.CenterScreen;
