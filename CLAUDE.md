@@ -163,10 +163,14 @@ commit que compilou e passou no smoke test (desenho aprovado em 2026-11-08).
 - **Voltar atrás:** `cd ~/.local/share/acrux-cli && ln -sfn "$(readlink
   previous)" current`. Publicar um commit à mão:
   `scripts/deploy-cli.sh <commit>`.
-- **Comando no PATH:** `~/.local/bin/acrux` é um link para
-  `~/.local/share/acrux-cli/current/Acrux.Cli`. A pasta `~/.local/bin` é da
-  Yukidama (espelho de dotfiles), então o link foi pedido a ela; este
-  projeto só cuida de `~/.local/share/acrux-cli`.
+- **Comando no PATH:** `~/.local/bin/acrux` é um symlink para
+  `~/.local/share/acrux-cli/current/Acrux.Cli`, criado pela Yukidama em
+  2026-11-08 (a pasta `~/.local/bin` é dela). Ele fica fora do espelho de
+  dotfiles, na categoria `[acrux]` do `dotfiles/.ignorar`. Este projeto
+  cuida de `~/.local/share/acrux-cli`, e **o `current` nunca pode ficar sem
+  alvo**: sem ele, `acrux` vira "comando não encontrado", sem mensagem. O
+  script garante isso de duas formas: troca o link por `mv`, de uma vez, e a
+  limpeza poupa `current` e `previous`.
 - **Smoke test** (`tests/smoke/run.sh <binário> [--update]`): roda todos os
   comandos sobre fixtures pequenos e compara a saída, com os códigos de
   saída, com `expected.txt`. São CSV com `;` e vírgula decimal, CSV
