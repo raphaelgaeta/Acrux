@@ -96,7 +96,7 @@ public static class TextDates
 
     private sealed record Conversion(string Column, Shape Shape, Order Order)
     {
-        // Exprs are built fresh for every use: Polars.NET 0.6.0 does not reuse them
+        // Exprs are built fresh for every use: Polars.NET 0.6.0 consumed them (1.0 no longer does)
         public Expr Build() => Shape.Parse(Column, Order).Alias(Column);
     }
 

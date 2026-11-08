@@ -217,7 +217,7 @@ static async Task<int> FilterLast(string file, string column, string spanText, i
 // The filter goes into the lazy plan: only the matching rows are read. Rows
 // come newest first — "the last hour" reads from now backwards — and Sort +
 // Limit lets Polars pick the N most recent without sorting everything. Each
-// query builds its own LazyFrame and Expr — Polars.NET 0.6.0 consumes them.
+// query builds its own LazyFrame and Expr — Polars.NET 0.6.0 consumed them.
 static void PrintWindow(Func<LazyFrame> source, string column, DateTimeOffset since, DateTimeOffset until, int rows)
 {
     DataType type;
