@@ -220,6 +220,29 @@ que compilou e passou no smoke test (desenho aprovado em 2026-11-08).
   `.gitignore` libera `tests/smoke/fixtures/*`. Nada de dado real ali: o
   repositório é público.
 
+#### O app de Windows no mesmo deploy (opcional, por clone)
+
+Desenho aprovado em 2026-11-08. Com `git config acrux.deployWindows true`,
+o hook roda `scripts/deploy-windows.sh` depois do CLI:
+
+- **Compila o commit do `current` do CLI**, o mais novo que passou no smoke
+  test (o app de janela não tem teste automático: compilar é a conferência).
+  Roda mesmo quando o deploy do CLI falha, porque segue o `current` dele.
+  `scripts/deploy-windows.sh <commit>` compila outro à mão.
+- **Publish igual ao do release** (win-x64, self-contained, single-file) em
+  `~/.local/share/acrux-windows/<commit>/`, com `COMMIT.txt` dentro e
+  `current`/`previous` como no CLI. ~5 s e ~300 MB por build.
+- **Só recompila quando o app muda** (`Directory.Build.props`,
+  `src/Acrux.Core`, `src/Acrux.WinForms`): um commit de documentação, do CLI
+  ou de teste mantém o build e registra "builds the same app as …: kept".
+- **Entrega:** se o clone tiver `git config acrux.windowsDeliver '<comando>'`,
+  o `sh` roda o comando com a pasta do `current` em `$1` (por exemplo, uma
+  cópia para uma VM do Windows). Código 0 é "entregue" e fica gravado em
+  `delivered`; 3 é destino fora do ar; outro código é falha. Nos dois
+  últimos casos, a entrega é tentada de novo no próximo deploy, e o
+  `current` não muda.
+- O log é o mesmo `deploy.log` do CLI, com as linhas marcadas `windows:`.
+
 ## Arquitetura
 
 Fluxo: `OpenFileDialog` (parquet, CSV, xlsx ou SQLite) → **o formato é
