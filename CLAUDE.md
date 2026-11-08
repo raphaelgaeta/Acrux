@@ -46,8 +46,8 @@ baixa os reference assemblies do Windows e permite **compilar** contra a API do
 Windows a partir do Linux — o binário resultante continua rodando só no
 Windows.
 
-Pacotes: Polars.NET 0.6.0 (+ Native.win-x64, Linq, ML), Apache.Arrow 23 (a
-0.6.0 exige Arrow ≥ 23.0.0 — não fazer downgrade),
+Pacotes: Polars.NET 1.0.1 (+ Native.win-x64/linux-x64, Linq, ML), Apache.Arrow
+23 (a 1.0.1 exige Arrow ≥ 23.0.0 — não fazer downgrade),
 Microsoft.CodeAnalysis.CSharp.Scripting (terminal C#) e Microsoft.Data.Sqlite
 (leitura de SQLite; traz o `e_sqlite3` nativo). Não há projeto de testes; o
 CLI tem um smoke test em `tests/smoke` (ver "Deploy de teste do CLI").
@@ -130,7 +130,10 @@ Yukidama, não deste projeto.
   acompanha mudanças no SVG: repita o `git show` se a arte mudar. Por ser
   arte fora da MIT, não entra no espelho de dotfiles da Yukidama.
 - O Polars (`native_shim.dll`) funciona sob o Wine: o parquet de teste
-  carregou com os acentos certos.
+  carregou com os acentos certos (0.6.0). Com a **1.0.1**, o dono repetiu o
+  roteiro dos GIFs no parquet de 700 colunas × 5M em 2026-11-08: abrir,
+  escolher colunas, filtro de cabeçalho e terminal C# (Roslyn). Tudo
+  funcionou.
 - **Nunca desligue o `mscoree` para rodar .NET.** Com
   `WINEDLLOVERRIDES="mscoree=..."`, o runtime falha com "Could not load file
   or assembly System.Runtime.dll — módulo não encontrado". O lançador
@@ -146,7 +149,9 @@ Yukidama, não deste projeto.
   - o prefixo usa `Decorated=N`: sem isso, todo clique caía 26 px acima do
     alvo.
 - Aparência e ícone ainda pedem Windows de verdade: o Wine valida
-  funcionamento, não fidelidade visual.
+  funcionamento, não fidelidade visual. **Os GIFs do README também**: a
+  interface sob o Wine fica estranha demais para gravar (decisão do dono,
+  2026-11-08). Regravar no Windows quando precisar.
 
 ### Deploy de teste do CLI no laptop
 
@@ -291,14 +296,23 @@ aceitar fonte lazy genérica).
    nunca encadeados sobre resultado anterior.
 3. **Consultas de filtro re-escaneiam o arquivo** via `LazyFrame.ScanParquet`
    (projection pushdown; dezenas de ms em 5M de linhas). Não tentar filtrar
-   "em memória": mesmo com `FromArrow` funcionando na 0.6.0, isso criaria uma
+   "em memória": mesmo com `FromArrow` funcionando desde a 0.6.0, isso criaria uma
    segunda cópia dos dados em RAM, violando o princípio 1.
 4. O `DataFrame` do Polars é descartado logo após `ToArrow()` (a posse dos
    buffers é transferida; verificado por teste).
 
 ## Armadilhas conhecidas (custaram debugging real)
 
-### Polars.NET 0.6.0 (upgrade da 0.4.0 validado por probe em 2026-07)
+### Polars.NET 1.0.1 (0.4.0 → 0.6.0 em 2026-07, por probe; → 1.0.1 em 2026-11-08)
+- **A troca 0.6.0 → 1.0.1 foi medida antes e depois** (branch
+  `refactor/polars-1.0.1`): o smoke test deu a mesma saída, e uma bateria de
+  19 testes de estresse (CLI e caminhos da janela no parquet de 700 colunas ×
+  5M, CSV de 2M, xlsx, SQLite) deu **os mesmos tempos (±12%) e de 18% a 74%
+  menos memória**. Causa provável, não confirmada: a 1.0.0 tirou o mimalloc.
+  Memória medida como pico de `RssAnon`, com o mesmo teto de 8 GB (o porquê
+  está na armadilha de ordenar linhas largas, abaixo). O `filter` com
+  janela larga continuou estourando na 1.0.1 com ordenar e cortar, streaming
+  ou `TopK`: a correção em duas passadas vale para as duas versões.
 - `PolarsSchema.ToDictionary()` **foi removido** → `ToFrozenDictionary()` para
   buscar por nome; **para listar colunas na ordem do arquivo, `ToList()`**
   (ver abaixo).
@@ -327,8 +341,8 @@ aceitar fonte lazy genérica).
   Microseconds)` (microssegundos desde 1970) com dois `Lit(long)`, início e
   fim, calculados conforme o tipo: com fuso, o instante real; sem fuso, a
   hora de parede local (como o grid mostra); data, a meia-noite do dia. Cada
-  lado usa o seu próprio `Col(...)`, porque a 0.6.0 consome a `Expr` ao
-  combiná-la. Validado contra contagem independente em Python nos três
+  lado usa o seu próprio `Col(...)`, porque a 0.6.0 consumia a `Expr` ao
+  combiná-la (a 1.0.1 não consome mais). Validado contra contagem independente em Python nos três
   tipos, com linhas no passado e no futuro. `TimeSpan.TryParse`
   não lê `"1 hour"`: o `TimeFilter.ParseSpan` lê as unidades do systemd.
 - **A inferência de datas do Polars sempre lê `nn/nn/aaaa` como dia/mês**
@@ -353,7 +367,9 @@ aceitar fonte lazy genérica).
   vira float depois da amostra → "could not parse `8.1` as dtype `i64`" no
   sink. `inferSchemaLength: null` NÃO significa "arquivo todo" (cai no
   default, diferente do Python) e `ulong.MaxValue` dá "capacity overflow"
-  nativo. Estratégia do app (EnsureParquetAsync): amostra de 10k (~235 ms em
+  nativo. **Continua assim na 1.0.1**, apesar de a nota da 0.7.0 prometer
+  varrer o arquivo todo quando o parâmetro falta: `ScanCsv` sem ele ainda
+  falha com um float na linha 200.001 (probe, 2026-11-08). Estratégia do app (EnsureParquetAsync): amostra de 10k (~235 ms em
   104 MB) + retry com 1M (~15 s) só quando falha. `decimalComma` errado NÃO
   dá erro — a coluna vira string silenciosamente; por isso a convenção
   decimal é farejada nos dados e, no retry, o valor ofensor da mensagem de
@@ -367,16 +383,19 @@ aceitar fonte lazy genérica).
   UTF-16 via BOM). No net10.0 o `CodePagesEncodingProvider` já vem no
   framework — o pacote `System.Text.Encoding.CodePages` é desnecessário
   (aviso NU1510 se adicionado).
-- **`Collect()` consome o handle do `LazyFrame`** (o 2º parâmetro bool do
-  `Collect(Engine, bool)` permite reuso): acessar `Schema` ou qualquer membro
-  do LazyFrame após o `Collect` dá `PolarsException` "Handle is invalid".
-  Ler o `Schema` antes de coletar.
-- `DataFrame.FromArrow(RecordBatch)` crashava na 0.4.0; na 0.6.0 **funciona**
+- **Na 0.6.0, `Collect()` consumia o handle do `LazyFrame`** (acessar
+  `Schema` depois dava "Handle is invalid") e combinar uma `Expr` a
+  consumia. **Na 1.0.1, os dois são reutilizáveis** (probe, 2026-11-08:
+  `Schema` e um 2º `Collect` depois do 1º; a mesma `Expr` em dois filtros e
+  combinada consigo mesma, contagens iguais). O código ainda monta
+  `LazyFrame` e `Expr` novos a cada consulta: não é mais preciso, mas também
+  não custa.
+- `DataFrame.FromArrow(RecordBatch)` crashava na 0.4.0; desde a 0.6.0 **funciona**
   (validado). Ainda assim não usar para filtrar em memória (princípio 1). O
   DataFrame **sobrevive ao `Dispose` do RecordBatch de origem**: validado
   com 20 rodadas de GC e realocação nativa, com somas e valores intactos.
 - `Expr.IsIn`: o estilo antigo `IsIn(Lit(Series.From(...)).Implode())`
-  continua funcionando; a 0.6.0 tem overload direto `IsIn(IEnumerable<T>)`
+  continua funcionando; desde a 0.6.0 há overload direto `IsIn(IEnumerable<T>)`
   (validado, mesma semântica) — simplificação disponível para o futuro.
 - `WithRowIndex`/`ArgWhere` **agora existem** (índices como `UInt32Array`,
   validados) e poderiam substituir a varredura de máscara booleana no
@@ -417,7 +436,7 @@ aceitar fonte lazy genérica).
   **Ordem dos `case`:** `StringArray` herda de `BinaryArray` (e o mesmo
   vale para View e Large), então texto vem antes de binário. Tipo novo:
   conferir com `acrux head` num parquet que o contenha.
-- **O Polars 0.6.0 recusa timestamp com fuso em formato de offset**
+- **O Polars recusa timestamp com fuso em formato de offset** (0.6.0 e 1.0.1)
   (`+05:30`), só aceita nome IANA (`America/Sao_Paulo`): dá panic já na
   leitura do parquet ("unable to parse time zone"). A exceção chega ao .NET
   e o processo não cai; contorno do próprio Polars:

@@ -79,7 +79,7 @@ public static class TimeFilter
     public static Expr Between(string column, DataType type, DateTimeOffset since, DateTimeOffset until)
     {
         long from = Micros(column, type, since), to = Micros(column, type, until);
-        // two Col() calls, not one shared: Polars.NET 0.6.0 consumes an Expr when it is combined
+        // two Col() calls, not one shared: Polars.NET 0.6.0 consumed an Expr when combining it (1.0 no longer does)
         return (Instant(column) >= Lit(from)) & (Instant(column) <= Lit(to));
     }
 

@@ -224,8 +224,8 @@ nothing at all.
 
 | Package | Version | What it's for |
 |---|---|---|
-| [Polars.NET](https://www.nuget.org/packages/Polars.NET) (+ `Linq`, `ML`, `Native.win-x64`, `Native.linux-x64`) | 0.6.0 | The data engine — Rust Polars, reachable from C#; the native package matches the OS |
-| [Apache.Arrow](https://www.nuget.org/packages/Apache.Arrow) | 23.0.0 | The in-memory columnar format cells are read from (Polars.NET 0.6.0 requires ≥ 23) |
+| [Polars.NET](https://www.nuget.org/packages/Polars.NET) (+ `Linq`, `ML`, `Native.win-x64`, `Native.linux-x64`) | 1.0.1 | The data engine — Rust Polars, reachable from C#; the native package matches the OS |
+| [Apache.Arrow](https://www.nuget.org/packages/Apache.Arrow) | 23.0.0 | The in-memory columnar format cells are read from (Polars.NET 1.0.1 requires ≥ 23) |
 | [Microsoft.Data.Sqlite](https://www.nuget.org/packages/Microsoft.Data.Sqlite) | 10.0.14 | Reads SQLite databases; brings the native SQLite for Windows and Linux |
 | [Microsoft.CodeAnalysis.CSharp.Scripting](https://www.nuget.org/packages/Microsoft.CodeAnalysis.CSharp.Scripting) | 5.6.0 | Roslyn — compiles the terminal's C# scripts at runtime |
 
