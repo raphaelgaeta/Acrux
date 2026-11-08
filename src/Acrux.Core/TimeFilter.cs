@@ -85,6 +85,32 @@ public static class TimeFilter
 
     private static Expr Instant(string column) => Col(column).Dt.Timestamp(TimeUnit.Microseconds);
 
+    /// <summary>
+    /// Positions of the newest <paramref name="count"/> rows inside the window,
+    /// newest first; equal times keep the file's order. Reads only the time
+    /// column: gathering whole rows is left to the caller, a few at a time.
+    /// Sorting the rows themselves would hold every matching row, all its
+    /// columns, in memory — past 8 GB on a 700-column file, even with the
+    /// streaming engine or TopK (measured 2026-11-08). Consumes
+    /// <paramref name="source"/>.
+    /// </summary>
+    public static long[] NewestRows(LazyFrame source, string column, DataType type,
+        DateTimeOffset since, DateTimeOffset until, uint count)
+    {
+        const string Row = "__acrux_row";
+        using var indexed = source.WithRowIndex(Row);
+        using var window = indexed.Filter(Between(column, type, since, until));
+        using var pairs = window.Select(Col(Row), Col(column));
+        using var newest = pairs.Sort([(column, true), (Row, false)]);
+        using var first = newest.Limit(count);
+        using var df = first.Collect();
+        using var batch = df.ToArrow();
+        var rows = new long[batch.Length];
+        for (int i = 0; i < rows.Length; i++)
+            rows[i] = Convert.ToInt64(PolarsTableAdapter.GetCellValue(batch.Column(0), i), CultureInfo.InvariantCulture);
+        return rows;
+    }
+
     private static long Micros(string column, DataType type, DateTimeOffset at)
     {
         var name = type.ToString();

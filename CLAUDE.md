@@ -22,7 +22,10 @@ coluna em todas as tabelas) e `filter <arquivo> <coluna> --last <período>
 `30min`, `1h 30min`, `2 days`, `1M` = mês; a janela termina agora, então
 linhas com data no futuro ficam de fora — numa coluna só de data, o dia de
 hoje entra inteiro; da linha mais recente para a mais antiga; mostra as
-linhas e quantas casaram).
+linhas e quantas casaram; horários iguais saem na ordem do arquivo). Ele
+lê só a coluna de tempo para achar as linhas e depois busca cada uma onde
+ela está: a memória fica perto de 0,6 GB mesmo num parquet de 700 colunas,
+ao custo de ~28 ms por linha mostrada nesse arquivo (~4 ms com 5 colunas).
 **Num `.db`, cada comando responde por tabela** (`schema`, `columns`,
 `rows`, `head`, `column`, `filter`): somar ou unir tabelas diferentes dá
 números sem sentido, e a mesma coluna pode ter tipos diferentes em cada
@@ -267,7 +270,7 @@ aceitar fonte lazy genérica).
 | `src/Acrux.Core/PolarsTableAdapter.cs` | `GetCellValue`: leitura O(1) por célula do Arrow |
 | `src/Acrux.Core/ScriptHost.cs` | Terminal C#: avaliação Roslyn de scripts Polars |
 | `src/Acrux.Core/TextDates.cs` | Datas guardadas como texto (CSV, SQLite) viram data só quando não há ambiguidade |
-| `src/Acrux.Core/TimeFilter.cs` | Filtro de tempo relativo: lê períodos no padrão do systemd e monta o predicado por tipo de coluna |
+| `src/Acrux.Core/TimeFilter.cs` | Filtro de tempo relativo: lê períodos no padrão do systemd, monta o predicado por tipo de coluna e acha as posições das N linhas mais recentes |
 | `src/Acrux.WinForms/Program.cs` | Entrada do app: limpeza de temporários órfãos e `Environment.Exit(0)` |
 | `src/Acrux.WinForms/MainForm.cs` | Grid virtual, carga do arquivo, costura dos filtros |
 | `src/Acrux.WinForms/ColumnSelectorForm.cs` | Diálogo de seleção de colunas na abertura |
@@ -301,14 +304,32 @@ aceitar fonte lazy genérica).
   19 testes de estresse (CLI e caminhos da janela no parquet de 700 colunas ×
   5M, CSV de 2M, xlsx, SQLite) deu **os mesmos tempos (±12%) e de 18% a 74%
   menos memória**. Causa provável, não confirmada: a 1.0.0 tirou o mimalloc.
-  Memória medida como pico de `RssAnon`: o RSS conta as páginas do parquet
-  mapeado (mmap), que o kernel descarta à vontade, e passa de 8 GB num teste
-  que usa 0,7 GB de fato. Cada teste rodou num escopo
-  `systemd-run --user --scope -p MemoryMax=8G -p MemorySwapMax=0`, que mata
-  o processo em vez de deixar o laptop entrar em swap.
+  Memória medida como pico de `RssAnon`, com o mesmo teto de 8 GB (o porquê
+  está na armadilha de ordenar linhas largas, abaixo). O `filter` com
+  janela larga continuou estourando na 1.0.1 com ordenar e cortar, streaming
+  ou `TopK`: a correção em duas passadas vale para as duas versões.
 - `PolarsSchema.ToDictionary()` **foi removido** → `ToFrozenDictionary()` para
   buscar por nome; **para listar colunas na ordem do arquivo, `ToList()`**
   (ver abaixo).
+- **Ordenar e cortar linhas largas estoura a memória, mesmo em streaming**
+  (700 colunas × 5M, 2026-11-08, cada teste num escopo `systemd-run --user
+  --scope -p MemoryMax=8G -p MemorySwapMax=0`). Para mostrar as 10 linhas
+  mais recentes de uma janela com 730 mil linhas:
+  - `Filter` + `Sort` + `Limit`, `Collect(Engine.Streaming)` e `TopK`:
+    **todos passaram de 8 GB**, porque guardam as linhas que casam, com as
+    700 colunas, antes de cortar;
+  - `WithRowIndex` + `IsIn` com as posições: decodifica as páginas de todas
+    as colunas onde as linhas caem (2,6 GB com 10 linhas, morto com 1.000);
+  - `Slice(posição, 1)` por linha: **o DataFrame de uma linha prende o bloco
+    decodificado inteiro** (~13 MB por linha com 700 colunas) enquanto vive;
+  - o que funciona: as posições pela coluna de tempo
+    (`TimeFilter.NewestRows`, 0,1 s) e cada linha virando texto logo depois
+    do `Slice`, com o DataFrame descartado (`PrintWindow` no CLI): 0,6 GB
+    com 10 ou 100 linhas.
+
+  **Meça pelo pico de `RssAnon`** (`/proc/<pid>/status`), não pelo RSS: o
+  RSS conta as páginas do parquet mapeado (mmap), que o kernel descarta à
+  vontade, e passou de 8 GB num teste que usava 0,7 GB de fato.
 - **Comparar datas: pelo instante, não pelo literal.** Uma coluna com fuso
   (`datetime[μs, UTC]`) contra um `Lit(DateTime)` sem fuso dá erro no
   Polars. O `TimeFilter.Between` compara `Col(c).Dt.Timestamp(TimeUnit.
