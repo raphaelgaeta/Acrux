@@ -1,0 +1,16 @@
+#!/bin/sh
+# Deploys the CLI from the new commit in the background, so the commit returns
+# at once (scripts/deploy-cli.sh). Enabled per clone with
+#   git config core.hooksPath .githooks
+# ACRUX_NO_DEPLOY=1 git commit ... skips it.
+[ -n "$ACRUX_NO_DEPLOY" ] && exit 0
+
+root="${ACRUX_CLI_HOME:-$HOME/.local/share/acrux-cli}"
+mkdir -p "$root"
+top=$(git rev-parse --show-toplevel)
+# git exports GIT_DIR, GIT_INDEX_FILE... to hooks; the detached deploy must not inherit them
+# shellcheck disable=SC2046  # one word per variable name, on purpose
+unset $(git rev-parse --local-env-vars)
+
+setsid "$top/scripts/deploy-cli.sh" >> "$root/deploy.log" 2>&1 < /dev/null &
+echo "acrux-cli: deploying in the background; log: $root/deploy.log" >&2

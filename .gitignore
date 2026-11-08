@@ -76,3 +76,6 @@ Desktop.ini
 
 
 
+
+# The smoke test fixtures are part of the repo, whatever their extension
+!tests/smoke/fixtures/*
