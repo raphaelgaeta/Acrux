@@ -48,7 +48,7 @@ static int ShowFormat(string file)
 
 static string DescribeRoute(SourceFormat format) => format switch
 {
-    SourceFormat.Sqlite => "every table in one DataFrame, tagged by tableName",
+    SourceFormat.Sqlite => "each table read into its own DataFrame",
     SourceFormat.Parquet => "read as is",
     SourceFormat.Csv or SourceFormat.Excel => "converted once to a temp parquet",
     var other => $"no route for {other}",
@@ -338,23 +338,54 @@ static string Fit(string text, int width)
     return text[..cut] + "…";
 }
 
+// Name and Polars type of every column; on SQLite, per table. One column per
+// line: types like "datetime[μs, UTC]" carry commas, so a comma list would blur.
 static async Task<int> Schema(string file)
-{
-    foreach (var name in await ColumnNamesAsync(file))
-        Console.WriteLine(name);
-    return 0;
-}
-
-// Same split, but the parquet route reads the schema only: listing the columns
-// of a multi-million-row file must not load it.
-static async Task<string[]> ColumnNamesAsync(string file)
 {
     if (DataFrameProvider.DetectFormat(file) == SourceFormat.Sqlite)
     {
-        using var df = await DataFrameProvider.ReadSqliteTablesToSingleDataFrameAsync(file);
-        return [.. df.Schema.ToList().Select(c => c.Name)];
+        var tables = await DataFrameProvider.ReadSqliteTablesAsync(file);
+        try
+        {
+            foreach (var (table, df) in tables)
+            {
+                Console.WriteLine($"== {table}");
+                PrintSchema(df.Schema);
+            }
+        }
+        finally
+        {
+            foreach (var df in tables.Values)
+                df.Dispose();
+        }
+        return 0;
     }
 
+    var (parquet, isTemp) = await DataFrameProvider.EnsureParquetAsync(file);
+    try
+    {
+        using var lf = LazyFrame.ScanParquet(parquet);   // the schema only: no data is read
+        PrintSchema(lf.Schema);
+    }
+    finally
+    {
+        if (isTemp) File.Delete(parquet);
+    }
+    return 0;
+}
+
+static void PrintSchema(PolarsSchema schema)
+{
+    var columns = schema.ToList();
+    int width = Math.Min(columns.Select(c => c.Name.Length).DefaultIfEmpty(0).Max(), 40);
+    foreach (var c in columns)
+        Console.WriteLine($"{c.Name.PadRight(width)}  {c.Type}");
+}
+
+// The parquet route reads the schema only: listing the columns of a
+// multi-million-row file must not load it.
+static async Task<string[]> ColumnNamesAsync(string file)
+{
     var (parquet, isTemp) = await DataFrameProvider.EnsureParquetAsync(file);
     try
     {
