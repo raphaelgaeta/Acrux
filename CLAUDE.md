@@ -70,16 +70,15 @@ Onde estamos:
   `Polars.NET.Native.linux-x64` 0.6.0), validado em degraus em 2026-11-07:
   1. o nativo carrega (`schema`, `columns`): **ok**;
   2. o caminho do grid (`head`: `GetDataFrameAsync` com `limit` → `ToArrow`
-     → `PolarsTableAdapter.GetCellValue` célula a célula): **ok**, mas achou
-     tipos que o adaptador não conhece (ver Armadilhas);
+     → `PolarsTableAdapter.GetCellValue` célula a célula): **ok**. Achou
+     tipos que o adaptador não conhecia, já corrigidos (ver Armadilhas);
   3. CSV cp1252 e vírgula decimal, xlsx, SQLite, temporários em
      `/tmp/Acrux`: **ok**;
   4. o terminal C# (`ScriptHost`/Roslyn) no Linux: **pendente**.
 
 Próximos passos:
 
-1. Corrigir o `PolarsTableAdapter` para os tipos que faltam, pendente de
-   aval por mudar o que o grid mostra; depois o degrau 4.
+1. Degrau 4: um comando `query` no CLI que rode script pelo `ScriptHost`.
 2. Com isso fechado, spike de grid virtualizada no Avalonia.
 
 ### Testar o app de janela no laptop (Wine)
@@ -269,17 +268,32 @@ aceitar fonte lazy genérica).
   Limit` — por isso só `GetDistinctValuesAsync` usa `Collect(Engine.
   Streaming)`. Não criar seletor de engine sem novo dado que o justifique.
 - Strings continuam chegando como `StringViewArray` (não `StringArray`).
-- **O `PolarsTableAdapter.GetCellValue` não conhece vários tipos**: eles
-  caem no `_ => array.ToString()` e a célula mostra o *nome do tipo* do
-  array. Achado no degrau 2 do CLI (2026-11-07): `Int8`, `Int16`, `UInt8`,
-  `UInt32`, `UInt64`, `Decimal128`, `BinaryView` (blob do SQLite),
-  `LargeList`, `Time64` e `Duration`. Pesa no uso real: decimal é comum em
-  extrações de banco, e `u32` é o que o Polars devolve em contagens
-  (`Count`/`Len`) no terminal. O timestamp sai sempre como `+00:00`, ignora
-  o fuso da coluna, e o sem fuso parece UTC. A Arrow 23 tem um método de
-  leitura para cada um (`Decimal128Array.GetValue`/`GetString`,
-  `Time64Array.GetTime`, `DurationArray.GetTimeSpan`, `GetBytes`,
-  `GetSlicedValues`). A correção está pendente de aval.
+- **Tipo de array sem `case` no `PolarsTableAdapter.GetCellValue` cai no
+  `_ => array.ToString()`, e a célula mostra o *nome do tipo* do array.**
+  Até 2026-11-07 isso acontecia com inteiros de 8/16 bits e sem sinal (o
+  `u32` é o que o Polars devolve em `Count`/`Len`), decimal, binário/blob,
+  lista, hora, duração e categórico (`DictionaryArray`). O degrau 2 do CLI
+  achou, e a correção foi validada com um parquet de 20 tipos:
+  - **inteiros:** o número;
+  - **decimal:** `decimal`, ou o texto exato quando passa de 28 dígitos;
+  - **binário:** `0x…`, até 32 bytes mais o tamanho total;
+  - **lista:** `[1, 2]`, até 20 itens, cultura invariante, textos entre
+    aspas;
+  - **hora:** `HH:mm:ss.FFFFFFF` em texto (o `TimeOnly` padrão perde os
+    segundos);
+  - **duração:** `TimeSpan`;
+  - **categórico:** o valor do dicionário;
+  - **timestamp:** sem fuso é hora de parede, sem offset (antes parecia
+    UTC); com fuso, convertido para o fuso da coluna.
+
+  **Ordem dos `case`:** `StringArray` herda de `BinaryArray` (e o mesmo
+  vale para View e Large), então texto vem antes de binário. Tipo novo:
+  conferir com `acrux head` num parquet que o contenha.
+- **O Polars 0.6.0 recusa timestamp com fuso em formato de offset**
+  (`+05:30`), só aceita nome IANA (`America/Sao_Paulo`): dá panic já na
+  leitura do parquet ("unable to parse time zone"). A exceção chega ao .NET
+  e o processo não cai; contorno do próprio Polars:
+  `POLARS_IGNORE_TIMEZONE_PARSE_ERROR=1`.
 - `DataType.String` etc. seguem estáticos e **fora do XML doc** do pacote.
 - Para validar APIs novas do pacote, use a skill `polars-probe`.
 - **Leitura de banco via ADO.NET** (probe no Linux, 2026-11):
