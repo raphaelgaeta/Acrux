@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using Acrux;
 using Polars.CSharp;
+using static Polars.CSharp.Polars;
 
 DataFrameProvider.CleanStaleTempFiles();   // orphans from runs killed mid-conversion
 
@@ -16,6 +17,8 @@ try
         ["type", var file] => ShowFormat(file),
         ["column", var file, var column] => await ShowSpecificColumn(file, column, 10),
         ["column", var file, var column, "-n", var n] when int.TryParse(n, out var rows) && rows > 0 => await ShowSpecificColumn(file, column, rows),
+        ["filter", var file, var column, "--last", var span] => await FilterLast(file, column, span, 10),
+        ["filter", var file, var column, "--last", var span, "-n", var n] when int.TryParse(n, out var rows) && rows > 0 => await FilterLast(file, column, span, rows),
         _ => Usage(),
     };
 }
@@ -86,8 +89,37 @@ static async Task<int> ShowColumns(string file)
 
 static async Task<int> ShowRowNumber(string file)
 {
-    using var df = await LoadAsync(file);
-    Console.WriteLine(df.Len);
+    if (DataFrameProvider.DetectFormat(file) == SourceFormat.Sqlite)
+    {
+        // one count per table: a sum across tables means nothing
+        var tables = await DataFrameProvider.ReadSqliteTablesAsync(file);
+        try
+        {
+            foreach (var (table, df) in tables)
+                Console.WriteLine($"{table} -> {df.Len}");
+        }
+        finally
+        {
+            foreach (var df in tables.Values)
+                df.Dispose();
+        }
+        return 0;
+    }
+
+    var (parquet, isTemp) = await DataFrameProvider.EnsureParquetAsync(file);
+    try
+    {
+        // parquet keeps the row count in its metadata: no data is read
+        using var lf = LazyFrame.ScanParquet(parquet);
+        using var counted = lf.Select(Len());
+        using var count = counted.Collect();
+        using var batch = count.ToArrow();
+        Console.WriteLine(PolarsTableAdapter.GetCellValue(batch.Column(0), 0));
+    }
+    finally
+    {
+        if (isTemp) File.Delete(parquet);
+    }
     return 0;
 }
 
@@ -121,6 +153,85 @@ static async Task<int> ShowHead(string file, int rows)
     }
     return 0;
 }
+
+
+// Filtering by time, journalctl-style: acrux filter <file> <column> --last "1 hour" [-n N]
+// (the span takes systemd's units: 30min, 1h 30min, 2 days, 1 week...)
+static async Task<int> FilterLast(string file, string column, string spanText, int rows)
+{
+    var span = TimeFilter.ParseSpan(spanText);
+    // "the last hour" ends now: rows dated in the future stay out
+    var until = DateTimeOffset.Now;
+    var since = until - span;
+    Console.WriteLine($"from {Stamp(since)} to {Stamp(until)} (--last \"{spanText}\")");
+
+    if (DataFrameProvider.DetectFormat(file) == SourceFormat.Sqlite)
+    {
+        // the column may live in any table: filter every table that has it
+        var tables = await DataFrameProvider.ReadSqliteTablesAsync(file);
+        try
+        {
+            var found = tables.Where(t => ColumnNames(t.Value).Contains(column)).ToList();
+            if (found.Count == 0)
+                throw new ArgumentException(ColumnNotFound(column, tables.Values.SelectMany(ColumnNames)));
+            foreach (var (table, df) in found)
+            {
+                Console.WriteLine($"== {table}");
+                PrintWindow(() => df.Lazy(), column, since, until, rows);
+            }
+        }
+        finally
+        {
+            foreach (var df in tables.Values)
+                df.Dispose();
+        }
+        return 0;
+    }
+
+    var (parquet, isTemp) = await DataFrameProvider.EnsureParquetAsync(file);
+    try
+    {
+        var columns = await DataFrameProvider.GetColumnNamesAsync(parquet);
+        if (!columns.Contains(column))
+            throw new ArgumentException(ColumnNotFound(column, columns));
+        PrintWindow(() => LazyFrame.ScanParquet(parquet), column, since, until, rows);
+    }
+    finally
+    {
+        if (isTemp) File.Delete(parquet);
+    }
+    return 0;
+}
+
+// The filter goes into the lazy plan: only the matching rows are read. Rows
+// come newest first — "the last hour" reads from now backwards — and Sort +
+// Limit lets Polars pick the N most recent without sorting everything. Each
+// query builds its own LazyFrame and Expr — Polars.NET 0.6.0 consumes them.
+static void PrintWindow(Func<LazyFrame> source, string column, DateTimeOffset since, DateTimeOffset until, int rows)
+{
+    DataType type;
+    using (var probe = source())
+        type = probe.Schema.ToList().First(c => c.Name == column).Type;
+
+    long total;
+    using (var lf = source())
+    using (var matching = lf.Filter(TimeFilter.Between(column, type, since, until)))
+    using (var count = matching.Select(Col(column).Count()).Collect())
+    using (var countBatch = count.ToArrow())
+        total = Convert.ToInt64(PolarsTableAdapter.GetCellValue(countBatch.Column(0), 0), CultureInfo.InvariantCulture);
+
+    using var lf2 = source();
+    using var matching2 = lf2.Filter(TimeFilter.Between(column, type, since, until));
+    using var newestFirst = matching2.Sort(column, descending: true);
+    using var first = newestFirst.Limit((uint)rows);
+    using var df = first.Collect();
+    using var batch = df.ToArrow();
+    PrintBatch(batch);
+    Console.WriteLine($"{total} matching rows");
+}
+
+static string Stamp(DateTimeOffset at) => at.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture);
+
 
 static void PrintBatch(Apache.Arrow.RecordBatch batch)
 {
@@ -234,33 +345,6 @@ static async Task<int> Schema(string file)
     return 0;
 }
 
-// The file format is detected once, by content, and picks the reading route.
-static async Task<DataFrame> LoadAsync(string file) =>
-    DataFrameProvider.DetectFormat(file) switch
-    {
-        // every table in one DataFrame, tagged by a "tableName" column
-        SourceFormat.Sqlite => await DataFrameProvider.ReadSqliteTablesToSingleDataFrameAsync(file),
-        // already parquet: read as is
-        SourceFormat.Parquet => await DataFrameProvider.LoadDataFrameAsync(file),
-        // one-time conversion to a temp parquet (xlsx: first sheet)
-        SourceFormat.Csv or SourceFormat.Excel => await LoadViaTempParquetAsync(file),
-        // a format added to the enum without a route here
-        var format => throw new NotSupportedException($"The CLI has no reading route for {format}."),
-    };
-
-static async Task<DataFrame> LoadViaTempParquetAsync(string file)
-{
-    var (parquet, isTemp) = await DataFrameProvider.EnsureParquetAsync(file);
-    try
-    {
-        return await DataFrameProvider.LoadDataFrameAsync(parquet);
-    }
-    finally
-    {
-        if (isTemp) File.Delete(parquet);   // the temp parquet is ours to delete
-    }
-}
-
 // Same split, but the parquet route reads the schema only: listing the columns
 // of a multi-million-row file must not load it.
 static async Task<string[]> ColumnNamesAsync(string file)
@@ -284,6 +368,6 @@ static async Task<string[]> ColumnNamesAsync(string file)
 
 static int Usage()
 {
-    Console.Error.WriteLine("usage: acrux <schema|columns|head [-n N]|rows|type> <file> | acrux column <file> <name> [-n N]");
+    Console.Error.WriteLine("usage: acrux <schema|columns|head [-n N]|rows|type> <file> | acrux column <file> <name> [-n N] | acrux filter <file> <column> --last <span> [-n N]");
     return 2;
 }

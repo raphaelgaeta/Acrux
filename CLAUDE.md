@@ -14,9 +14,17 @@ dotnet run --project src/Acrux.WinForms
 dotnet run --project src/Acrux.Cli -- head arquivo.parquet -n 10   # CLI, roda no Linux
 ```
 
-O CLI tem os comandos `schema`, `columns`, `head [-n N]`, `rows`, `type` e
+O CLI tem os comandos `schema`, `columns`, `head [-n N]`, `rows`, `type`,
 `column <arquivo> <nome> [-n N]` (padrão: 10 linhas; num `.db`, procura a
-coluna em todas as tabelas).
+coluna em todas as tabelas) e `filter <arquivo> <coluna> --last <período>
+[-n N]` (no espírito do `journalctl --since`: unidades do systemd, como
+`30min`, `1h 30min`, `2 days`, `1M` = mês; a janela termina agora, então
+linhas com data no futuro ficam de fora — numa coluna só de data, o dia de
+hoje entra inteiro; da linha mais recente para a mais antiga; mostra as
+linhas e quantas casaram).
+**Num `.db`, cada comando responde por tabela** (`columns`, `rows`, `head`,
+`column`, `filter`): somar ou unir tabelas diferentes dá números sem sentido.
+O `rows` de parquet conta pelos metadados, sem ler os dados.
 Erros saem em uma linha com código 1 (`ACRUX_DEBUG=1` mostra a exceção
 inteira); uso errado sai com código 2.
 
@@ -197,6 +205,7 @@ aceitar fonte lazy genérica).
 | `src/Acrux.Core/PolarsTableAdapter.cs` | `GetCellValue`: leitura O(1) por célula do Arrow |
 | `src/Acrux.Core/ScriptHost.cs` | Terminal C#: avaliação Roslyn de scripts Polars |
 | `src/Acrux.Core/TextDates.cs` | Datas guardadas como texto (CSV, SQLite) viram data só quando não há ambiguidade |
+| `src/Acrux.Core/TimeFilter.cs` | Filtro de tempo relativo: lê períodos no padrão do systemd e monta o predicado por tipo de coluna |
 | `src/Acrux.WinForms/Program.cs` | Entrada do app: limpeza de temporários órfãos e `Environment.Exit(0)` |
 | `src/Acrux.WinForms/MainForm.cs` | Grid virtual, carga do arquivo, costura dos filtros |
 | `src/Acrux.WinForms/ColumnSelectorForm.cs` | Diálogo de seleção de colunas na abertura |
@@ -228,6 +237,16 @@ aceitar fonte lazy genérica).
 - `PolarsSchema.ToDictionary()` **foi removido** → `ToFrozenDictionary()` para
   buscar por nome; **para listar colunas na ordem do arquivo, `ToList()`**
   (ver abaixo).
+- **Comparar datas: pelo instante, não pelo literal.** Uma coluna com fuso
+  (`datetime[μs, UTC]`) contra um `Lit(DateTime)` sem fuso dá erro no
+  Polars. O `TimeFilter.Between` compara `Col(c).Dt.Timestamp(TimeUnit.
+  Microseconds)` (microssegundos desde 1970) com dois `Lit(long)`, início e
+  fim, calculados conforme o tipo: com fuso, o instante real; sem fuso, a
+  hora de parede local (como o grid mostra); data, a meia-noite do dia. Cada
+  lado usa o seu próprio `Col(...)`, porque a 0.6.0 consome a `Expr` ao
+  combiná-la. Validado contra contagem independente em Python nos três
+  tipos, com linhas no passado e no futuro. `TimeSpan.TryParse`
+  não lê `"1 hour"`: o `TimeFilter.ParseSpan` lê as unidades do systemd.
 - **A inferência de datas do Polars sempre lê `nn/nn/aaaa` como dia/mês**
   (`ScanCsv(tryParseDates: true)` e `Str.ToDatetime` sem formato; testado
   em 2026-11-07). Num CSV americano em que todos os dias eram até 12,
@@ -378,9 +397,9 @@ aceitar fonte lazy genérica).
   sem linhas entra só com as colunas. **A mesma coluna com tipos diferentes em
   tabelas diferentes derruba o concat** ("failed to vstack column"; validado),
   por isso ela é convertida antes para um tipo comum: Float64 se todos os
-  lados são numéricos, senão String. É o que o CLI usa para `.db`
-  (`LoadAsync`/`ColumnNamesAsync` em `Acrux.Cli/Program.cs`); os outros
-  formatos seguem pelo parquet, e `columns`/`schema` leem só o cabeçalho.
+  lados são numéricos, senão String. No CLI, só o `schema` ainda usa isso
+  para `.db` (`ColumnNamesAsync` em `Acrux.Cli/Program.cs`); os outros
+  comandos respondem por tabela.
 
 ### DataGridView (modo virtual)
 - **Diminuir `RowCount` remove linhas uma a uma** (minutos com milhões de
