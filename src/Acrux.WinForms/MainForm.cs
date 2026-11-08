@@ -200,38 +200,44 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
     if (dialog.ShowDialog(this) != DialogResult.OK)
         return;
 
-    var isCsv = dialog.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
-    var isXlsx = dialog.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase);
-    string sourcePath = dialog.FileName;
+    var fileName = dialog.FileName;
+    string sourcePath = fileName;
     bool sourceIsTemp = false;
     try
     {
         _btnLoad.Enabled = false;
 
-        // xlsx with several sheets: ask which one before converting
-        int sheetIndex = 0;
-        if (isXlsx)
+        // the content decides the format, not the extension
+        var format = await Task.Run(() => DataFrameProvider.DetectFormat(fileName));
+
+        // xlsx with several sheets / SQLite with several tables: ask which one before converting
+        int tableIndex = 0;
+        if (format is SourceFormat.Excel or SourceFormat.Sqlite)
         {
-            var fileName = dialog.FileName;
-            var sheetNames = await Task.Run(() => DataFrameProvider.GetExcelSheetNames(fileName));
-            if (sheetNames.Length > 1)
+            var tableNames = await Task.Run(() => DataFrameProvider.GetTableNames(fileName));
+            if (tableNames.Length > 1)
             {
-                using var sheetPicker = new SheetSelectorForm(sheetNames);
-                if (sheetPicker.ShowDialog(this) != DialogResult.OK)
+                using var picker = new SheetSelectorForm(tableNames,
+                    format == SourceFormat.Excel ? "Select sheet" : "Select table");
+                if (picker.ShowDialog(this) != DialogResult.OK)
                 {
                     _lblInfo.Text = "Load canceled";
                     return;
                 }
-                sheetIndex = sheetPicker.SelectedSheetIndex;
+                tableIndex = picker.SelectedSheetIndex;
             }
         }
 
-        // CSV/xlsx: one-time conversion to a temp parquet; the app operates on parquet
-        _lblInfo.Text = isCsv ? "Converting CSV to parquet..."
-            : isXlsx ? "Converting Excel to parquet..."
-            : "Reading schema...";
+        // CSV/xlsx/SQLite: one-time conversion to a temp parquet; the app operates on parquet
+        _lblInfo.Text = format switch
+        {
+            SourceFormat.Csv => "Converting CSV to parquet...",
+            SourceFormat.Excel => "Converting Excel to parquet...",
+            SourceFormat.Sqlite => "Converting SQLite table to parquet...",
+            _ => "Reading schema...",
+        };
         var progress = new Progress<string>(msg => _lblInfo.Text = msg);
-        (sourcePath, sourceIsTemp) = await DataFrameProvider.EnsureParquetAsync(dialog.FileName, progress, sheetIndex);
+        (sourcePath, sourceIsTemp) = await DataFrameProvider.EnsureParquetAsync(fileName, progress, tableIndex);
 
         // metadata only: fast even on huge files
         var columnNames = await DataFrameProvider.GetColumnNamesAsync(sourcePath);

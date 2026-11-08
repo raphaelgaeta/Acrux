@@ -1,0 +1,292 @@
+$ acrux type vendas.csv
+format: Csv
+type:   Acrux.SourceFormat
+route:  converted once to a temp parquet
+[exit 0]
+
+$ acrux type eua.csv
+format: Csv
+type:   Acrux.SourceFormat
+route:  converted once to a temp parquet
+[exit 0]
+
+$ acrux type ansi.csv
+format: Csv
+type:   Acrux.SourceFormat
+route:  converted once to a temp parquet
+[exit 0]
+
+$ acrux type sem_extensao
+format: Csv
+type:   Acrux.SourceFormat
+route:  converted once to a temp parquet
+[exit 0]
+
+$ acrux type tipos.parquet
+format: Parquet
+type:   Acrux.SourceFormat
+route:  read as is
+[exit 0]
+
+$ acrux type planilha.xlsx
+format: Excel
+type:   Acrux.SourceFormat
+route:  converted once to a temp parquet
+tables: Vendas, Estoque
+[exit 0]
+
+$ acrux type banco.db
+format: Sqlite
+type:   Acrux.SourceFormat
+route:  each table read into its own DataFrame
+tables: bordas, canais, itens do pedido, mensagens, misturada, vazia, v_por_canal
+[exit 0]
+
+$ acrux type dados.csv
+format: Sqlite
+type:   Acrux.SourceFormat
+route:  each table read into its own DataFrame
+tables: bordas, canais, itens do pedido, mensagens, misturada, vazia, v_por_canal
+[exit 0]
+
+$ acrux schema vendas.csv
+produto  str
+valor    f64
+data     date
+[exit 0]
+
+$ acrux rows vendas.csv
+3
+[exit 0]
+
+$ acrux schema eua.csv
+id       i64
+quando   date
+ambigua  str
+[exit 0]
+
+$ acrux rows eua.csv
+3
+[exit 0]
+
+$ acrux schema ansi.csv
+cidade  str
+valor   f64
+[exit 0]
+
+$ acrux rows ansi.csv
+2
+[exit 0]
+
+$ acrux schema tipos.parquet
+i8       i8
+i16      i16
+i32      i32
+i64      i64
+u8       u8
+u32      u32
+u64      u64
+f32      f32
+f64      f64
+bool     bool
+texto    str
+largo    str
+data     date
+ts       datetime[μs]
+ts_tz    datetime[ms, America/Sao_Paulo]
+decimal  decimal[10,2]
+blob     binary
+lista    list[i64]
+hora     time
+duracao  duration[ms]
+[exit 0]
+
+$ acrux rows tipos.parquet
+3
+[exit 0]
+
+$ acrux schema planilha.xlsx
+produto  str
+qtd      f64
+[exit 0]
+
+$ acrux rows planilha.xlsx
+2
+[exit 0]
+
+$ acrux schema banco.db
+== bordas
+c1  str
+c2  binary
+c3  f64
+== canais
+id         i64
+titulo     str
+ultimo_id  i64
+== itens do pedido
+pedido_id  i64
+item       str
+== mensagens
+canal_id  i64
+msg_id    i64
+data      datetime[μs, UTC]
+texto     str
+links     str
+== misturada
+id      i64
+codigo  str
+== vazia
+id    i64
+nome  str
+== v_por_canal
+canal_id  i64
+n         i64
+[exit 0]
+
+$ acrux rows banco.db
+bordas -> 3
+canais -> 2
+itens do pedido -> 3
+mensagens -> 4
+misturada -> 5
+vazia -> 0
+v_por_canal -> 2
+[exit 0]
+
+$ acrux columns banco.db
+bordas -> c1, c2, c3
+canais -> id, titulo, ultimo_id
+itens do pedido -> pedido_id, item
+mensagens -> canal_id, msg_id, data, texto, links
+misturada -> id, codigo
+vazia -> id, nome
+v_por_canal -> canal_id, n
+[exit 0]
+
+$ acrux head vendas.csv
+produto       | valor | data      
+--------------+-------+-----------
+Açaí          | 10.5  | 2026-11-01
+Pão de queijo | 7.25  | 2026-11-02
+Café          | 32.9  | 2026-11-03
+(3 rows × 3 columns)
+[exit 0]
+
+$ acrux head eua.csv
+id | quando     | ambigua   
+---+------------+-----------
+1  | 2026-01-13 | 01/02/2026
+2  | 2026-02-01 | 03/04/2026
+3  | 2026-12-25 | 05/06/2026
+(3 rows × 3 columns)
+[exit 0]
+
+$ acrux head ansi.csv
+cidade     | valor
+-----------+------
+São Paulo  | 1.5  
+Açailândia | 2    
+(2 rows × 2 columns)
+[exit 0]
+
+$ acrux head tipos.parquet -n 3
+i8   | i16  | i32   | i64           | u8   | u32        | u64                 | f32   | f64   | bool  | texto           | largo | data       | ts                  | ts_tz                      | decimal | blob     | lista  | hora     | duracao   
+-----+------+-------+---------------+------+------------+---------------------+-------+-------+-------+-----------------+-------+------------+---------------------+----------------------------+---------+----------+--------+----------+-----------
+1    | 300  | 70000 | 1099511627776 | 255  | 4000000000 | 9223372036854775808 | 1.5   | 3.5   | True  | São Paulo       | a     | 2026-11-07 | 2026-11-07 10:30:00 | 2026-11-07 10:30:00 -03:00 | 12.34   | 0x00FF   | [1, 2] | 10:30:00 | 00:01:30  
+-2   | null | 2     | null          | 1    | null       | 1                   | null  | 1E-09 | False | linha 1 linha 2 | null  | null       | null                | null                       | null    | null     | null   | null     | null      
+null | -3   | null  | 3             | null | 1          | null                | -2.25 | null  | null  | null            | ç     | 1999-01-01 | 2000-01-01 00:00:00 | null                       | -0.50   | 0x616263 | []     | 23:59:59 | 1.00:00:00
+(3 rows × 20 columns)
+[exit 0]
+
+$ acrux head banco.db -n 2
+== bordas
+c1   | c2     | c3  
+-----+--------+-----
+null | null   | null
+def  | 0x00FF | 2   
+(2 rows × 3 columns)
+
+== canais
+id | titulo             | ultimo_id
+---+--------------------+----------
+1  | Ofertas do Dia     | 120      
+2  | Cupons & Promoções | 87       
+(2 rows × 3 columns)
+
+== itens do pedido
+pedido_id | item         
+----------+--------------
+1         | açaí         
+1         | pão de queijo
+(2 rows × 2 columns)
+
+== mensagens
+canal_id | msg_id | data                       | texto                | links                    
+---------+--------+----------------------------+----------------------+--------------------------
+1        | 118    | 2026-11-07 16:47:04 -03:00 | Fone 🔥 por R$ 99,90 | ["https://example.com/a"]
+1        | 119    | 2026-11-07 23:10:00 -03:00 | Café em grão 1 kg    | null                     
+(2 rows × 5 columns)
+
+== misturada
+id | codigo
+---+-------
+1  | 10    
+2  | 20    
+(2 rows × 2 columns)
+
+== vazia
+id | nome
+---+-----
+(0 rows × 2 columns)
+
+== v_por_canal
+canal_id | n
+---------+--
+1        | 2
+2        | 2
+(2 rows × 2 columns)
+[exit 0]
+
+$ acrux column banco.db data -n 3
+== mensagens
+data                      
+--------------------------
+2026-11-07 16:47:04 -03:00
+2026-11-07 23:10:00 -03:00
+2020-01-01 09:00:00 -03:00
+(3 rows × 1 columns)
+[exit 0]
+
+$ acrux column vendas.csv Produto
+acrux: no column "Produto" (did you mean "produto"?); columns: produto, valor, data
+[exit 1]
+
+$ acrux filter banco.db data --last 100 years
+from <since> to <now> (--last "100 years")
+== mensagens
+canal_id | msg_id | data                       | texto                | links                    
+---------+--------+----------------------------+----------------------+--------------------------
+1        | 119    | 2026-11-07 23:10:00 -03:00 | Café em grão 1 kg    | null                     
+1        | 118    | 2026-11-07 16:47:04 -03:00 | Fone 🔥 por R$ 99,90 | ["https://example.com/a"]
+2        | 86     | 2020-01-01 09:00:00 -03:00 | Cupom antigo         | []                       
+(3 rows × 5 columns)
+3 matching rows
+[exit 0]
+
+$ acrux filter vendas.csv produto --last 1 day
+from <since> to <now> (--last "1 day")
+acrux: column "produto" is str, not a date or time column
+[exit 1]
+
+$ acrux filter banco.db data --last 1 parsec
+acrux: unknown time unit "parsec"; use one of: us/usec/µs, ms/msec, s/sec/second/seconds, m/min/minute/minutes, h/hr/hour/hours, d/day/days, w/week/weeks, M/month/months, y/year/years
+[exit 1]
+
+$ acrux head nao_existe.csv
+acrux: Could not find file '<work>/nao_existe.csv'.
+[exit 1]
+
+$ acrux head vendas.csv -n 0
+usage: acrux <schema|columns|head [-n N]|rows|type> <file> | acrux column <file> <name> [-n N] | acrux filter <file> <column> --last <span> [-n N] | acrux version
+[exit 2]
+

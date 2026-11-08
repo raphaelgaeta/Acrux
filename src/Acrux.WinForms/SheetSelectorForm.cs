@@ -3,16 +3,16 @@ using System.Windows.Forms;
 
 namespace Acrux;
 
-/// <summary>Minimal picker shown when an .xlsx has more than one sheet.</summary>
+/// <summary>Minimal picker shown when an .xlsx has several sheets or a SQLite database several tables.</summary>
 public sealed class SheetSelectorForm : Form
 {
     private readonly ListBox _list;
 
     public int SelectedSheetIndex => _list.SelectedIndex;
 
-    public SheetSelectorForm(string[] sheetNames)
+    public SheetSelectorForm(string[] sheetNames, string title = "Select sheet")
     {
-        Text = "Select sheet";
+        Text = title;
         Icon = AppIcon.Value;
         Width = 340;
         Height = 380;
