@@ -1,15 +1,23 @@
+using Microsoft.Data.Sqlite;
 using Polars.CSharp;
-
+using static Polars.CSharp.Polars;
 namespace Acrux;
+
+/// <summary>Source formats the app reads, as identified by file content.</summary>
+public enum SourceFormat { Parquet, Csv, Excel, Sqlite }
 
 public static class DataFrameProvider
 {
-    /// <summary>Open-dialog filter (parquet + csv + xlsx).</summary>
+    /// <summary>
+    /// Open-dialog filter. Extensions only narrow the listing: the format is
+    /// decided by content (<see cref="DetectFormat"/>), so "All files" works too.
+    /// </summary>
     public const string OpenDialogFilter =
-        "Data files (*.parquet;*.csv;*.xlsx)|*.parquet;*.csv;*.xlsx|" +
+        "Data files (*.parquet;*.csv;*.xlsx;*.db;*.sqlite;*.sqlite3)|*.parquet;*.csv;*.xlsx;*.db;*.sqlite;*.sqlite3|" +
         "Parquet files (*.parquet)|*.parquet|" +
         "CSV files (*.csv)|*.csv|" +
         "Excel files (*.xlsx)|*.xlsx|" +
+        "SQLite databases (*.db;*.sqlite;*.sqlite3)|*.db;*.sqlite;*.sqlite3|" +
         "All files (*.*)|*.*";
 
     // CSV type-inference samples. Polars' default (100 rows) misfires easily
@@ -21,32 +29,38 @@ public static class DataFrameProvider
     private const ulong InferSchemaRowsRetry = 1_000_000;
 
     /// <summary>
-    /// Guarantees a parquet source: .parquet passes through; .csv is converted
-    /// once to a temporary parquet (ScanCsv → SinkParquet, streaming, RAM-
-    /// bounded) so the app keeps operating on parquet only — preserving the
-    /// cheap-rescan design of filters and scripts. Returns the source path and
-    /// whether it is temporary (caller deletes).
+    /// Guarantees a parquet source, whatever the input (format detected by
+    /// content): parquet passes through; CSV is converted once to a temporary
+    /// parquet (ScanCsv → SinkParquet, streaming, RAM-bounded); an xlsx sheet
+    /// or a SQLite table/view is materialized and written as parquet. The app
+    /// then operates on parquet only — preserving the cheap-rescan design of
+    /// filters and scripts. <paramref name="tableIndex"/> picks the sheet or
+    /// table (order of <see cref="GetTableNames"/>). Returns the source path
+    /// and whether it is temporary (caller deletes).
     /// </summary>
     public static async Task<(string ParquetPath, bool IsTemp)> EnsureParquetAsync(
-        string path, IProgress<string>? progress = null, int excelSheetIndex = 0,
+        string path, IProgress<string>? progress = null, int tableIndex = 0,
         CancellationToken cancellationToken = default)
     {
         if (!File.Exists(path))
             throw new FileNotFoundException("File not found.", path);
 
-        if (path.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
+        var format = await Task.Run(() => DetectFormat(path), cancellationToken);
+        if (format == SourceFormat.Parquet)
+            return (path, false);
+
+        if (format is SourceFormat.Excel or SourceFormat.Sqlite)
         {
             return await Task.Run(() =>
             {
                 var tempDir = Path.Combine(Path.GetTempPath(), "Acrux");
                 Directory.CreateDirectory(tempDir);
-                return (ConvertExcel(path, excelSheetIndex, tempDir,
-                    Path.GetFileNameWithoutExtension(path)), true);
+                var baseName = Path.GetFileNameWithoutExtension(path);
+                return (format == SourceFormat.Excel
+                    ? ConvertExcel(path, tableIndex, tempDir, baseName)
+                    : ConvertSqlite(path, tableIndex, tempDir, baseName), true);
             }, cancellationToken);
         }
-
-        if (!path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
-            return (path, false);
 
         return await Task.Run(() =>
         {
@@ -113,6 +127,84 @@ public static class DataFrameProvider
     }
 
     /// <summary>
+    /// Identifies the file by its leading bytes, not its extension: agents and
+    /// exports name files loosely (.db, .sqlite, none at all), and a wrong
+    /// guess would only fail later with a cryptic native error. Plain text
+    /// (no NUL bytes, or a UTF-16 BOM) is taken as delimited text (CSV).
+    /// </summary>
+    public static SourceFormat DetectFormat(string path)
+    {
+        var head = new byte[8 * 1024];
+        int read;
+        using (var fs = File.OpenRead(path))
+            read = fs.ReadAtLeast(head, head.Length, throwOnEndOfStream: false);
+        if (read == 0)
+            throw new InvalidDataException("The file is empty.");
+        var bytes = head.AsSpan(0, read);
+
+        if (bytes.StartsWith("PAR1"u8))
+            return SourceFormat.Parquet;
+        if (bytes.StartsWith("SQLite format 3\0"u8))
+            return SourceFormat.Sqlite;
+        if (bytes.StartsWith("PK\u0003\u0004"u8))
+            return IsXlsx(path) ? SourceFormat.Excel
+                : throw new NotSupportedException("ZIP archive that is not an .xlsx workbook (e.g. .docx or .ods).");
+        if (bytes.StartsWith(new byte[] { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 }))
+            throw new NotSupportedException("Legacy Office file (e.g. Excel 97-2003 .xls): save it as .xlsx.");
+        // UTF-16 text is full of NULs; TranscodeToUtf8 honors its BOM
+        if (bytes.StartsWith(new byte[] { 0xFF, 0xFE }) || bytes.StartsWith(new byte[] { 0xFE, 0xFF }))
+            return SourceFormat.Csv;
+        if (bytes.IndexOf((byte)0) < 0)
+            return SourceFormat.Csv;
+        throw new NotSupportedException("Unrecognized binary file. Supported: Parquet, CSV, Excel (.xlsx) and SQLite.");
+    }
+
+    private static bool IsXlsx(string path)
+    {
+        try
+        {
+            using var zip = System.IO.Compression.ZipFile.OpenRead(path);
+            return zip.GetEntry("xl/workbook.xml") is not null;
+        }
+        catch (InvalidDataException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// What the user can pick inside the file: sheets (xlsx) or tables and
+    /// views (SQLite). Empty for single-table formats (parquet, CSV).
+    /// </summary>
+    public static string[] GetTableNames(string path) => DetectFormat(path) switch
+    {
+        SourceFormat.Excel => GetExcelSheetNames(path),
+        SourceFormat.Sqlite => GetSqliteTableNames(path),
+        _ => [],
+    };
+
+    /// <summary>
+    /// The user's data only — tables first, then views, each alphabetically.
+    /// Left out: internal sqlite_* tables, and virtual tables (FTS5 search
+    /// indexes, R*Tree…) with their shadow tables: an FTS index mirrors a real
+    /// table and showed up first in the list as a lone "texto" column.
+    /// pragma_table_list needs SQLite 3.37+; the bundled e_sqlite3 is 3.53.
+    /// </summary>
+    public static string[] GetSqliteTableNames(string path)
+    {
+        using var conn = OpenSqlite(path);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "SELECT name FROM pragma_table_list WHERE schema = 'main' AND type IN ('table', 'view') " +
+            "AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY type, name";
+        using var reader = cmd.ExecuteReader();
+        var names = new List<string>();
+        while (reader.Read())
+            names.Add(reader.GetString(0));
+        return names.ToArray();
+    }
+
+    /// <summary>
     /// xlsx → temp parquet. ReadExcel (native calamine engine) materializes
     /// the sheet in RAM, but the xlsx format caps at ~1M rows so the peak is
     /// bounded. Note: Excel stores every number as floating point, so integer
@@ -133,6 +225,271 @@ public static class DataFrameProvider
             throw;
         }
     }
+
+    /// <summary>
+    /// Every table and view of a SQLite database, materialized: name → DataFrame,
+    /// in <see cref="GetSqliteTableNames"/> order (tables, then views), names
+    /// matched case-insensitively like SQLite does. Meant for one-shot
+    /// consumers such as the CLI: the whole database goes to RAM — fine for the
+    /// small databases agents create, not for multi-GB ones (the grid keeps
+    /// going through <see cref="EnsureParquetAsync"/>). The caller disposes the
+    /// DataFrames.
+    /// </summary>
+      
+    public static async Task<OrderedDictionary<string, DataFrame>> ReadSqliteTablesAsync(
+        string path, CancellationToken cancellationToken = default)
+    {
+        if (!File.Exists(path))
+            throw new FileNotFoundException("File not found.", path);
+
+        return await Task.Run(() =>
+        {
+            if (DetectFormat(path) != SourceFormat.Sqlite)
+                throw new InvalidDataException("Not a SQLite database.");
+
+            var tables = new OrderedDictionary<string, DataFrame>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                using var conn = OpenSqlite(path);
+                foreach (var name in GetSqliteTableNames(path))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var columns = GetSqliteColumnKinds(conn, name);
+                    using var batch = ReadSqliteTable(conn, name, columns);
+                    tables.Add(name, DataFrame.FromArrow(batch));
+                }
+                return tables;
+            }
+            catch
+            {
+                foreach (var df in tables.Values)
+                    df.Dispose();
+                throw;
+            }
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// The whole SQLite database as ONE DataFrame, mirroring pandas'
+    /// pd.concat(dict) — which is what yields a MultiIndex there; Polars has no
+    /// index, so a leading "tableName" column names each row's source table.
+    /// Columns are unioned (diagonal concat): a column a table lacks is null in
+    /// its rows, and a table with no rows contributes only its columns. Same
+    /// RAM caveat as <see cref="ReadSqliteTablesAsync"/>. The caller disposes
+    /// the result.
+    /// </summary>
+    public static async Task<DataFrame> ReadSqliteTablesToSingleDataFrameAsync(
+        string path, CancellationToken cancellationToken = default)
+    {
+        var tables = await ReadSqliteTablesAsync(path, cancellationToken);
+        var tagged = new List<DataFrame>(tables.Count);
+        try
+        {
+            // the same column name with different types across tables (id INTEGER
+            // here, TEXT there) makes the concat fail ("failed to vstack"): meet at
+            // a common type — Float64 when every side is numeric, otherwise String
+            var commonType = tables.Values
+                .SelectMany(df => df.Schema.ToList())
+                .GroupBy(c => c.Name)
+                .Where(g => g.Select(c => c.Type.ToString()).Distinct().Count() > 1)
+                .ToDictionary(g => g.Key, g => g.All(c => IsNumeric(c.Type)) ? DataType.Float64 : DataType.String);
+
+            foreach (var (name, df) in tables)
+            {
+                tagged.Add(df.Select([
+                    Lit(name).Alias("tableName"),
+                    .. df.Schema.ToList().Select(c => commonType.TryGetValue(c.Name, out var type)
+                        ? Col(c.Name).Cast(type).Alias(c.Name)
+                        : Col(c.Name)),
+                ]));
+            }
+            return DataFrame.ConcatDiagonal(tagged);
+        }
+        finally
+        {
+            foreach (var df in tables.Values)
+                df.Dispose();
+            foreach (var df in tagged)
+                df.Dispose();
+        }
+    }
+
+    private static bool IsNumeric(DataType type) =>
+        type.ToString() is "i8" or "i16" or "i32" or "i64" or "u8" or "u16" or "u32" or "u64" or "f32" or "f64";
+
+    /// <summary>
+    /// SQLite table/view → temp parquet. Not through DataFrame.ReadDatabase:
+    /// it trusts the ADO.NET reader's column types, which SQLite derives from
+    /// the FIRST row (see <see cref="GetSqliteColumnKinds"/>). The table is read
+    /// with typed getters into Arrow and handed over via FromArrow; like the
+    /// xlsx path, it is materialized during the conversion.
+    /// </summary>
+    private static string ConvertSqlite(string path, int tableIndex, string tempDir, string baseName)
+    {
+        var tables = GetSqliteTableNames(path);
+        if (tables.Length == 0)
+            throw new InvalidDataException("The SQLite database has no tables or views.");
+        if ((uint)tableIndex >= (uint)tables.Length)
+            throw new ArgumentOutOfRangeException(nameof(tableIndex),
+                $"Table index {tableIndex} is out of range: the database has {tables.Length} tables/views.");
+
+        var temp = Path.Combine(tempDir, $"{baseName}_pid{Environment.ProcessId}_{Guid.NewGuid():N}.parquet");
+        try
+        {
+            using var conn = OpenSqlite(path);
+            var table = tables[tableIndex];
+            var columns = GetSqliteColumnKinds(conn, table);
+            using var batch = ReadSqliteTable(conn, table, columns);
+            using var df = DataFrame.FromArrow(batch);
+            df.WriteParquet(temp);
+            return temp;
+        }
+        catch
+        {
+            try { File.Delete(temp); } catch (IOException) { }
+            throw;
+        }
+    }
+
+    private enum SqliteKind { Integer, Real, Text, Blob }
+
+    // Read-only: a viewer never writes to the user's database. No pooling: a
+    // pooled connection keeps the file open after Close.
+    private static SqliteConnection OpenSqlite(string path)
+    {
+        var conn = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = path,
+            Mode = SqliteOpenMode.ReadOnly,
+            Pooling = false,
+        }.ToString());
+        conn.Open();
+        return conn;
+    }
+
+    /// <summary>
+    /// SQLite is dynamically typed, and the ADO.NET reader types each column by
+    /// its FIRST row: a later 'abc' in an INTEGER column reads as 0, 3.5 as 3,
+    /// and a NULL first row falls back to the declared type — or to binary when
+    /// there is none, CASTs included (all silent; probe-validated). So the type
+    /// comes from the storage classes actually present in the column, in one
+    /// pass: integer → Int64; integer + real → Double; only blob → Binary;
+    /// anything else with text → String; only NULLs → the declared type.
+    /// </summary>
+    private static List<(string Name, SqliteKind Kind)> GetSqliteColumnKinds(SqliteConnection conn, string table)
+    {
+        var columns = new List<(string Name, string DeclaredType)>();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT name, type FROM pragma_table_info($table)";
+            cmd.Parameters.AddWithValue("$table", table);
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+                columns.Add((reader.GetString(0), reader.IsDBNull(1) ? "" : reader.GetString(1)));
+        }
+        if (columns.Count == 0)
+            throw new InvalidDataException($"Could not read the columns of '{table}'.");
+
+        var classes = new string?[columns.Count];
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT " + string.Join(", ", columns.Select(c =>
+                $"group_concat(DISTINCT NULLIF(typeof({QuoteIdentifier(c.Name)}), 'null'))")) +
+                $" FROM {QuoteIdentifier(table)}";
+            using var reader = cmd.ExecuteReader();
+            reader.Read();
+            for (int i = 0; i < columns.Count; i++)
+                classes[i] = reader.IsDBNull(i) ? null : reader.GetString(i);
+        }
+
+        return columns.Select((c, i) => (c.Name, SqliteKindFor(classes[i], c.DeclaredType))).ToList();
+    }
+
+    private static SqliteKind SqliteKindFor(string? storageClasses, string declaredType)
+    {
+        if (storageClasses is null)
+        {
+            // only NULLs: SQLite's affinity rules on the declared type
+            var t = declaredType.ToUpperInvariant();
+            return t.Contains("INT") ? SqliteKind.Integer
+                : t.Contains("REAL") || t.Contains("FLOA") || t.Contains("DOUB") ? SqliteKind.Real
+                : SqliteKind.Text;
+        }
+        var set = storageClasses.Split(',');
+        if (set.All(c => c == "integer")) return SqliteKind.Integer;
+        if (set.All(c => c is "integer" or "real")) return SqliteKind.Real;
+        if (set.All(c => c == "blob")) return SqliteKind.Blob;
+        return SqliteKind.Text;
+    }
+
+    private static Apache.Arrow.RecordBatch ReadSqliteTable(
+        SqliteConnection conn, string table, List<(string Name, SqliteKind Kind)> columns)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT {string.Join(", ", columns.Select(c => QuoteIdentifier(c.Name)))} FROM {QuoteIdentifier(table)}";
+        using var reader = cmd.ExecuteReader();
+
+        var append = new Action<SqliteDataReader, int>[columns.Count];
+        var build = new Func<Apache.Arrow.IArrowArray>[columns.Count];
+        var fields = new List<Apache.Arrow.Field>();
+        for (int i = 0; i < columns.Count; i++)
+        {
+            switch (columns[i].Kind)
+            {
+                case SqliteKind.Integer:
+                {
+                    var b = new Apache.Arrow.Int64Array.Builder();
+                    append[i] = (r, k) => { if (r.IsDBNull(k)) b.AppendNull(); else b.Append(r.GetInt64(k)); };
+                    build[i] = () => b.Build();
+                    fields.Add(new(columns[i].Name, Apache.Arrow.Types.Int64Type.Default, nullable: true));
+                    break;
+                }
+                case SqliteKind.Real:
+                {
+                    var b = new Apache.Arrow.DoubleArray.Builder();
+                    append[i] = (r, k) => { if (r.IsDBNull(k)) b.AppendNull(); else b.Append(r.GetDouble(k)); };
+                    build[i] = () => b.Build();
+                    fields.Add(new(columns[i].Name, Apache.Arrow.Types.DoubleType.Default, nullable: true));
+                    break;
+                }
+                case SqliteKind.Blob:
+                {
+                    var b = new Apache.Arrow.BinaryArray.Builder();
+                    append[i] = (r, k) => { if (r.IsDBNull(k)) b.AppendNull(); else b.Append((ReadOnlySpan<byte>)r.GetFieldValue<byte[]>(k)); };
+                    build[i] = () => b.Build();
+                    fields.Add(new(columns[i].Name, Apache.Arrow.Types.BinaryType.Default, nullable: true));
+                    break;
+                }
+                default:
+                {
+                    // text column: numbers keep their SQLite text form ("10", "3.5"); stray blobs show as hex
+                    var b = new Apache.Arrow.StringArray.Builder();
+                    append[i] = (r, k) =>
+                    {
+                        if (r.IsDBNull(k)) b.AppendNull();
+                        else if (r.GetFieldType(k) == typeof(byte[])) b.Append("0x" + Convert.ToHexString(r.GetFieldValue<byte[]>(k)));
+                        else b.Append(r.GetString(k));
+                    };
+                    build[i] = () => b.Build();
+                    fields.Add(new(columns[i].Name, Apache.Arrow.Types.StringType.Default, nullable: true));
+                    break;
+                }
+            }
+        }
+
+        int rows = 0;
+        while (reader.Read())
+        {
+            for (int k = 0; k < append.Length; k++)
+                append[k](reader, k);
+            rows++;
+        }
+
+        var schema = new Apache.Arrow.Schema(fields, null);
+        return new Apache.Arrow.RecordBatch(schema, build.Select(f => f()), rows);
+    }
+
+    private static string QuoteIdentifier(string name) => "\"" + name.Replace("\"", "\"\"") + "\"";
 
     /// <summary>
     /// Best-effort sweep of %TEMP%\Acrux leftovers from runs that died before
@@ -292,8 +649,22 @@ public static class DataFrameProvider
         return await Task.Run(() =>
         {
             using var lf = LazyFrame.ScanParquet(parquetPath);
-            return lf.Schema.ToFrozenDictionary().Keys.ToArray();
+            // ToList keeps the file's column order; ToFrozenDictionary scrambles it (validated)
+            return lf.Schema.ToList().Select(c => c.Name).ToArray();
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Loads the entire parquet into RAM — small files only: unlike
+    /// <see cref="GetDataFrameAsync"/> there is no projection, so every
+    /// column and row is read.
+    /// </summary>
+    public static async Task<DataFrame> LoadDataFrameAsync(string parquetPath, CancellationToken cancellationToken = default)
+    {
+        if (!File.Exists(parquetPath))
+            throw new FileNotFoundException("Parquet file not found.", parquetPath);
+
+        return await Task.Run(() => DataFrame.ReadParquet(parquetPath), cancellationToken);
     }
 
     /// <summary>

@@ -26,8 +26,9 @@ Windows a partir do Linux — o binário resultante continua rodando só no
 Windows.
 
 Pacotes: Polars.NET 0.6.0 (+ Native.win-x64, Linq, ML), Apache.Arrow 23 (a
-0.6.0 exige Arrow ≥ 23.0.0 — não fazer downgrade) e
-Microsoft.CodeAnalysis.CSharp.Scripting (terminal C#). Não há projeto de testes.
+0.6.0 exige Arrow ≥ 23.0.0 — não fazer downgrade),
+Microsoft.CodeAnalysis.CSharp.Scripting (terminal C#) e Microsoft.Data.Sqlite
+(leitura de SQLite; traz o `e_sqlite3` nativo). Não há projeto de testes.
 
 Publicação — sempre com o caminho do `.csproj` (ver NETSDK1099 acima):
 
@@ -60,23 +61,77 @@ Onde estamos:
 - `Acrux.Core` já é net10.0 puro, sem dependência de WinForms; só o
   `Acrux.WinForms` é net10.0-windows.
 - Os dois projetos **compilam** no Linux (`EnableWindowsTargeting`).
-- Nada foi **executado** no Linux ainda — nem o Core, nem o nativo do Polars.
-  O único pacote nativo referenciado é `Polars.NET.Native.win-x64`.
+- O nativo do Polars para Linux (`Polars.NET.Native.linux-x64` 0.6.0,
+  `libnative_shim.so`) já **rodou** no Fedora num probe isolado (2026-11-07:
+  `ScanParquet`, `ReadDatabase`, `WriteParquet`). O Core em si ainda não foi
+  validado no Linux; esse é o papel do `Acrux.Cli` (branch `feat/cli`).
 
 Próximos passos:
 
-1. `Acrux.Cli` (console net10.0) para validar o carregamento do nativo do
-   Polars no Fedora.
+1. `Acrux.Cli` (console net10.0) para validar o Core no Fedora.
 2. Com isso fechado, spike de grid virtualizada no Avalonia.
+
+### Testar o app de janela no laptop (Wine)
+
+O WinForms não roda nativo no Linux. No laptop, o app roda sob o Wine 11,
+montado pela Yukidama em 2026-11-07; os fatos medidos estão em
+`~/Yukidama/conhecimento/wine.md`. Configurar o laptop é trabalho da
+Yukidama, não deste projeto.
+
+- **Lançar:** pelo menu do Super+D (entrada "Acrux", em
+  `~/.local/share/applications/acrux.desktop`) ou por `acrux-wine [arquivo]`
+  (em `~/.local/bin`; prefixo em `~/.local/share/wineprefixes/acrux`). O
+  argumento só abre o arquivo quando o `Main` aceitar um caminho, o que está
+  pendente.
+- **Abre a compilação mais nova**: a de mtime mais recente entre
+  `~/Acrux-publish/Acrux.exe` e o publish sem `-o`
+  (`src/Acrux.WinForms/bin/Release/net10.0-windows/win-x64/publish/`).
+  `acrux-wine --qual` diz qual abriria, e por quê, sem abrir. `ACRUX_EXE`
+  fixa outro executável.
+- **Só o self-contained roda**: o prefixo não tem o .NET Desktop Runtime, e o
+  lançador ignora o apphost leve do build framework-dependent, mesmo que seja
+  mais novo. Refaça o publish a cada mudança. Um publish feito a partir de
+  branch sem a `feat/brand` sai com o ícone padrão do WinForms.
+- O ícone do menu é uma cópia local do SVG da `feat/brand`
+  (`~/.local/share/icons/hicolor/scalable/apps/acrux.svg`). Ele não
+  acompanha mudanças no SVG: repita o `git show` se a arte mudar. Por ser
+  arte fora da MIT, não entra no espelho de dotfiles da Yukidama.
+- O Polars (`native_shim.dll`) funciona sob o Wine: o parquet de teste
+  carregou com os acentos certos.
+- **Nunca desligue o `mscoree` para rodar .NET.** Com
+  `WINEDLLOVERRIDES="mscoree=..."`, o runtime falha com "Could not load file
+  or assembly System.Runtime.dll — módulo não encontrado". O lançador
+  descarta overrides externos.
+- **Prefixo novo exige o pacote `wine-common`** (já instalado). Sem ele, o
+  `wineboot` entra em laço copiando `.winmd`: o `rundll32` fica a 99% de CPU e
+  o processador chega a 100 °C, com ou sem tela.
+- **Interromper um comando que chamou o wine não para o Wine.** Para parar:
+  `WINEPREFIX=~/.local/share/wineprefixes/acrux wineserver -k`.
+- **Esquisitices conhecidas:**
+  - o seletor de colunas abre lado a lado no sway, em vez de flutuar;
+  - a janela fica borrada na escala 1.5, porque passa pelo Xwayland;
+  - o prefixo usa `Decorated=N`: sem isso, todo clique caía 26 px acima do
+    alvo.
+- Aparência e ícone ainda pedem Windows de verdade: o Wine valida
+  funcionamento, não fidelidade visual.
 
 ## Arquitetura
 
-Fluxo: `OpenFileDialog` (parquet, CSV ou xlsx) → xlsx: abas enumeradas via
-ZIP puro (`GetExcelSheetNames` lê `xl/workbook.xml`; 2+ abas abrem o
-`SheetSelectorForm`) e a aba escolhida vira parquet temporário por
+Fluxo: `OpenFileDialog` (parquet, CSV, xlsx ou SQLite) → **o formato é
+decidido pelo conteúdo, não pela extensão** (`DataFrameProvider.DetectFormat`
+lê os bytes iniciais: `PAR1` = parquet, `SQLite format 3\0` = SQLite, ZIP com
+`xl/workbook.xml` = xlsx, texto sem NUL ou com BOM UTF-16 = CSV; `.xls`
+antigo, outros ZIPs e binários são recusados com mensagem clara) → xlsx e
+SQLite têm "tabelas" a escolher (`GetTableNames`: abas via ZIP puro, lendo
+`xl/workbook.xml`; tabelas e views de dados via `pragma_table_list`, sem
+as virtuais e suas `shadow`; 2+ abrem o
+`SheetSelectorForm`) → xlsx: a aba escolhida vira parquet temporário por
 `DataFrame.ReadExcel` (motor calamine; materializa em RAM, limitado a ~1M
 linhas pelo formato; **números chegam como double** — representação interna
-do Excel, validado por probe) → CSV é convertido **uma única vez**
+do Excel, validado por probe) → SQLite: a tabela escolhida vira parquet
+temporário por leitura tipada para Arrow + `FromArrow` + `WriteParquet`
+(conexão só leitura, sem pool; materializa durante a conversão; ver
+armadilha de tipagem abaixo) → CSV é convertido **uma única vez**
 para parquet temporário (`DataFrameProvider.EnsureParquetAsync`: valida UTF-8
 por amostra e transcodifica cp1252/UTF-16 se preciso — ver armadilha abaixo —,
 detecção de separador na 1ª linha, `decimalComma` quando `;`, `ScanCsv` →
@@ -124,14 +179,14 @@ aceitar fonte lazy genérica).
 
 | Arquivo | Papel |
 |---|---|
-| `src/Acrux.Core/DataFrameProvider.cs` | Leitura do parquet via LazyFrame |
+| `src/Acrux.Core/DataFrameProvider.cs` | Detecção de formato pelo conteúdo, conversão para parquet, leitura via LazyFrame |
 | `src/Acrux.Core/FilterEngine.cs` | Filtros estilo Excel via Polars (distintos + máscara) |
 | `src/Acrux.Core/PolarsTableAdapter.cs` | `GetCellValue`: leitura O(1) por célula do Arrow |
 | `src/Acrux.Core/ScriptHost.cs` | Terminal C#: avaliação Roslyn de scripts Polars |
 | `src/Acrux.WinForms/Program.cs` | Entrada do app: limpeza de temporários órfãos e `Environment.Exit(0)` |
 | `src/Acrux.WinForms/MainForm.cs` | Grid virtual, carga do arquivo, costura dos filtros |
 | `src/Acrux.WinForms/ColumnSelectorForm.cs` | Diálogo de seleção de colunas na abertura |
-| `src/Acrux.WinForms/SheetSelectorForm.cs` | Diálogo de escolha da aba do xlsx (2+ abas) |
+| `src/Acrux.WinForms/SheetSelectorForm.cs` | Diálogo de escolha da aba do xlsx ou da tabela do SQLite (2+) |
 | `src/Acrux.WinForms/FilterPopupForm.cs` | Popup de filtro aberto pelo cabeçalho da coluna |
 | `src/Acrux.WinForms/ScriptTerminalPanel.cs` | UI do terminal (painel inferior do MainForm) |
 
@@ -155,7 +210,9 @@ aceitar fonte lazy genérica).
 ## Armadilhas conhecidas (custaram debugging real)
 
 ### Polars.NET 0.6.0 (upgrade da 0.4.0 validado por probe em 2026-07)
-- `PolarsSchema.ToDictionary()` **foi removido** → usar `ToFrozenDictionary()`.
+- `PolarsSchema.ToDictionary()` **foi removido** → `ToFrozenDictionary()` para
+  buscar por nome; **para listar colunas na ordem do arquivo, `ToList()`**
+  (ver abaixo).
 - **Inferência de schema do CSV é por amostra** (default 100 linhas): int que
   vira float depois da amostra → "could not parse `8.1` as dtype `i64`" no
   sink. `inferSchemaLength: null` NÃO significa "arquivo todo" (cai no
@@ -179,7 +236,9 @@ aceitar fonte lazy genérica).
   do LazyFrame após o `Collect` dá `PolarsException` "Handle is invalid".
   Ler o `Schema` antes de coletar.
 - `DataFrame.FromArrow(RecordBatch)` crashava na 0.4.0; na 0.6.0 **funciona**
-  (validado). Ainda assim não usar para filtrar em memória (princípio 1).
+  (validado). Ainda assim não usar para filtrar em memória (princípio 1). O
+  DataFrame **sobrevive ao `Dispose` do RecordBatch de origem**: validado
+  com 20 rodadas de GC e realocação nativa, com somas e valores intactos.
 - `Expr.IsIn`: o estilo antigo `IsIn(Lit(Series.From(...)).Implode())`
   continua funcionando; a 0.6.0 tem overload direto `IsIn(IEnumerable<T>)`
   (validado, mesma semântica) — simplificação disponível para o futuro.
@@ -200,6 +259,65 @@ aceitar fonte lazy genérica).
 - Strings continuam chegando como `StringViewArray` (não `StringArray`).
 - `DataType.String` etc. seguem estáticos e **fora do XML doc** do pacote.
 - Para validar APIs novas do pacote, use a skill `polars-probe`.
+- **Leitura de banco via ADO.NET** (probe no Linux, 2026-11):
+  `DataFrame.ReadDatabase(IDataReader, batchSize)` recebe um *leitor*, não
+  um caminho, e lê tudo para Arrow (eager). **Não fecha o leitor**: o
+  chamador faz `using`. `LazyFrame.ScanDatabase(Func<IDataReader>, …)` abre
+  dois leitores (schema + dados) e fecha os dois, mas `SinkParquet` sobre ele
+  **não faz streaming**: o motor novo dá panic "not yet implemented:
+  AnonymousScan" no stderr e cai para escrita eager. A RAM é a mesma do
+  `ReadDatabase`, e ainda há ruído. Para SQLite, nem o `ReadDatabase` serve:
+  ele confia no tipo que o leitor informa (ver SQLite abaixo).
+- **`PolarsSchema.ToFrozenDictionary()` não preserva a ordem das colunas**
+  (validado: 40 colunas voltam embaralhadas). `ToList()` e `ToArrowSchema()`
+  preservam. O `GetColumnNamesAsync` usou `ToFrozenDictionary().Keys` até
+  2026-11-07, e por isso o seletor de colunas e o grid saíam embaralhados.
+  Agora usa `ToList()`.
+
+### SQLite (.db) — probe no Linux, 2026-11
+- **`System.Data.SQLite` 2.0.4 não traz o SQLite nativo**: sozinho dá
+  `DllNotFoundException: e_sqlite3`. Use `Microsoft.Data.Sqlite`, que traz o
+  `e_sqlite3` para win/linux/osx via SQLitePCLRaw.
+- **O leitor ADO.NET tipa cada coluna pela PRIMEIRA linha, e o SQLite aceita
+  qualquer valor em qualquer coluna**: depois da 1ª linha, numa coluna
+  INTEGER, `'abc'` vira 0 e `3.5` vira 3. Se a 1ª linha é NULL, vale o tipo
+  declarado (INTEGER com textos → zeros) ou binary quando não há tipo
+  declarado — **inclusive em `CAST(...)`**, que não tem tipo declarado. Tudo
+  sem erro. Por isso o `ConvertSqlite` não usa `ReadDatabase`: ele decide o
+  tipo pelas classes de armazenamento presentes na coluna
+  (`group_concat(DISTINCT typeof(col))`, uma passada), lê com o getter
+  daquele tipo para Arrow e entrega por `FromArrow`. Regras: só integer →
+  i64; integer + real → f64; só blob → binary; qualquer mistura com texto →
+  str; só NULL → tipo declarado. Medido: 300k linhas × 10 colunas em ~0,8 s.
+- **O SQLite não tem tipo de data nem booleano**: data guardada em texto chega
+  como str; BOOLEAN chega como i64 (0/1).
+- **Detecção por conteúdo**: arquivo SQLite começa com `"SQLite format 3\0"`
+  (16 bytes). A extensão `.db` não garante nada. Isso está no `DetectFormat`.
+- **Índices de busca (FTS5) poluem a lista de tabelas**: num banco real (o
+  `ofertas.db` do Corrente de Ofertas), a tabela virtual `busca` e as
+  `shadow` dela (`busca_config`, `_data`, `_docsize`, `_idx`) vinham antes de
+  `mensagens` em ordem alfabética, e a "primeira tabela" era o índice, com uma
+  coluna só (`texto`). O `sqlite_master` não distingue esses casos; o
+  `pragma_table_list` (SQLite 3.37+; o embutido é 3.53) marca o tipo como
+  `virtual` ou `shadow`. Por isso o `GetSqliteTableNames` lista só
+  `table`/`view` do schema `main`.
+- **`ReadSqliteTablesAsync` devolve o banco inteiro como dicionário**
+  (`OrderedDictionary<string, DataFrame>`: ordem garantida, tabelas antes das
+  views, nomes sem diferenciar maiúsculas, como no SQLite). É para o CLI, que
+  não pede `--table` ao operador; desenho do dono, 2026-11-07. Tudo vai para
+  a RAM, o que serve para bancos de agente, mas não para bancos de GB. O app
+  de janela continua no `EnsureParquetAsync`, tabela a tabela. O chamador
+  descarta os DataFrames.
+- **`ReadSqliteTablesToSingleDataFrameAsync` junta o banco num DataFrame só**
+  (desenho do dono): é o equivalente do `pd.concat(dict)` do pandas, que lá
+  gera um MultiIndex. A coluna `tableName` vem primeiro, e as colunas são
+  unidas por `ConcatDiagonal` (nulo onde a tabela não tem a coluna). Tabela
+  sem linhas entra só com as colunas. **A mesma coluna com tipos diferentes em
+  tabelas diferentes derruba o concat** ("failed to vstack column"; validado),
+  por isso ela é convertida antes para um tipo comum: Float64 se todos os
+  lados são numéricos, senão String. É o que o CLI usa para `.db`
+  (`LoadAsync`/`ColumnNamesAsync` em `Acrux.Cli/Program.cs`); os outros
+  formatos seguem pelo parquet, e `columns`/`schema` leem só o cabeçalho.
 
 ### DataGridView (modo virtual)
 - **Diminuir `RowCount` remove linhas uma a uma** (minutos com milhões de

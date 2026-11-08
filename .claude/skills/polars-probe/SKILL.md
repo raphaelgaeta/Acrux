@@ -65,10 +65,13 @@ aproveitável.
 ## Fatos já validados na 0.6.0 (não re-testar)
 
 - `ToArrow()` transfere posse: batch válido após `Dispose` do DataFrame.
-- `FromArrow(RecordBatch)` funciona (na 0.4.0 era AccessViolation).
+- `FromArrow(RecordBatch)` funciona (na 0.4.0 era AccessViolation), e o
+  DataFrame sobrevive ao `Dispose` do batch de origem (GC + realocação nativa).
 - `IsIn`: tanto `Lit(Series.From(...)).Implode()` (estilo 0.4.0) quanto o
   overload direto `IsIn(IEnumerable<T>)` funcionam.
-- `PolarsSchema.ToDictionary()` não existe mais → `ToFrozenDictionary()`.
+- `PolarsSchema.ToDictionary()` não existe mais → `ToFrozenDictionary()`, que
+  **não preserva a ordem das colunas**; para nomes em ordem, `ToList()`
+  (tuplas nome/tipo) ou `ToArrowSchema().FieldsList`.
 - `WithRowIndex(nome)` e `ArgWhere(expr)` existem; índices como `UInt32Array`.
 - Strings → `StringViewArray`; `Unique()` preserva null (detecção de vazias).
 - `Sort(string)` e `Limit(uint)` funcionam com parâmetros default no LazyFrame.
