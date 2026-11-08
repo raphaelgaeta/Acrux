@@ -127,7 +127,10 @@ Yukidama, não deste projeto.
   acompanha mudanças no SVG: repita o `git show` se a arte mudar. Por ser
   arte fora da MIT, não entra no espelho de dotfiles da Yukidama.
 - O Polars (`native_shim.dll`) funciona sob o Wine: o parquet de teste
-  carregou com os acentos certos.
+  carregou com os acentos certos (0.6.0). Com a **1.0.1**, o dono repetiu o
+  roteiro dos GIFs no parquet de 700 colunas × 5M em 2026-11-08: abrir,
+  escolher colunas, filtro de cabeçalho e terminal C# (Roslyn). Tudo
+  funcionou.
 - **Nunca desligue o `mscoree` para rodar .NET.** Com
   `WINEDLLOVERRIDES="mscoree=..."`, o runtime falha com "Could not load file
   or assembly System.Runtime.dll — módulo não encontrado". O lançador
@@ -143,7 +146,9 @@ Yukidama, não deste projeto.
   - o prefixo usa `Decorated=N`: sem isso, todo clique caía 26 px acima do
     alvo.
 - Aparência e ícone ainda pedem Windows de verdade: o Wine valida
-  funcionamento, não fidelidade visual.
+  funcionamento, não fidelidade visual. **Os GIFs do README também**: a
+  interface sob o Wine fica estranha demais para gravar (decisão do dono,
+  2026-11-08). Regravar no Windows quando precisar.
 
 ### Deploy de teste do CLI no laptop
 
