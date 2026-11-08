@@ -1,6 +1,5 @@
 using Microsoft.Data.Sqlite;
 using Polars.CSharp;
-using static Polars.CSharp.Polars;
 namespace Acrux;
 
 /// <summary>Source formats the app reads, as identified by file content.</summary>
@@ -279,54 +278,6 @@ public static class DataFrameProvider
             }
         }, cancellationToken);
     }
-
-    /// <summary>
-    /// The whole SQLite database as ONE DataFrame, mirroring pandas'
-    /// pd.concat(dict) — which is what yields a MultiIndex there; Polars has no
-    /// index, so a leading "tableName" column names each row's source table.
-    /// Columns are unioned (diagonal concat): a column a table lacks is null in
-    /// its rows, and a table with no rows contributes only its columns. Same
-    /// RAM caveat as <see cref="ReadSqliteTablesAsync"/>. The caller disposes
-    /// the result.
-    /// </summary>
-    public static async Task<DataFrame> ReadSqliteTablesToSingleDataFrameAsync(
-        string path, CancellationToken cancellationToken = default)
-    {
-        var tables = await ReadSqliteTablesAsync(path, cancellationToken);
-        var tagged = new List<DataFrame>(tables.Count);
-        try
-        {
-            // the same column name with different types across tables (id INTEGER
-            // here, TEXT there) makes the concat fail ("failed to vstack"): meet at
-            // a common type — Float64 when every side is numeric, otherwise String
-            var commonType = tables.Values
-                .SelectMany(df => df.Schema.ToList())
-                .GroupBy(c => c.Name)
-                .Where(g => g.Select(c => c.Type.ToString()).Distinct().Count() > 1)
-                .ToDictionary(g => g.Key, g => g.All(c => IsNumeric(c.Type)) ? DataType.Float64 : DataType.String);
-
-            foreach (var (name, df) in tables)
-            {
-                tagged.Add(df.Select([
-                    Lit(name).Alias("tableName"),
-                    .. df.Schema.ToList().Select(c => commonType.TryGetValue(c.Name, out var type)
-                        ? Col(c.Name).Cast(type).Alias(c.Name)
-                        : Col(c.Name)),
-                ]));
-            }
-            return DataFrame.ConcatDiagonal(tagged);
-        }
-        finally
-        {
-            foreach (var df in tables.Values)
-                df.Dispose();
-            foreach (var df in tagged)
-                df.Dispose();
-        }
-    }
-
-    private static bool IsNumeric(DataType type) =>
-        type.ToString() is "i8" or "i16" or "i32" or "i64" or "u8" or "u16" or "u32" or "u64" or "f32" or "f64";
 
     /// <summary>
     /// SQLite table/view → temp parquet. Not through DataFrame.ReadDatabase:

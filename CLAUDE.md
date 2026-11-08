@@ -441,16 +441,13 @@ aceitar fonte lazy genérica).
   a RAM, o que serve para bancos de agente, mas não para bancos de GB. O app
   de janela continua no `EnsureParquetAsync`, tabela a tabela. O chamador
   descarta os DataFrames.
-- **`ReadSqliteTablesToSingleDataFrameAsync` junta o banco num DataFrame só**
-  (desenho do dono): é o equivalente do `pd.concat(dict)` do pandas, que lá
-  gera um MultiIndex. A coluna `tableName` vem primeiro, e as colunas são
-  unidas por `ConcatDiagonal` (nulo onde a tabela não tem a coluna). Tabela
-  sem linhas entra só com as colunas. **A mesma coluna com tipos diferentes em
-  tabelas diferentes derruba o concat** ("failed to vstack column"; validado),
-  por isso ela é convertida antes para um tipo comum: Float64 se todos os
-  lados são numéricos, senão String. **Desde 2026-11-08 nada chama esse
-  método**: o `schema` era o último comando do CLI a usá-lo, e agora todos
-  respondem por tabela.
+- **Juntar o banco num DataFrame só não serve** (o equivalente do
+  `pd.concat(dict)`, com uma coluna `tableName`; existiu como
+  `ReadSqliteTablesToSingleDataFrameAsync` e saiu em 2026-11-08). Somar ou
+  unir tabelas diferentes dava números sem sentido, e a mesma coluna com
+  tipos diferentes em duas tabelas **derruba o `ConcatDiagonal`** ("failed
+  to vstack column"; validado). O contorno era converter para um tipo comum,
+  e isso escondia o tipo real. Hoje tudo responde por tabela.
 
 ### DataGridView (modo virtual)
 - **Diminuir `RowCount` remove linhas uma a uma** (minutos com milhões de
