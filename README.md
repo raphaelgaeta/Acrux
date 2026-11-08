@@ -42,6 +42,12 @@ The logo by [Kat Ribeiro](https://www.instagram.com/design.da.kat/) tells the
 same story: the five stars of the Southern Cross around the bear, with Acrux,
 the brightest, shining above him.
 
+The bear has a name of his own: **Ginan the Snooper**. Ginan is the official
+name of ε Crucis, the faintest of the cross's five stars — the one Brazilians
+call *Intrometida*, "the nosy one", for squeezing in among the four bright
+stars that draw the cross. A polar bear who came south to snoop around the
+sky, now snooping around your data.
+
 ## What it does
 
 - **Opens Parquet, CSV and simple Excel files.** CSV and .xlsx get converted

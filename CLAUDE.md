@@ -60,6 +60,14 @@ Logo de Kat Ribeiro (design), propriedade do dono do projeto e **fora da MIT**
 entra a arte em uso; o kit completo (`.ai`, `.eps`, JPGs, PDFs com contato dela)
 fica fora.
 
+**Acrux é o projeto; o urso do logo é o mascote, Ginan the Snooper.** Ginan é
+o nome oficial (IAU, 2017) de ε Crucis, a "Intrometida" do Cruzeiro do Sul;
+*snooper* é o xereta: o urso polar que veio bisbilhotar o céu do sul, e os
+seus dados. Fora do README, porque não foi conferido na fonte primária: a
+Wikipédia diz, citando o relatório de 2023 do grupo de nomes de estrelas da
+IAU, que Ginan seria o nome wardaman da própria Acrux, e que o nome foi mantido
+mesmo assim.
+
 - **O ícone é recorte:** urso e estrela grande são transparentes e assumem a cor
   do fundo (claros no tema claro, escuros no escuro), como nos mockups da autora.
   Não preencher. "Ícone Preto" some no tema escuro; o ícone com nome só é legível
