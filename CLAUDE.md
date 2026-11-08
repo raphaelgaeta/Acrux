@@ -78,10 +78,30 @@ Pelo GitHub Actions (`.github/workflows/release.yml`, desenho aprovado em
 1. Na `master`, crie e suba a tag: `git tag v0.1.0 && git push origin v0.1.0`.
 2. O workflow compila e testa: no Linux, o smoke test e o CLI self-contained
    (`acrux-cli-v0.1.0-linux-x64.tar.gz`, com um link `acrux` dentro); no
-   Windows, o app single-file (`Acrux-v0.1.0-win-x64.zip`, com a `LICENSE` e
-   o `NOTICE` da arte).
+   Windows, o instalador (`Acrux-v0.1.0-setup.exe`) e o app single-file
+   (`Acrux-v0.1.0-win-x64.zip`); os dois levam a `LICENSE` e o `NOTICE` da
+   arte.
 3. Ele cria um release **rascunho**, com o `SHA256SUMS` e as notas (texto
    fixo de instalação + as geradas pelo GitHub). O dono confere e publica.
+
+**O instalador** (`installer/acrux.iss`, Inno Setup 6.7.1 instalado na CI pelo
+`choco`, com a versão fixa; desenho aprovado em 2026-11-08):
+
+- **Por usuário, sem admin:** instala em `%LOCALAPPDATA%\Programs\Acrux`,
+  com atalho no menu Iniciar, ícone na área de trabalho opcional e
+  desinstalador.
+- **Instala uma pasta, não o single-file:** é um publish self-contained
+  normal, que abre mais rápido e não extrai nada em `%TEMP%\.net`.
+- **Runtime do Visual C++ (ver Armadilhas):** se a `vcruntime140.dll` falta,
+  o setup baixa o `vc_redist.x64.exe` do link oficial da Microsoft e o roda
+  com `runas`. Só nesse momento o Windows pede admin. Baixar, em vez de
+  embutir, evita redistribuir o pacote, que pela licença é restrito a quem
+  tem Visual Studio. Se o download falhar ou o pedido de admin for recusado,
+  o Acrux se instala mesmo assim, e o setup mostra o link.
+- **`AppId` fixo** no `.iss`: o Windows reconhece a instalação por ele.
+  Nunca mude.
+- O `.iss` só compila no Windows (na CI). Para testar, baixe o artefato
+  `windows` do PR com `gh run download`.
 
 Em PR, o mesmo workflow só compila e testa, sem release. A versão vem da tag
 (`-p:Version=0.1.0`); fora de release vale `0.0.0-dev`
@@ -343,6 +363,17 @@ aceitar fonte lazy genérica).
 ## Armadilhas conhecidas (custaram debugging real)
 
 ### Polars.NET 1.0.1 (0.4.0 → 0.6.0 em 2026-07, por probe; → 1.0.1 em 2026-11-08)
+- **No Windows, o nativo do Polars exige o runtime do Visual C++.** O
+  `native_shim.dll` importa `VCRUNTIME140.dll` (a 0.6.0 importava também o
+  `_1`), que vem do Visual C++ Redistributable e **não existe num Windows
+  limpo**. Lá, abrir qualquer arquivo dá "Error loading DataFrame: Dll was
+  not found." (VM do Windows 11, 2026-11-08). O Wine tem uma cópia própria, e
+  quase todo PC já tem o redistributable instalado: por isso ninguém tinha
+  visto. As outras importações são do Windows (o UCRT `api-ms-win-crt-*`
+  existe desde o Windows 10), e o `e_sqlite3.dll` não depende disso. O
+  instalador resolve; o zip pede o redistributable nas notas. Conferir as
+  importações de um `.dll` novo: tabela de importação PE (o `objdump` do
+  Fedora não lê PE).
 - **A troca 0.6.0 → 1.0.1 foi medida antes e depois** (branch
   `refactor/polars-1.0.1`): o smoke test deu a mesma saída, e uma bateria de
   19 testes de estresse (CLI e caminhos da janela no parquet de 700 colunas ×
