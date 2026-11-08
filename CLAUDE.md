@@ -1,8 +1,9 @@
 # Acrux
 
-Visualizador WinForms de arquivos .parquet, .csv e .xlsx: Polars.NET como motor
-de dados, `DataGridView` em modo virtual como apresentação. Otimizado para
-arquivos grandes (655+ colunas, milhões de linhas). O nome vem de α Crucis,
+Um núcleo de leitura de dados tabulares (parquet, CSV, xlsx e SQLite) sobre o
+Polars.NET, com duas fronteiras: o visualizador WinForms (`DataGridView` em
+modo virtual) e o CLI. Otimizado para arquivos grandes (700 colunas, milhões
+de linhas). O nome vem de α Crucis,
 a estrela mais brilhante do Cruzeiro do Sul (o repositório já se chamou
 ParquetGridViewer e o projeto, PolarsGridViewer).
 
@@ -34,10 +35,11 @@ Erros saem em uma linha com código 1 (`ACRUX_DEBUG=1` mostra a exceção
 inteira); uso errado sai com código 2. `acrux version` diz qual commit está
 instalado (ver "Deploy de teste do CLI" abaixo).
 
-Dois projetos sob `src/`, agregados pelo `Acrux.sln` da raiz: `Acrux.Core`
+Três projetos sob `src/`, agregados pelo `Acrux.sln` da raiz: `Acrux.Core`
 (net10.0, sem UI — `DataFrameProvider`, `FilterEngine`, `PolarsTableAdapter`,
-`ScriptHost`) e `Acrux.WinForms` (net10.0-windows, WinForms, `AssemblyName`
-mantido como `Acrux`, referencia o Core). `dotnet build` na raiz basta, mas
+`ScriptHost`, `TextDates`, `TimeFilter`), `Acrux.WinForms` (net10.0-windows,
+WinForms, `AssemblyName` mantido como `Acrux`) e `Acrux.Cli` (net10.0,
+console); os dois últimos referenciam o Core. `dotnet build` na raiz basta, mas
 **`dotnet run` e `dotnet publish` exigem apontar o projeto**: na raiz o `run`
 não acha projeto ("Couldn't find a project to run") e o `publish` falha com
 **NETSDK1099**, porque tenta aplicar single-file também no Acrux.Core, que é
@@ -135,64 +137,26 @@ Próximos passos:
 1. Degrau 4: um comando `query` no CLI que rode script pelo `ScriptHost`.
 2. Com isso fechado, spike de grid virtualizada no Avalonia.
 
-### Testar o app de janela no laptop (Wine)
+### Testar o app de janela no Linux (Wine)
 
-O WinForms não roda nativo no Linux. No laptop, o app roda sob o Wine 11,
-montado pela Yukidama em 2026-11-07; os fatos medidos estão em
-`~/Yukidama/conhecimento/wine.md`. Configurar o laptop é trabalho da
-Yukidama, não deste projeto.
+O WinForms não roda nativo no Linux, mas o publish self-contained roda sob o
+Wine: com a 1.0.1, abrir, escolher colunas, filtro de cabeçalho e terminal C#
+funcionaram (2026-11-08). O Wine valida funcionamento, não aparência: ícone,
+visual e os GIFs do README se conferem no Windows. **Nunca desligue o
+`mscoree`** (`WINEDLLOVERRIDES="mscoree=..."`): sem ele o runtime .NET falha
+com "Could not load file or assembly System.Runtime.dll". A montagem do
+laptop do mantenedor fica no `CLAUDE.local.md`, fora do git.
 
-- **Lançar:** pelo menu do Super+D (entrada "Acrux", em
-  `~/.local/share/applications/acrux.desktop`) ou por `acrux-wine [arquivo]`
-  (em `~/.local/bin`; prefixo em `~/.local/share/wineprefixes/acrux`). O
-  argumento só abre o arquivo quando o `Main` aceitar um caminho, o que está
-  pendente.
-- **Abre a compilação mais nova**: a de mtime mais recente entre
-  `~/Acrux-publish/Acrux.exe` e o publish sem `-o`
-  (`src/Acrux.WinForms/bin/Release/net10.0-windows/win-x64/publish/`).
-  `acrux-wine --qual` diz qual abriria, e por quê, sem abrir. `ACRUX_EXE`
-  fixa outro executável.
-- **Só o self-contained roda**: o prefixo não tem o .NET Desktop Runtime, e o
-  lançador ignora o apphost leve do build framework-dependent, mesmo que seja
-  mais novo. Refaça o publish a cada mudança. Um publish feito a partir de
-  branch sem a `feat/brand` sai com o ícone padrão do WinForms.
-- O ícone do menu é uma cópia local do SVG da `feat/brand`
-  (`~/.local/share/icons/hicolor/scalable/apps/acrux.svg`). Ele não
-  acompanha mudanças no SVG: repita o `git show` se a arte mudar. Por ser
-  arte fora da MIT, não entra no espelho de dotfiles da Yukidama.
-- O Polars (`native_shim.dll`) funciona sob o Wine: o parquet de teste
-  carregou com os acentos certos (0.6.0). Com a **1.0.1**, o dono repetiu o
-  roteiro dos GIFs no parquet de 700 colunas × 5M em 2026-11-08: abrir,
-  escolher colunas, filtro de cabeçalho e terminal C# (Roslyn). Tudo
-  funcionou.
-- **Nunca desligue o `mscoree` para rodar .NET.** Com
-  `WINEDLLOVERRIDES="mscoree=..."`, o runtime falha com "Could not load file
-  or assembly System.Runtime.dll — módulo não encontrado". O lançador
-  descarta overrides externos.
-- **Prefixo novo exige o pacote `wine-common`** (já instalado). Sem ele, o
-  `wineboot` entra em laço copiando `.winmd`: o `rundll32` fica a 99% de CPU e
-  o processador chega a 100 °C, com ou sem tela.
-- **Interromper um comando que chamou o wine não para o Wine.** Para parar:
-  `WINEPREFIX=~/.local/share/wineprefixes/acrux wineserver -k`.
-- **Esquisitices conhecidas:**
-  - o seletor de colunas abre lado a lado no sway, em vez de flutuar;
-  - a janela fica borrada na escala 1.5, porque passa pelo Xwayland;
-  - o prefixo usa `Decorated=N`: sem isso, todo clique caía 26 px acima do
-    alvo.
-- Aparência e ícone ainda pedem Windows de verdade: o Wine valida
-  funcionamento, não fidelidade visual. **Os GIFs do README também**: a
-  interface sob o Wine fica estranha demais para gravar (decisão do dono,
-  2026-11-08). Regravar no Windows quando precisar.
+### Deploy de teste do CLI (opcional, por clone)
 
-### Deploy de teste do CLI no laptop
-
-Cada commit publica o CLI sozinho, e o comando `acrux` passa a ser o último
-commit que compilou e passou no smoke test (desenho aprovado em 2026-11-08).
+Quem liga o hook tem, a cada commit, o CLI publicado sozinho: o último commit
+que compilou e passou no smoke test (desenho aprovado em 2026-11-08).
 
 - **Hook:** `.githooks/post-commit` chama `scripts/deploy-cli.sh` em segundo
   plano (`setsid`), e o commit volta na hora. Hooks não vêm no clone: cada
-  clone liga uma vez com `git config core.hooksPath .githooks` (este já
-  está ligado). Numa branch sem `.githooks/`, nada acontece.
+  clone liga uma vez com `git config core.hooksPath .githooks`. Numa branch
+  sem `.githooks/`, nada acontece. Merge sem conflito não dispara o hook
+  (é `post-merge`, não `post-commit`): publique à mão.
   `ACRUX_NO_DEPLOY=1 git commit …` pula o deploy.
 - **O script publica o commit, não o disco:** `git archive` do commit →
   `dotnet publish` Release linux-x64 framework-dependent (~3 s) →
@@ -213,14 +177,10 @@ commit que compilou e passou no smoke test (desenho aprovado em 2026-11-08).
 - **Voltar atrás:** `cd ~/.local/share/acrux-cli && ln -sfn "$(readlink
   previous)" current`. Publicar um commit à mão:
   `scripts/deploy-cli.sh <commit>`.
-- **Comando no PATH:** `~/.local/bin/acrux` é um symlink para
-  `~/.local/share/acrux-cli/current/Acrux.Cli`, criado pela Yukidama em
-  2026-11-08 (a pasta `~/.local/bin` é dela). Ele fica fora do espelho de
-  dotfiles, na categoria `[acrux]` do `dotfiles/.ignorar`. Este projeto
-  cuida de `~/.local/share/acrux-cli`, e **o `current` nunca pode ficar sem
-  alvo**: sem ele, `acrux` vira "comando não encontrado", sem mensagem. O
-  script garante isso de duas formas: troca o link por `mv`, de uma vez, e a
-  limpeza poupa `current` e `previous`.
+- **Comando no PATH:** aponte um link para
+  `~/.local/share/acrux-cli/current/Acrux.Cli`. **O `current` nunca pode
+  ficar sem alvo** (sem ele, o comando some sem mensagem): o script troca o
+  link por `mv`, de uma vez, e a limpeza poupa `current` e `previous`.
 - **Smoke test** (`tests/smoke/run.sh <binário> [--update]`): roda todos os
   comandos sobre fixtures pequenos e compara a saída, com os códigos de
   saída, com `expected.txt`. São CSV com `;` e vírgula decimal, CSV
@@ -543,19 +503,16 @@ aceitar fonte lazy genérica).
 
 ## Convenções
 
-- Comunicação com o usuário em **português (PT-BR)**; código, comentários,
-  strings de GUI e mensagens de commit em **inglês** (repo público).
+- Código, comentários, strings de GUI e mensagens de commit em **inglês**
+  (repo público).
   Comentários enxutos: explicar o *porquê*/a restrição, nunca narrar a linha.
 - Trabalho **sempre em branch** com prefixo (`refactor/`, `feat/`, `docs/`) —
   **nunca commit direto em `master`**; a integração é por PR.
-- PR com `gh pr create --body-file <arquivo>`: a máquina é headless, `--web`
-  não funciona. Merge com `--merge`, **nunca `--squash`** — os commits
-  separados devem sobreviver no histórico.
+- PR com `gh pr create --body-file <arquivo>`. Merge com `--merge`, **nunca
+  `--squash`** — os commits separados devem sobreviver no histórico
+  (reafirmado pelo dono em 2026-11-08). O repositório apaga a branch sozinho
+  ao mesclar.
 - Movimentação de arquivo com `git mv`, para o histórico acompanhar o arquivo.
-- Confira o nome do remote com `git remote -v` antes do push (neste clone é
-  `origin`; já se chamou `ParquetGridViewer` em outro checkout).
-- `gh` instalado e autenticado (conta `raphaelgaeta`, HTTPS): push e
-  `gh pr create` funcionam direto do terminal.
 - Fluxo de trabalho do dono do projeto: ele valida o desenho antes do código.
   Para features novas, apresente a arquitetura/avaliação primeiro e aguarde o
   aval antes de implementar.
