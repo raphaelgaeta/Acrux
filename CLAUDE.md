@@ -79,9 +79,9 @@ Onde estamos:
 
 - `Acrux.Core` já é net10.0 puro, sem dependência de WinForms; só o
   `Acrux.WinForms` é net10.0-windows.
-- Os dois projetos **compilam** no Linux (`EnableWindowsTargeting`).
-- **O Core roda no Linux** pelo `Acrux.Cli` (net10.0, nativo
-  `Polars.NET.Native.linux-x64` 0.6.0), validado em degraus em 2026-11-07:
+- Os três projetos **compilam** no Linux (`EnableWindowsTargeting`).
+- **O Core roda no Linux** pelo `Acrux.Cli` (net10.0), validado em degraus
+  em 2026-11-07:
   1. o nativo carrega (`schema`, `columns`): **ok**;
   2. o caminho do grid (`head`: `GetDataFrameAsync` com `limit` → `ToArrow`
      → `PolarsTableAdapter.GetCellValue` célula a célula): **ok**. Achou
@@ -89,6 +89,12 @@ Onde estamos:
   3. CSV cp1252 e vírgula decimal, xlsx, SQLite, temporários em
      `/tmp/Acrux`: **ok**;
   4. o terminal C# (`ScriptHost`/Roslyn) no Linux: **pendente**.
+- O `Acrux.Cli` escolhe o nativo do Polars **pela máquina que compila**:
+  `Polars.NET.Native.win-x64` no Windows, `.linux-x64` no Linux
+  (`$([MSBuild]::IsOSPlatform(...))`, vindo do protótipo de 2026-09-08). A
+  condição olha a máquina, não o RID do publish: publish para outro sistema
+  exige escolha explícita. As versões managed e nativa precisam ser
+  idênticas: divergência dá segfault em runtime, não erro de build.
 
 Próximos passos:
 
@@ -462,9 +468,14 @@ aceitar fonte lazy genérica).
 - Comunicação com o usuário em **português (PT-BR)**; código, comentários,
   strings de GUI e mensagens de commit em **inglês** (repo público).
   Comentários enxutos: explicar o *porquê*/a restrição, nunca narrar a linha.
-- Trabalho e push na branch `master`. Confira o nome do remote com
-  `git remote -v` antes do push (neste clone é `origin`; já se chamou
-  `ParquetGridViewer` em outro checkout).
+- Trabalho **sempre em branch** com prefixo (`refactor/`, `feat/`, `docs/`) —
+  **nunca commit direto em `master`**; a integração é por PR.
+- PR com `gh pr create --body-file <arquivo>`: a máquina é headless, `--web`
+  não funciona. Merge com `--merge`, **nunca `--squash`** — os commits
+  separados devem sobreviver no histórico.
+- Movimentação de arquivo com `git mv`, para o histórico acompanhar o arquivo.
+- Confira o nome do remote com `git remote -v` antes do push (neste clone é
+  `origin`; já se chamou `ParquetGridViewer` em outro checkout).
 - `gh` instalado e autenticado (conta `raphaelgaeta`, HTTPS): push e
   `gh pr create` funcionam direto do terminal.
 - Fluxo de trabalho do dono do projeto: ele valida o desenho antes do código.

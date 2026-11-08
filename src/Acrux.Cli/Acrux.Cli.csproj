@@ -1,11 +1,17 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\Acrux.Core\Acrux.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Polars.NET.Native.linux-x64" Version="0.6.0" />
+    <!-- Native engine picked from the machine doing the build: the managed
+         Polars.NET comes transitively from Acrux.Core, but the native library
+         is a per-RID package. Cross-RID publish would need an explicit choice. -->
+    <PackageReference Include="Polars.NET.Native.win-x64" Version="0.6.0"
+                      Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+    <PackageReference Include="Polars.NET.Native.linux-x64" Version="0.6.0"
+                      Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
   </ItemGroup>
 
   <PropertyGroup>
