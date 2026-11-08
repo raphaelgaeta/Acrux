@@ -1,6 +1,8 @@
 #!/bin/sh
 # Deploys the CLI from the new commit in the background, so the commit returns
-# at once (scripts/deploy-cli.sh). Enabled per clone with
+# at once (scripts/deploy-cli.sh), then the Windows app if this clone asks for
+# it (git config acrux.deployWindows true; scripts/deploy-windows.sh). Enabled
+# per clone with
 #   git config core.hooksPath .githooks
 # ACRUX_NO_DEPLOY=1 git commit ... skips it.
 [ -n "$ACRUX_NO_DEPLOY" ] && exit 0
@@ -8,9 +10,19 @@
 root="${ACRUX_CLI_HOME:-$HOME/.local/share/acrux-cli}"
 mkdir -p "$root"
 top=$(git rev-parse --show-toplevel)
+windows=$(git config --bool acrux.deployWindows)
 # git exports GIT_DIR, GIT_INDEX_FILE... to hooks; the detached deploy must not inherit them
 # shellcheck disable=SC2046  # one word per variable name, on purpose
 unset $(git rev-parse --local-env-vars)
 
-setsid "$top/scripts/deploy-cli.sh" >> "$root/deploy.log" 2>&1 < /dev/null &
-echo "acrux-cli: deploying in the background; log: $root/deploy.log" >&2
+# The Windows step runs even when the CLI's fails: it builds what the CLI's
+# "current" holds, and retries a delivery that didn't go through.
+# shellcheck disable=SC2016  # expanded by the inner sh
+setsid sh -c '"$1/scripts/deploy-cli.sh"
+    if [ "$2" = true ]; then "$1/scripts/deploy-windows.sh"; fi' deploy "$top" "$windows" \
+    >> "$root/deploy.log" 2>&1 < /dev/null &
+if [ "$windows" = true ]; then
+    echo "acrux: deploying the CLI and the Windows app in the background; log: $root/deploy.log" >&2
+else
+    echo "acrux-cli: deploying in the background; log: $root/deploy.log" >&2
+fi
