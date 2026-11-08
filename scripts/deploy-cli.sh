@@ -41,8 +41,11 @@ trap 'rm -rf "$work"' EXIT
 git -C "$repo" archive "$rev" Directory.Build.props src/Acrux.Core src/Acrux.Cli tests/smoke | tar -x -C "$work"
 
 rm -rf "${root:?}/$rev"
+# 9>&-: dotnet leaves build servers running (VBCSCompiler, MSBuild nodes) for
+# minutes after the build; inheriting fd 9 they held the lock, and the next
+# deploy waited on it (2026-11-08)
 if ! dotnet publish "$work/src/Acrux.Cli/Acrux.Cli.csproj" -c Release -r linux-x64 \
-        --self-contained false -o "$root/$rev" -nologo -v q; then
+        --self-contained false -o "$root/$rev" -nologo -v q 9>&-; then
     rm -rf "${root:?}/$rev"
     log "build failed: $rev not deployed, current stays ${deployed:-none}"
     exit 1
