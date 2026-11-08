@@ -1,5 +1,7 @@
 <Project>
   <PropertyGroup>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- a release overrides it from the tag (-p:Version=0.1.0, .github/workflows/release.yml) -->
+    <Version>0.0.0-dev</Version>
   </PropertyGroup>
 </Project>
