@@ -127,11 +127,13 @@ static void PrintBatch(Apache.Arrow.RecordBatch batch)
     const int MaxCellWidth = 30;
     var names = batch.Schema.FieldsList.Select(f => f.Name).ToArray();
     var cells = new string[batch.Length][];
+    // the column's type, not the value, says whether a DateTime is a date or a moment
+    var dateOnly = names.Select((_, c) => batch.Column(c) is Apache.Arrow.Date32Array or Apache.Arrow.Date64Array).ToArray();
     for (int r = 0; r < batch.Length; r++)
     {
         cells[r] = new string[names.Length];
         for (int c = 0; c < names.Length; c++)
-            cells[r][c] = FormatCell(PolarsTableAdapter.GetCellValue(batch.Column(c), r));
+            cells[r][c] = FormatCell(PolarsTableAdapter.GetCellValue(batch.Column(c), r), dateOnly[c]);
     }
 
     var widths = names
@@ -144,11 +146,13 @@ static void PrintBatch(Apache.Arrow.RecordBatch batch)
     Console.WriteLine($"({batch.Length} rows × {names.Length} columns)");
 }
 
-static string FormatCell(object value) => value switch
+// ISO for dates on every machine: 07/11 is November here and July in the US
+static string FormatCell(object value, bool dateOnly) => value switch
 {
     DBNull => "null",
-    DateTime d => d.TimeOfDay == TimeSpan.Zero ? d.ToString("yyyy-MM-dd") : d.ToString("yyyy-MM-dd HH:mm:ss"),
-    DateTimeOffset d => d.ToString("yyyy-MM-dd HH:mm:ss zzz"),
+    DateTime d when dateOnly => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+    DateTime d => d.ToString("yyyy-MM-dd HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture),
+    DateTimeOffset d => d.ToString("yyyy-MM-dd HH:mm:ss.FFFFFFF zzz", CultureInfo.InvariantCulture),
     IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),   // 3.5, never "3,5"
     _ => (value.ToString() ?? "").ReplaceLineEndings(" "),
 };

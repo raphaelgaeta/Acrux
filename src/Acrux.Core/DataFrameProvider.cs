@@ -77,9 +77,10 @@ public static class DataFrameProvider
                 var separator = DetectCsvSeparator(utf8Csv);
                 var decimalComma = DetectDecimalComma(utf8Csv, separator);
                 var baseName = Path.GetFileNameWithoutExtension(path);
+                string parquet;
                 try
                 {
-                    return (ConvertCsv(utf8Csv, separator, decimalComma, InferSchemaRows, tempDir, baseName), true);
+                    parquet = ConvertCsv(utf8Csv, separator, decimalComma, InferSchemaRows, tempDir, baseName);
                 }
                 catch (Exception ex) when (
                     ex.Message.Contains("could not parse") ||
@@ -98,8 +99,12 @@ public static class DataFrameProvider
                         decimalComma = true;
 
                     progress?.Report("Refining CSV types (larger sample)...");
-                    return (ConvertCsv(utf8Csv, separator, decimalComma, InferSchemaRowsRetry, tempDir, baseName), true);
+                    parquet = ConvertCsv(utf8Csv, separator, decimalComma, InferSchemaRowsRetry, tempDir, baseName);
                 }
+
+                // dates arrive as text (ScanCsv's tryParseDates is off: it guesses day/month)
+                progress?.Report("Recognizing dates...");
+                return (TextDates.ConvertParquet(parquet, tempDir, baseName), true);
             }
             finally
             {
@@ -257,6 +262,12 @@ public static class DataFrameProvider
                     var columns = GetSqliteColumnKinds(conn, name);
                     using var batch = ReadSqliteTable(conn, name, columns);
                     tables.Add(name, DataFrame.FromArrow(batch));
+                    // SQLite has no date type: dates live in text columns
+                    if (TextDates.Convert(tables[name]) is { } dated)
+                    {
+                        tables[name].Dispose();
+                        tables[name] = dated;
+                    }
                 }
                 return tables;
             }
@@ -341,7 +352,8 @@ public static class DataFrameProvider
             var columns = GetSqliteColumnKinds(conn, table);
             using var batch = ReadSqliteTable(conn, table, columns);
             using var df = DataFrame.FromArrow(batch);
-            df.WriteParquet(temp);
+            using var dated = TextDates.Convert(df);   // SQLite has no date type: dates live in text
+            (dated ?? df).WriteParquet(temp);
             return temp;
         }
         catch
@@ -533,9 +545,12 @@ public static class DataFrameProvider
         var temp = Path.Combine(tempDir, $"{baseName}_pid{Environment.ProcessId}_{Guid.NewGuid():N}.parquet");
         try
         {
+            // tryParseDates off: Polars' inference always reads 01/02/2026 as day/month,
+            // so a US file turned January 2 into February 1 silently (tested).
+            // TextDates converts dates afterwards, only when unambiguous.
             using var lf = LazyFrame.ScanCsv(
                 utf8Csv, separator: separator, decimalComma: decimalComma,
-                tryParseDates: true, inferSchemaLength: inferRows);
+                tryParseDates: false, inferSchemaLength: inferRows);
             lf.SinkParquet(temp);
             return temp;
         }

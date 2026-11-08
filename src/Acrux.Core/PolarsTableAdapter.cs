@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using Apache.Arrow;
@@ -10,9 +9,6 @@ public static class PolarsTableAdapter
 {
     private const int MaxBinaryBytes = 32;
     private const int MaxListItems = 20;
-
-    // IANA zone id (from the column's type) → TimeZoneInfo; null when unknown
-    private static readonly ConcurrentDictionary<string, TimeZoneInfo?> Zones = new();
 
     // O(1) read straight from the Arrow buffer, no column materialization.
     // This is what CellValueNeeded uses: only visible cells get converted.
@@ -71,21 +67,15 @@ public static class PolarsTableAdapter
 
     // A timestamp without a zone is a wall-clock value: shown as is, no offset
     // (it used to read as UTC). A zoned one is an instant: shown in the
-    // column's zone, falling back to UTC when the zone id is unknown here.
+    // viewer's local zone, with its offset (owner's decision, 2026-11-07).
     private static object TimestampValue(TimestampArray array, int index)
     {
         var instant = array.GetTimestamp(index)!.Value;
-        var zoneId = ((TimestampType)array.Data.DataType).Timezone;
-        if (string.IsNullOrEmpty(zoneId))
+        // an if, not ?: — a ternary would turn the DateTime into a DateTimeOffset
+        // too (implicit conversion), stamping the local offset on wall-clock values
+        if (string.IsNullOrEmpty(((TimestampType)array.Data.DataType).Timezone))
             return instant.DateTime;
-
-        var zone = Zones.GetOrAdd(zoneId, static id =>
-        {
-            try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
-            catch (TimeZoneNotFoundException) { return null; }
-            catch (InvalidTimeZoneException) { return null; }
-        });
-        return zone is null ? instant : TimeZoneInfo.ConvertTime(instant, zone);
+        return instant.ToLocalTime();
     }
 
     // TimeOnly's default text is the short time pattern, which drops the

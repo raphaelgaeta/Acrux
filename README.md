@@ -50,6 +50,14 @@ under. Yes, the Polars mascot is a polar bear and polar bears live under the
   since SQLite lets any column hold any type, each column is typed by the
   values it actually holds, so a stray `'abc'` in an INTEGER column is kept
   as text instead of silently turning into 0.
+- **Recognizes dates stored as text — only when it can't be wrong.** CSV and
+  SQLite have no date type, so dates arrive as text. ISO dates
+  (`2026-11-07`, `2026-11-07T19:47:04Z`) always become real dates. But
+  `07/11/2026` is November 7 in Brazil and July 11 in the US, so a
+  `dd/mm` or `mm/dd` column converts only when the data itself proves the
+  order (a `25` in the first position settles it); if every value is ≤ 12,
+  it stays text rather than risk a silent guess. Times with a zone are shown
+  in your local zone.
 - **Lets you pick columns before loading.** Only the selected columns are ever
   read from disk.
 - **Filters like Excel.** Click a header, get the distinct values (blanks

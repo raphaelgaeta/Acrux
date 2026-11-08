@@ -147,8 +147,9 @@ armadilha de tipagem abaixo) → CSV é convertido **uma única vez**
 para parquet temporário (`DataFrameProvider.EnsureParquetAsync`: valida UTF-8
 por amostra e transcodifica cp1252/UTF-16 se preciso — ver armadilha abaixo —,
 detecção de separador na 1ª linha, `decimalComma` quando `;`, `ScanCsv` →
-`SinkParquet` streaming; temp em `%TEMP%\Acrux`, apagado na
-troca/fechamento) —
+`SinkParquet` streaming com `tryParseDates` **desligado**, e depois
+`TextDates.ConvertParquet` reconhece as datas em texto; temp em
+`%TEMP%\Acrux`, apagado na troca/fechamento) —
 o app opera **somente sobre parquet** daí em diante, preservando o re-scan
 barato → `GetColumnNamesAsync` (só schema) → `ColumnSelectorForm` (usuário
 escolhe colunas) → `GetDataFrameAsync` (`Select` + `Collect`, projection
@@ -195,6 +196,7 @@ aceitar fonte lazy genérica).
 | `src/Acrux.Core/FilterEngine.cs` | Filtros estilo Excel via Polars (distintos + máscara) |
 | `src/Acrux.Core/PolarsTableAdapter.cs` | `GetCellValue`: leitura O(1) por célula do Arrow |
 | `src/Acrux.Core/ScriptHost.cs` | Terminal C#: avaliação Roslyn de scripts Polars |
+| `src/Acrux.Core/TextDates.cs` | Datas guardadas como texto (CSV, SQLite) viram data só quando não há ambiguidade |
 | `src/Acrux.WinForms/Program.cs` | Entrada do app: limpeza de temporários órfãos e `Environment.Exit(0)` |
 | `src/Acrux.WinForms/MainForm.cs` | Grid virtual, carga do arquivo, costura dos filtros |
 | `src/Acrux.WinForms/ColumnSelectorForm.cs` | Diálogo de seleção de colunas na abertura |
@@ -226,6 +228,24 @@ aceitar fonte lazy genérica).
 - `PolarsSchema.ToDictionary()` **foi removido** → `ToFrozenDictionary()` para
   buscar por nome; **para listar colunas na ordem do arquivo, `ToList()`**
   (ver abaixo).
+- **A inferência de datas do Polars sempre lê `nn/nn/aaaa` como dia/mês**
+  (`ScanCsv(tryParseDates: true)` e `Str.ToDatetime` sem formato; testado
+  em 2026-11-07). Num CSV americano em que todos os dias eram até 12,
+  `01/02/2026` (2 de janeiro) virou 1º de fevereiro **em silêncio**. Por isso
+  o `tryParseDates` está desligado e o `TextDates` decide pela evidência da
+  coluna inteira:
+  - ISO 8601 converte sempre;
+  - `dd/mm` × `mm/dd` só quando algum valor tem primeiro ou segundo número
+    acima de 12; tudo até 12 fica texto;
+  - tudo ou nada: um valor que não converte (`31/02`) mantém a coluna como
+    texto.
+
+  São três passadas para não pesar: as primeiras 1.000 linhas descartam
+  colunas, depois a coluna inteira dá a evidência, e por fim se verifica que
+  não surgiram nulos. Medido: 1 milhão de linhas em ~0,5 s, sem custo de
+  memória além do que o Polars já usa (~660 MB de pico com 32 threads).
+  Também: com fuso nos dados, o `Str.ToDatetime` sem formato **é recusado
+  pelo próprio Polars**; o `TextDates` sempre passa formato explícito.
 - **Inferência de schema do CSV é por amostra** (default 100 linhas): int que
   vira float depois da amostra → "could not parse `8.1` as dtype `i64`" no
   sink. `inferSchemaLength: null` NÃO significa "arquivo todo" (cai no
@@ -286,7 +306,10 @@ aceitar fonte lazy genérica).
   - **duração:** `TimeSpan`;
   - **categórico:** o valor do dicionário;
   - **timestamp:** sem fuso é hora de parede, sem offset (antes parecia
-    UTC); com fuso, convertido para o fuso da coluna.
+    UTC); com fuso, mostrado no **fuso local de quem vê**, com o offset
+    (decisão do dono, 2026-11-07). Cuidado ao mexer: um `?:` entre
+    `DateTime` e `DateTimeOffset` converte os dois lados para
+    `DateTimeOffset` e carimba o offset local na hora de parede. Use `if`.
 
   **Ordem dos `case`:** `StringArray` herda de `BinaryArray` (e o mesmo
   vale para View e Large), então texto vem antes de binário. Tipo novo:
@@ -329,7 +352,8 @@ aceitar fonte lazy genérica).
   i64; integer + real → f64; só blob → binary; qualquer mistura com texto →
   str; só NULL → tipo declarado. Medido: 300k linhas × 10 colunas em ~0,8 s.
 - **O SQLite não tem tipo de data nem booleano**: data guardada em texto chega
-  como str; BOOLEAN chega como i64 (0/1).
+  como str e passa pelo `TextDates` (o `ofertas.db` real: `data` ISO com
+  fuso virou timestamp); BOOLEAN chega como i64 (0/1).
 - **Detecção por conteúdo**: arquivo SQLite começa com `"SQLite format 3\0"`
   (16 bytes). A extensão `.db` não garante nada. Isso está no `DetectFormat`.
 - **Índices de busca (FTS5) poluem a lista de tabelas**: num banco real (o
