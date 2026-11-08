@@ -26,8 +26,14 @@ terminal, on Linux or Windows.
 
 The latest build is on the [Releases](https://github.com/raphaelgaeta/Acrux/releases/latest) page:
 
-- **Windows app** — `Acrux-vX.Y.Z-win-x64.zip`: unzip it and run `Acrux.exe`.
-  Nothing to install; the .NET runtime is inside.
+- **Windows app** — `Acrux-vX.Y.Z-setup.exe` installs it for your user, no
+  admin rights needed. Acrux also needs the Microsoft Visual C++ runtime. If
+  your PC doesn't have it, setup downloads it from Microsoft, and Windows asks
+  for permission to install it.
+- **Windows app, no install** — `Acrux-vX.Y.Z-win-x64.zip`: unzip it and run
+  `Acrux.exe` (the .NET runtime is inside). It needs the
+  [Microsoft Visual C++ Redistributable (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe),
+  which most PCs already have.
 - **Command line, Linux** — `acrux-cli-vX.Y.Z-linux-x64.tar.gz`: extract it and
   put the `acrux-cli` folder on your `PATH`; no .NET needed.
 

@@ -1,7 +1,7 @@
-# Builds the Windows app and the Linux command line. On a pull request it
-# only checks that both build (and that the smoke test passes); on a "v*" tag
-# it also creates a DRAFT release with both files and their SHA-256 sums —
-# the maintainer reviews it and clicks Publish.
+# Builds the Windows app (installer and zip) and the Linux command line. On a
+# pull request it only checks that they build (and that the smoke test
+# passes); on a "v*" tag it also creates a DRAFT release with the files and
+# their SHA-256 sums — the maintainer reviews it and clicks Publish.
 name: Release
 
 on:
@@ -81,10 +81,25 @@ jobs:
           Copy-Item out/Acrux.exe, LICENSE pkg/
           Copy-Item assets/brand/NOTICE.md pkg/NOTICE-logo.md
           Compress-Archive -Path pkg/* -DestinationPath Acrux-${{ needs.version.outputs.label }}-win-x64.zip
+      - name: "Installer (Inno Setup: a folder publish, plus the VC++ runtime if missing)"
+        shell: pwsh
+        run: |
+          dotnet publish src/Acrux.WinForms/Acrux.WinForms.csproj -c Release -r win-x64 `
+            --self-contained true -p:Version=${{ needs.version.outputs.version }} -o out-setup
+          choco install innosetup --version 6.7.1 -y --no-progress --allow-downgrade | Out-Null
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $version = '${{ needs.version.outputs.version }}'
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Qp `
+            "/DAppVersion=$version" "/DNumericVersion=$(($version -split '-')[0])" `
+            "/DLabel=${{ needs.version.outputs.label }}" "/DPublishDir=$PWD\out-setup" `
+            "/O$PWD" installer\acrux.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v7
         with:
           name: windows
-          path: Acrux-*.zip
+          path: |
+            Acrux-*.zip
+            Acrux-*-setup.exe
           retention-days: 7
 
   release:
@@ -101,12 +116,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha256sum Acrux-*.zip acrux-cli-*.tar.gz > SHA256SUMS
+          sha256sum Acrux-*-setup.exe Acrux-*.zip acrux-cli-*.tar.gz > SHA256SUMS
           cat > notes.md <<'EOF'
-          **Windows app** — unzip `Acrux-…-win-x64.zip` and run `Acrux.exe`; nothing
-          to install, the .NET runtime is inside. The file isn't code-signed yet, so
-          Windows SmartScreen warns about an unknown publisher: **More info → Run
-          anyway**.
+          **Windows app** — run `Acrux-…-setup.exe`: it installs Acrux for your user,
+          without admin rights. If the Microsoft Visual C++ runtime that Acrux needs
+          is missing, setup downloads it from Microsoft and Windows asks for
+          permission to install it.
+
+          Or, without installing: unzip `Acrux-…-win-x64.zip` and run `Acrux.exe`
+          (the .NET runtime is inside). This one needs the [Microsoft Visual C++
+          Redistributable (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe),
+          which most PCs already have; without it, opening a file fails with "Dll
+          was not found".
+
+          Neither file is code-signed yet, so Windows SmartScreen warns about an
+          unknown publisher: **More info → Run anyway**.
 
           **Command line, Linux** — extract `acrux-cli-…-linux-x64.tar.gz` and put the
           `acrux-cli` folder on your `PATH` (the `acrux` link inside starts it); no
@@ -117,4 +141,4 @@ jobs:
           EOF
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
             --title "Acrux $GITHUB_REF_NAME" --notes-file notes.md --generate-notes \
-            Acrux-*.zip acrux-cli-*.tar.gz SHA256SUMS
+            Acrux-*-setup.exe Acrux-*.zip acrux-cli-*.tar.gz SHA256SUMS
