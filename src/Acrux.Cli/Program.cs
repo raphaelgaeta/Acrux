@@ -1,4 +1,5 @@
-﻿using Acrux;
+﻿using System.Globalization;
+using Acrux;
 using Polars.CSharp;
 
 DataFrameProvider.CleanStaleTempFiles();   // orphans from runs killed mid-conversion
@@ -8,7 +9,8 @@ try
     return args switch
     {
         ["schema", var file] => await Schema(file),
-        ["head", var file] => await ShowHeadDataFrame(file),
+        ["head", var file] => await ShowHead(file, 5),
+        ["head", var file, "-n", var n] when int.TryParse(n, out var rows) && rows > 0 => await ShowHead(file, rows),
         ["columns", var file] => await ShowColumns(file),
         ["rows", var file] => await ShowRowNumber(file),
         ["type", var file] => ShowFormat(file),
@@ -87,12 +89,77 @@ static async Task<int> ShowRowNumber(string file)
     return 0;
 }
 
-static async Task<int> ShowHeadDataFrame(string file)
+// The grid's own path: parquet (converted if needed) → projection + limit →
+// Collect → ToArrow, then every cell read straight from the Arrow buffer by
+// PolarsTableAdapter.GetCellValue — what the grid's CellValueNeeded does.
+static async Task<int> ShowHead(string file, int rows)
 {
-    using var df = await LoadAsync(file);
-    using var head = df.Head(5);
-    Console.WriteLine(head);
+    // SQLite: the first rows of each table, the way `columns` lists each table
+    string[] tables = DataFrameProvider.DetectFormat(file) == SourceFormat.Sqlite
+        ? DataFrameProvider.GetTableNames(file)
+        : [];
+
+    for (int i = 0; i < Math.Max(tables.Length, 1); i++)
+    {
+        if (tables.Length > 0)
+            Console.WriteLine($"{(i > 0 ? "\n" : "")}== {tables[i]}");
+
+        var (parquet, isTemp) = await DataFrameProvider.EnsureParquetAsync(file, tableIndex: i);
+        try
+        {
+            var columns = await DataFrameProvider.GetColumnNamesAsync(parquet);
+            using var df = await DataFrameProvider.GetDataFrameAsync(parquet, columns, limit: (uint)rows);
+            using var batch = df.ToArrow();
+            PrintBatch(batch);
+        }
+        finally
+        {
+            if (isTemp) File.Delete(parquet);
+        }
+    }
     return 0;
+}
+
+static void PrintBatch(Apache.Arrow.RecordBatch batch)
+{
+    const int MaxCellWidth = 30;
+    var names = batch.Schema.FieldsList.Select(f => f.Name).ToArray();
+    var cells = new string[batch.Length][];
+    for (int r = 0; r < batch.Length; r++)
+    {
+        cells[r] = new string[names.Length];
+        for (int c = 0; c < names.Length; c++)
+            cells[r][c] = FormatCell(PolarsTableAdapter.GetCellValue(batch.Column(c), r));
+    }
+
+    var widths = names
+        .Select((name, c) => Math.Min(MaxCellWidth, cells.Select(row => row[c].Length).Prepend(name.Length).Max()))
+        .ToArray();
+    Console.WriteLine(string.Join(" | ", names.Select((name, c) => Fit(name, widths[c]))));
+    Console.WriteLine(string.Join("-+-", widths.Select(w => new string('-', w))));
+    foreach (var row in cells)
+        Console.WriteLine(string.Join(" | ", row.Select((value, c) => Fit(value, widths[c]))));
+    Console.WriteLine($"({batch.Length} rows × {names.Length} columns)");
+}
+
+static string FormatCell(object value) => value switch
+{
+    DBNull => "null",
+    DateTime d => d.TimeOfDay == TimeSpan.Zero ? d.ToString("yyyy-MM-dd") : d.ToString("yyyy-MM-dd HH:mm:ss"),
+    DateTimeOffset d => d.ToString("yyyy-MM-dd HH:mm:ss zzz"),
+    IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),   // 3.5, never "3,5"
+    _ => (value.ToString() ?? "").ReplaceLineEndings(" "),
+};
+
+// pads or truncates to the column width, never splitting an emoji's surrogate pair
+static string Fit(string text, int width)
+{
+    if (text.Length <= width)
+        return text.PadRight(width);
+    int cut = width - 1;
+    if (char.IsHighSurrogate(text[cut - 1]))
+        cut--;
+    return text[..cut] + "…";
 }
 
 static async Task<int> Schema(string file)
@@ -152,6 +219,6 @@ static async Task<string[]> ColumnNamesAsync(string file)
 
 static int Usage()
 {
-    Console.Error.WriteLine("usage: acrux <schema|columns|head|rows|type> <file>");
+    Console.Error.WriteLine("usage: acrux <schema|columns|head [-n N]|rows|type> <file>");
     return 2;
 }

@@ -671,7 +671,8 @@ public static class DataFrameProvider
     /// Collects only the requested columns (projection pushdown: Polars reads
     /// just the selected columns from disk).
     /// </summary>
-    public static async Task<DataFrame> GetDataFrameAsync(string parquetPath, string[] columns, CancellationToken cancellationToken = default)
+    public static async Task<DataFrame> GetDataFrameAsync(
+        string parquetPath, string[] columns, uint? limit = null, CancellationToken cancellationToken = default)
     {
         if (!File.Exists(parquetPath))
             throw new FileNotFoundException("Parquet file not found.", parquetPath);
@@ -679,7 +680,10 @@ public static class DataFrameProvider
         return await Task.Run(() =>
         {
             using var lf = LazyFrame.ScanParquet(parquetPath).Select(columns);
-            return lf.Collect();
+            if (limit is null)
+                return lf.Collect();
+            using var limited = lf.Limit(limit.Value);   // the scan stops after `limit` rows
+            return limited.Collect();
         }, cancellationToken);
     }
 }

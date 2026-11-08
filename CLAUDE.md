@@ -11,7 +11,12 @@ ParquetGridViewer e o projeto, PolarsGridViewer).
 ```
 dotnet build                              # solução inteira (Acrux.sln), da raiz
 dotnet run --project src/Acrux.WinForms
+dotnet run --project src/Acrux.Cli -- head arquivo.parquet -n 10   # CLI, roda no Linux
 ```
+
+O CLI tem os comandos `schema`, `columns`, `head [-n N]`, `rows` e `type`.
+Erros saem em uma linha com código 1 (`ACRUX_DEBUG=1` mostra a exceção
+inteira); uso errado sai com código 2.
 
 Dois projetos sob `src/`, agregados pelo `Acrux.sln` da raiz: `Acrux.Core`
 (net10.0, sem UI — `DataFrameProvider`, `FilterEngine`, `PolarsTableAdapter`,
@@ -61,14 +66,20 @@ Onde estamos:
 - `Acrux.Core` já é net10.0 puro, sem dependência de WinForms; só o
   `Acrux.WinForms` é net10.0-windows.
 - Os dois projetos **compilam** no Linux (`EnableWindowsTargeting`).
-- O nativo do Polars para Linux (`Polars.NET.Native.linux-x64` 0.6.0,
-  `libnative_shim.so`) já **rodou** no Fedora num probe isolado (2026-11-07:
-  `ScanParquet`, `ReadDatabase`, `WriteParquet`). O Core em si ainda não foi
-  validado no Linux; esse é o papel do `Acrux.Cli` (branch `feat/cli`).
+- **O Core roda no Linux** pelo `Acrux.Cli` (net10.0, nativo
+  `Polars.NET.Native.linux-x64` 0.6.0), validado em degraus em 2026-11-07:
+  1. o nativo carrega (`schema`, `columns`): **ok**;
+  2. o caminho do grid (`head`: `GetDataFrameAsync` com `limit` → `ToArrow`
+     → `PolarsTableAdapter.GetCellValue` célula a célula): **ok**, mas achou
+     tipos que o adaptador não conhece (ver Armadilhas);
+  3. CSV cp1252 e vírgula decimal, xlsx, SQLite, temporários em
+     `/tmp/Acrux`: **ok**;
+  4. o terminal C# (`ScriptHost`/Roslyn) no Linux: **pendente**.
 
 Próximos passos:
 
-1. `Acrux.Cli` (console net10.0) para validar o Core no Fedora.
+1. Corrigir o `PolarsTableAdapter` para os tipos que faltam, pendente de
+   aval por mudar o que o grid mostra; depois o degrau 4.
 2. Com isso fechado, spike de grid virtualizada no Avalonia.
 
 ### Testar o app de janela no laptop (Wine)
@@ -189,6 +200,7 @@ aceitar fonte lazy genérica).
 | `src/Acrux.WinForms/SheetSelectorForm.cs` | Diálogo de escolha da aba do xlsx ou da tabela do SQLite (2+) |
 | `src/Acrux.WinForms/FilterPopupForm.cs` | Popup de filtro aberto pelo cabeçalho da coluna |
 | `src/Acrux.WinForms/ScriptTerminalPanel.cs` | UI do terminal (painel inferior do MainForm) |
+| `src/Acrux.Cli/Program.cs` | CLI: rota de leitura escolhida pelo formato detectado; `head` usa o caminho do grid |
 
 ### Princípios de design (não violar)
 
@@ -257,6 +269,17 @@ aceitar fonte lazy genérica).
   Limit` — por isso só `GetDistinctValuesAsync` usa `Collect(Engine.
   Streaming)`. Não criar seletor de engine sem novo dado que o justifique.
 - Strings continuam chegando como `StringViewArray` (não `StringArray`).
+- **O `PolarsTableAdapter.GetCellValue` não conhece vários tipos**: eles
+  caem no `_ => array.ToString()` e a célula mostra o *nome do tipo* do
+  array. Achado no degrau 2 do CLI (2026-11-07): `Int8`, `Int16`, `UInt8`,
+  `UInt32`, `UInt64`, `Decimal128`, `BinaryView` (blob do SQLite),
+  `LargeList`, `Time64` e `Duration`. Pesa no uso real: decimal é comum em
+  extrações de banco, e `u32` é o que o Polars devolve em contagens
+  (`Count`/`Len`) no terminal. O timestamp sai sempre como `+00:00`, ignora
+  o fuso da coluna, e o sem fuso parece UTC. A Arrow 23 tem um método de
+  leitura para cada um (`Decimal128Array.GetValue`/`GetString`,
+  `Time64Array.GetTime`, `DurationArray.GetTimeSpan`, `GetBytes`,
+  `GetSlicedValues`). A correção está pendente de aval.
 - `DataType.String` etc. seguem estáticos e **fora do XML doc** do pacote.
 - Para validar APIs novas do pacote, use a skill `polars-probe`.
 - **Leitura de banco via ADO.NET** (probe no Linux, 2026-11):
