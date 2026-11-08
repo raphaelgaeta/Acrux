@@ -170,7 +170,12 @@ commit que compilou e passou no smoke test (desenho aprovado em 2026-11-08).
   Sobram só essas duas pastas (~170 MB cada; 135 MB são o
   `libnative_shim.so` do Polars). Uma rajada de commits (rebase) entra em
   fila numa trava (`flock`) e publica só o mais novo. Build ou teste que
-  falha não troca nada: o `current` continua o anterior.
+  falha não troca nada: o `current` continua o anterior. **O `publish` roda
+  com o descritor da trava fechado (`9>&-`)**: o `dotnet` deixa servidores
+  de compilação vivos por minutos (`VBCSCompiler`, nós do MSBuild), e,
+  herdando a trava, eles seguraram o deploy seguinte (2026-11-08). Deploy
+  parado sem log novo: procure quem tem `acrux-cli/.lock` aberto em
+  `/proc/*/fd`; `dotnet build-server shutdown` solta.
 - **Log:** `~/.local/share/acrux-cli/deploy.log` (cortado para 500 linhas
   quando passa de 1.000). Uma falha não avisa na tela: **confira com
   `acrux version`** se o commit esperado está no ar.
