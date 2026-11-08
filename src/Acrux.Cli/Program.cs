@@ -15,6 +15,7 @@ try
         ["columns", var file] => await ShowColumns(file),
         ["rows", var file] => await ShowRowNumber(file),
         ["type", var file] => ShowFormat(file),
+        ["version"] => ShowVersion(),
         ["column", var file, var column] => await ShowSpecificColumn(file, column, 10),
         ["column", var file, var column, "-n", var n] when int.TryParse(n, out var rows) && rows > 0 => await ShowSpecificColumn(file, column, rows),
         ["filter", var file, var column, "--last", var span] => await FilterLast(file, column, span, 10),
@@ -29,6 +30,16 @@ catch (Exception ex)
         ? ex.ToString()
         : $"acrux: {ex.Message}");
     return 1;   // 1 = failed while running; 2 = usage error
+}
+
+// scripts/deploy-cli.sh leaves the deployed commit next to the binary
+static int ShowVersion()
+{
+    var stamp = Path.Combine(AppContext.BaseDirectory, "COMMIT");
+    Console.WriteLine(File.Exists(stamp)
+        ? File.ReadAllText(stamp).Trim()
+        : "development build (no COMMIT file next to the binary)");
+    return 0;
 }
 
 // Follows the format value as it travels: DetectFormat returns it, this method
@@ -399,6 +410,6 @@ static async Task<string[]> ColumnNamesAsync(string file)
 
 static int Usage()
 {
-    Console.Error.WriteLine("usage: acrux <schema|columns|head [-n N]|rows|type> <file> | acrux column <file> <name> [-n N] | acrux filter <file> <column> --last <span> [-n N]");
+    Console.Error.WriteLine("usage: acrux <schema|columns|head [-n N]|rows|type> <file> | acrux column <file> <name> [-n N] | acrux filter <file> <column> --last <span> [-n N] | acrux version");
     return 2;
 }

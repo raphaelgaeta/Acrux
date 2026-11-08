@@ -28,7 +28,8 @@ linhas e quantas casaram).
 números sem sentido, e a mesma coluna pode ter tipos diferentes em cada
 tabela. O `schema` e o `rows` de parquet leem só os metadados, sem os dados.
 Erros saem em uma linha com código 1 (`ACRUX_DEBUG=1` mostra a exceção
-inteira); uso errado sai com código 2.
+inteira); uso errado sai com código 2. `acrux version` diz qual commit está
+instalado (ver "Deploy de teste do CLI" abaixo).
 
 Dois projetos sob `src/`, agregados pelo `Acrux.sln` da raiz: `Acrux.Core`
 (net10.0, sem UI — `DataFrameProvider`, `FilterEngine`, `PolarsTableAdapter`,
@@ -45,7 +46,8 @@ Windows.
 Pacotes: Polars.NET 0.6.0 (+ Native.win-x64, Linq, ML), Apache.Arrow 23 (a
 0.6.0 exige Arrow ≥ 23.0.0 — não fazer downgrade),
 Microsoft.CodeAnalysis.CSharp.Scripting (terminal C#) e Microsoft.Data.Sqlite
-(leitura de SQLite; traz o `e_sqlite3` nativo). Não há projeto de testes.
+(leitura de SQLite; traz o `e_sqlite3` nativo). Não há projeto de testes; o
+CLI tem um smoke test em `tests/smoke` (ver "Deploy de teste do CLI").
 
 Publicação — sempre com o caminho do `.csproj` (ver NETSDK1099 acima):
 
@@ -136,6 +138,49 @@ Yukidama, não deste projeto.
     alvo.
 - Aparência e ícone ainda pedem Windows de verdade: o Wine valida
   funcionamento, não fidelidade visual.
+
+### Deploy de teste do CLI no laptop
+
+Cada commit publica o CLI sozinho, e o comando `acrux` passa a ser o último
+commit que compilou e passou no smoke test (desenho aprovado em 2026-11-08).
+
+- **Hook:** `.githooks/post-commit` chama `scripts/deploy-cli.sh` em segundo
+  plano (`setsid`), e o commit volta na hora. Hooks não vêm no clone: cada
+  clone liga uma vez com `git config core.hooksPath .githooks` (este já
+  está ligado). Numa branch sem `.githooks/`, nada acontece.
+  `ACRUX_NO_DEPLOY=1 git commit …` pula o deploy.
+- **O script publica o commit, não o disco:** `git archive` do commit →
+  `dotnet publish` Release linux-x64 framework-dependent (~3 s) →
+  `~/.local/share/acrux-cli/<commit>/` → `tests/smoke/run.sh` no binário
+  novo → só então troca o link `current`, e o anterior vira `previous`.
+  Sobram só essas duas pastas (~170 MB cada; 135 MB são o
+  `libnative_shim.so` do Polars). Uma rajada de commits (rebase) entra em
+  fila numa trava (`flock`) e publica só o mais novo. Build ou teste que
+  falha não troca nada: o `current` continua o anterior.
+- **Log:** `~/.local/share/acrux-cli/deploy.log` (cortado para 500 linhas
+  quando passa de 1.000). Uma falha não avisa na tela: **confira com
+  `acrux version`** se o commit esperado está no ar.
+- **Voltar atrás:** `cd ~/.local/share/acrux-cli && ln -sfn "$(readlink
+  previous)" current`. Publicar um commit à mão:
+  `scripts/deploy-cli.sh <commit>`.
+- **Comando no PATH:** `~/.local/bin/acrux` é um link para
+  `~/.local/share/acrux-cli/current/Acrux.Cli`. A pasta `~/.local/bin` é da
+  Yukidama (espelho de dotfiles), então o link foi pedido a ela; este
+  projeto só cuida de `~/.local/share/acrux-cli`.
+- **Smoke test** (`tests/smoke/run.sh <binário> [--update]`): roda todos os
+  comandos sobre fixtures pequenos e compara a saída, com os códigos de
+  saída, com `expected.txt`. São CSV com `;` e vírgula decimal, CSV
+  americano (`mm/dd` com evidência e uma coluna ambígua), cp1252 gerado na
+  hora, parquet com 20 tipos, xlsx com duas abas e um `.db` montado de
+  `banco.sql` (tipos misturados, NULL na 1ª linha, nome com espaço, view,
+  tabela vazia, data com fuso e uma data no futuro), além de arquivos com
+  extensão trocada e os erros. Fixa `TZ=America/Sao_Paulo` e mascara o
+  horário do cabeçalho do `filter` e a pasta temporária. **Mudou a saída de
+  propósito? `--update` e revise o `git diff` do `expected.txt` antes do
+  commit**: ele é o que o teste toma como certo. Os binários (`tipos.parquet`,
+  `planilha.xlsx`) saem de `fixtures/make_binary.py` (precisa de pyarrow); o
+  `.gitignore` libera `tests/smoke/fixtures/*`. Nada de dado real ali: o
+  repositório é público.
 
 ## Arquitetura
 
