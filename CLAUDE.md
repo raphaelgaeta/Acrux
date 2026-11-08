@@ -101,7 +101,9 @@ Pelo GitHub Actions (`.github/workflows/release.yml`, desenho aprovado em
 - **`AppId` fixo** no `.iss`: o Windows reconhece a instalação por ele.
   Nunca mude.
 - O `.iss` só compila no Windows (na CI). Para testar, baixe o artefato
-  `windows` do PR com `gh run download`.
+  `windows` do PR com `gh run download`. O primeiro, de 70 MB, funcionou na
+  VM limpa do Windows 11, onde o zip falhava por falta do runtime (teste do
+  dono, 2026-11-08).
 
 Em PR, o mesmo workflow só compila e testa, sem release. A versão vem da tag
 (`-p:Version=0.1.0`); fora de release vale `0.0.0-dev`
