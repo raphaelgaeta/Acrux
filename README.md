@@ -1,4 +1,9 @@
-# Acrux
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/acrux-logo-horizontal-gradient.svg">
+    <img src="assets/brand/acrux-logo-horizontal-purple.svg" alt="Acrux" width="360">
+  </picture>
+</h1>
 
 Acrux opens the tabular files that are too big or too messy for Excel —
 Parquet, CSV, Excel workbooks and SQLite databases — so you can look at them,
@@ -49,6 +54,16 @@ Acrux is α Crucis, the brightest star of the Southern Cross — the constellati
 on the Brazilian flag, and the guide star of the sky this project was built
 under. Yes, the Polars mascot is a polar bear and polar bears live under the
 *northern* star. He didn't mind the trip south.
+
+The logo by [Kat Ribeiro](https://www.instagram.com/design.da.kat/) tells the
+same story: the five stars of the Southern Cross around the bear, with Acrux,
+the brightest, shining above him.
+
+The bear has a name of his own: **Ginan the Snooper**. Ginan is the official
+name of ε Crucis, the faintest of the cross's five stars — the one Brazilians
+call *Intrometida*, "the nosy one", for squeezing in among the four bright
+stars that draw the cross. A polar bear who came south to snoop around the
+sky, now snooping around your data.
 
 ## How it fits together
 
@@ -240,6 +255,7 @@ nothing at all.
 | `src/Acrux.Core/PolarsTableAdapter.cs` | O(1) per-cell reads from Arrow arrays, for every column type |
 | `src/Acrux.Core/ScriptHost.cs` | Roslyn evaluation of chained Polars scripts |
 | `src/Acrux.WinForms/Program.cs` | Entry point: stale temp sweep and guaranteed process exit |
+| `src/Acrux.WinForms/AppIcon.cs` | Window icon, loaded from the embedded `.ico` |
 | `src/Acrux.WinForms/MainForm.cs` | Virtual grid, file loading, filter orchestration |
 | `src/Acrux.WinForms/ColumnSelectorForm.cs` | Column picker shown on open |
 | `src/Acrux.WinForms/SheetSelectorForm.cs` | Sheet or table picker for .xlsx and SQLite |
@@ -261,4 +277,5 @@ cross-platform desktop front end is the next step being explored.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) for the code. The logo and icon are not covered by it — see
+[assets/brand/NOTICE.md](assets/brand/NOTICE.md).

@@ -76,6 +76,37 @@ O `README.md` (em inglês, voltado ao público do repositório) resume features 
 arquitetura; este arquivo segue sendo a fonte de verdade técnica — ao mudar
 comportamento visível, atualizar os dois.
 
+## Identidade visual
+
+Logo de Kat Ribeiro (design), propriedade do dono do projeto e **fora da MIT**
+(`assets/brand/NOTICE.md`). Paleta: `#8c5ea4` e `#acd7e7`. No repositório só
+entra a arte em uso; o kit completo (`.ai`, `.eps`, JPGs, PDFs com contato dela)
+fica fora.
+
+**Acrux é o projeto; o urso do logo é o mascote, Ginan the Snooper.** Ginan é
+o nome oficial (IAU, 2017) de ε Crucis, a "Intrometida" do Cruzeiro do Sul;
+*snooper* é o xereta: o urso polar que veio bisbilhotar o céu do sul, e os
+seus dados. Fora do README, porque não foi conferido na fonte primária: a
+Wikipédia diz, citando o relatório de 2023 do grupo de nomes de estrelas da
+IAU, que Ginan seria o nome wardaman da própria Acrux, e que o nome foi mantido
+mesmo assim.
+
+- **O ícone é recorte:** urso e estrela grande são transparentes e assumem a cor
+  do fundo (claros no tema claro, escuros no escuro), como nos mockups da autora.
+  Não preencher. "Ícone Preto" some no tema escuro; o ícone com nome só é legível
+  a partir de ~48 px; a ilustração sem moldura se perde abaixo de 32 px.
+- **`acrux.ico`:** gerado de `assets/brand/acrux-icon.svg`. A arte não é quadrada
+  (1022,4×1009,25): vai com margem transparente, sem esticar. Quadros 16 a 64 px
+  em BMP e 256 em PNG, pelo `Icon` do System.Drawing.
+- **`ApplicationIcon` só marca o `.exe`.** Funciona em publish feito no Linux
+  (quadros conferidos na tabela de recursos PE, sem NETSDK1074). Janela com barra
+  de título precisa de `Icon = AppIcon.Value`; o `FilterPopupForm` é tool window e
+  não mostra ícone.
+- **Fonte Aller: nunca embutir nem commitar.** A licença gratuita limita a 25
+  usuários e só permite redistribuir o `.zip` original. O README não aceita fonte
+  própria; o nome aparece só como imagem, via logo. Azul no branco dá 1,54:1 de
+  contraste, por isso o README usa roxo no tema claro e gradiente no escuro.
+
 ## Porte multiplataforma (em andamento)
 
 Onde estamos:
@@ -277,6 +308,7 @@ aceitar fonte lazy genérica).
 | `src/Acrux.Core/TextDates.cs` | Datas guardadas como texto (CSV, SQLite) viram data só quando não há ambiguidade |
 | `src/Acrux.Core/TimeFilter.cs` | Filtro de tempo relativo: lê períodos no padrão do systemd, monta o predicado por tipo de coluna e acha as posições das N linhas mais recentes |
 | `src/Acrux.WinForms/Program.cs` | Entrada do app: limpeza de temporários órfãos e `Environment.Exit(0)` |
+| `src/Acrux.WinForms/AppIcon.cs` | Ícone das janelas, lido do `.ico` embutido |
 | `src/Acrux.WinForms/MainForm.cs` | Grid virtual, carga do arquivo, costura dos filtros |
 | `src/Acrux.WinForms/ColumnSelectorForm.cs` | Diálogo de seleção de colunas na abertura |
 | `src/Acrux.WinForms/SheetSelectorForm.cs` | Diálogo de escolha da aba do xlsx ou da tabela do SQLite (2+) |

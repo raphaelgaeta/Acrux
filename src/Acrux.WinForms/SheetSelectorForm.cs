@@ -13,6 +13,7 @@ public sealed class SheetSelectorForm : Form
     public SheetSelectorForm(string[] sheetNames, string title = "Select sheet")
     {
         Text = title;
+        Icon = AppIcon.Value;
         Width = 340;
         Height = 380;
         StartPosition = FormStartPosition.CenterParent;
