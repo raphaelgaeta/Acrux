@@ -22,6 +22,19 @@ terminal, on Linux or Windows.
 </p>
 <p align="center"><sub>The same 9 GB file, 700 columns × 5 million rows: the desktop app on Windows · the command line in a terminal (click either to enlarge)</sub></p>
 
+## Download
+
+The latest build is on the [Releases](https://github.com/raphaelgaeta/Acrux/releases/latest) page:
+
+- **Windows app** — `Acrux-vX.Y.Z-win-x64.zip`: unzip it and run `Acrux.exe`.
+  Nothing to install; the .NET runtime is inside.
+- **Command line, Linux** — `acrux-cli-vX.Y.Z-linux-x64.tar.gz`: extract it and
+  put the `acrux-cli` folder on your `PATH`; no .NET needed.
+
+The files aren't code-signed yet, so on first run Windows SmartScreen warns
+about an unknown publisher: **More info → Run anyway**. Each release lists the
+SHA-256 of its files in `SHA256SUMS`.
+
 ## Why this exists
 
 When I started working with data, I got used to how fast Polars and pandas read
@@ -229,7 +242,9 @@ WinForms doesn't support `PublishTrimmed`, and the terminal needs
 `Assembly.Location`, which is empty inside a pure single-file bundle).
 
 `tests/smoke/run.sh <built acrux binary>` runs every CLI command over small
-fixtures and compares the output with `tests/smoke/expected.txt`.
+fixtures and compares the output with `tests/smoke/expected.txt`. Releases are
+built by GitHub Actions (`.github/workflows/release.yml`) from a `v*` tag; the
+same workflow checks every pull request.
 
 ## Dependencies
 

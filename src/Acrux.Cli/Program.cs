@@ -32,13 +32,23 @@ catch (Exception ex)
     return 1;   // 1 = failed while running; 2 = usage error
 }
 
-// scripts/deploy-cli.sh leaves the deployed commit next to the binary
+// A local deploy (scripts/deploy-cli.sh) leaves its commit next to the binary;
+// otherwise the build's own version: the release tag, or 0.0.0-dev
+// (Directory.Build.props), plus the commit the SDK appends after a "+"
 static int ShowVersion()
 {
     var stamp = Path.Combine(AppContext.BaseDirectory, "COMMIT");
-    Console.WriteLine(File.Exists(stamp)
-        ? File.ReadAllText(stamp).Trim()
-        : "development build (no COMMIT file next to the binary)");
+    if (File.Exists(stamp))
+    {
+        Console.WriteLine(File.ReadAllText(stamp).Trim());
+        return 0;
+    }
+    var info = System.Reflection.Assembly.GetEntryAssembly()?
+        .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+        .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+        .FirstOrDefault()?.InformationalVersion ?? "unknown";
+    var parts = info.Split('+', 2);
+    Console.WriteLine(parts.Length == 2 ? $"{parts[0]} ({parts[1][..Math.Min(7, parts[1].Length)]})" : parts[0]);
     return 0;
 }
 

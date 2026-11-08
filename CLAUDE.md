@@ -70,6 +70,30 @@ for ScriptHost"/`NotSupportedException` de referência de metadados. Não há
 contorno por código (referências via `TryGetRawMetadata` resolvem as
 explícitas, mas não a do corlib interno) — validado por harness em 2026-07.
 
+### Release
+
+Pelo GitHub Actions (`.github/workflows/release.yml`, desenho aprovado em
+2026-11-08):
+
+1. Na `master`, crie e suba a tag: `git tag v0.1.0 && git push origin v0.1.0`.
+2. O workflow compila e testa: no Linux, o smoke test e o CLI self-contained
+   (`acrux-cli-v0.1.0-linux-x64.tar.gz`, com um link `acrux` dentro); no
+   Windows, o app single-file (`Acrux-v0.1.0-win-x64.zip`, com a `LICENSE` e
+   o `NOTICE` da arte).
+3. Ele cria um release **rascunho**, com o `SHA256SUMS` e as notas (texto
+   fixo de instalação + as geradas pelo GitHub). O dono confere e publica.
+
+Em PR, o mesmo workflow só compila e testa, sem release. A versão vem da tag
+(`-p:Version=0.1.0`); fora de release vale `0.0.0-dev`
+(`Directory.Build.props`), e na CI de PR, `0.0.0-ci.N`. O `acrux version`
+mostra a versão e o commit (`0.1.0 (b0bdb9a)`); num deploy local, o arquivo
+`COMMIT` tem prioridade. **Sem assinatura ainda:** o Windows mostra o aviso do
+SmartScreen. Próximo passo: o pedido de assinatura grátis da SignPath
+Foundation (exige um release anterior e a conta do dono com 2FA). Store,
+winget e RPM ficam para quando houver usuários. As Actions estão nas versões
+conferidas em 2026-11-08 (checkout v7, setup-dotnet v6, upload-artifact v7,
+download-artifact v8, todas em Node 24).
+
 O `Acrux.WinForms.csproj` traz tuning intencional de GC para desktop
 (workstation concurrent + DATAS via `GarbageCollectionAdaptationMode=1`) —
 não reverter sem motivo.

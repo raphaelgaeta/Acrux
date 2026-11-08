@@ -1,0 +1,120 @@
+# Builds the Windows app and the Linux command line. On a pull request it
+# only checks that both build (and that the smoke test passes); on a "v*" tag
+# it also creates a DRAFT release with both files and their SHA-256 sums —
+# the maintainer reviews it and clicks Publish.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      label: ${{ steps.v.outputs.label }}
+    steps:
+      - id: v
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "label=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            # not a release: a version nobody will mistake for one
+            echo "version=0.0.0-ci.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "label=ci-$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          fi
+
+  linux:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      - name: Smoke test
+        run: |
+          sudo apt-get install -y --no-install-recommends sqlite3 > /dev/null
+          dotnet build src/Acrux.Cli -c Release
+          tests/smoke/run.sh src/Acrux.Cli/bin/Release/net10.0/Acrux.Cli
+      - name: "Publish the command line (self-contained: no .NET needed)"
+        run: |
+          dotnet publish src/Acrux.Cli/Acrux.Cli.csproj -c Release -r linux-x64 \
+            --self-contained true -p:Version=${{ needs.version.outputs.version }} -o out/acrux-cli
+          ln -s Acrux.Cli out/acrux-cli/acrux
+          cp LICENSE out/acrux-cli/
+          out/acrux-cli/acrux version
+          tar -czf acrux-cli-${{ needs.version.outputs.label }}-linux-x64.tar.gz -C out acrux-cli
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux
+          path: acrux-cli-*.tar.gz
+          retention-days: 7
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      - name: Publish the desktop app (single file, self-contained)
+        shell: pwsh
+        run: |
+          dotnet publish src/Acrux.WinForms/Acrux.WinForms.csproj -c Release -r win-x64 `
+            --self-contained true -p:PublishSingleFile=true `
+            -p:Version=${{ needs.version.outputs.version }} -o out
+          New-Item -ItemType Directory -Force pkg | Out-Null
+          Copy-Item out/Acrux.exe, LICENSE pkg/
+          Copy-Item assets/brand/NOTICE.md pkg/NOTICE-logo.md
+          Compress-Archive -Path pkg/* -DestinationPath Acrux-${{ needs.version.outputs.label }}-win-x64.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          path: Acrux-*.zip
+          retention-days: 7
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version, linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum Acrux-*.zip acrux-cli-*.tar.gz > SHA256SUMS
+          cat > notes.md <<'EOF'
+          **Windows app** — unzip `Acrux-…-win-x64.zip` and run `Acrux.exe`; nothing
+          to install, the .NET runtime is inside. The file isn't code-signed yet, so
+          Windows SmartScreen warns about an unknown publisher: **More info → Run
+          anyway**.
+
+          **Command line, Linux** — extract `acrux-cli-…-linux-x64.tar.gz` and put the
+          `acrux-cli` folder on your `PATH` (the `acrux` link inside starts it); no
+          .NET needed.
+
+          Check a download against `SHA256SUMS`: `sha256sum -c SHA256SUMS
+          --ignore-missing` on Linux, `Get-FileHash <file>` on Windows.
+          EOF
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
+            --title "Acrux $GITHUB_REF_NAME" --notes-file notes.md --generate-notes \
+            Acrux-*.zip acrux-cli-*.tar.gz SHA256SUMS
