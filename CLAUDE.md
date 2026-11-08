@@ -14,7 +14,9 @@ dotnet run --project src/Acrux.WinForms
 dotnet run --project src/Acrux.Cli -- head arquivo.parquet -n 10   # CLI, roda no Linux
 ```
 
-O CLI tem os comandos `schema`, `columns`, `head [-n N]`, `rows` e `type`.
+O CLI tem os comandos `schema`, `columns`, `head [-n N]`, `rows`, `type` e
+`column <arquivo> <nome> [-n N]` (padrão: 10 linhas; num `.db`, procura a
+coluna em todas as tabelas).
 Erros saem em uma linha com código 1 (`ACRUX_DEBUG=1` mostra a exceção
 inteira); uso errado sai com código 2.
 

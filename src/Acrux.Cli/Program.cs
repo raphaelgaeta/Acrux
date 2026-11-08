@@ -14,6 +14,8 @@ try
         ["columns", var file] => await ShowColumns(file),
         ["rows", var file] => await ShowRowNumber(file),
         ["type", var file] => ShowFormat(file),
+        ["column", var file, var column] => await ShowSpecificColumn(file, column, 10),
+        ["column", var file, var column, "-n", var n] when int.TryParse(n, out var rows) && rows > 0 => await ShowSpecificColumn(file, column, rows),
         _ => Usage(),
     };
 }
@@ -151,6 +153,65 @@ static string FormatCell(object value) => value switch
     _ => (value.ToString() ?? "").ReplaceLineEndings(" "),
 };
 
+static async Task<int> ShowSpecificColumn(string file, string column, int rows)
+{
+    if (DataFrameProvider.DetectFormat(file) == SourceFormat.Sqlite)
+    {
+        // the column may live in any table: show it from every table that has it
+        var tables = await DataFrameProvider.ReadSqliteTablesAsync(file);
+        try
+        {
+            var found = tables.Where(t => ColumnNames(t.Value).Contains(column)).ToList();
+            if (found.Count == 0)
+                throw new ArgumentException(ColumnNotFound(column, tables.Values.SelectMany(ColumnNames)));
+            foreach (var (table, df) in found)
+            {
+                Console.WriteLine($"== {table}");
+                using var only = df.Select(column);
+                using var first = only.Head(rows);
+                using var batch = first.ToArrow();
+                PrintBatch(batch);
+            }
+        }
+        finally
+        {
+            foreach (var df in tables.Values)
+                df.Dispose();
+        }
+        return 0;
+    }
+
+    var (parquet, isTemp) = await DataFrameProvider.EnsureParquetAsync(file);
+    try
+    {
+        // checked against the schema first: Polars' own error dumps the whole query plan
+        var columns = await DataFrameProvider.GetColumnNamesAsync(parquet);
+        if (!columns.Contains(column))
+            throw new ArgumentException(ColumnNotFound(column, columns));
+
+        using var df = await DataFrameProvider.GetDataFrameAsync(parquet, [column], limit: (uint)rows);
+        using var batch = df.ToArrow();
+        PrintBatch(batch);
+    }
+    finally
+    {
+        if (isTemp) File.Delete(parquet);
+    }
+    return 0;
+}
+
+static IEnumerable<string> ColumnNames(DataFrame df) => df.Schema.ToList().Select(c => c.Name);
+
+// column names are case-sensitive; a near miss gets a hint
+static string ColumnNotFound(string column, IEnumerable<string> available)
+{
+    var names = available.Distinct().ToList();
+    var hint = names.FirstOrDefault(n => string.Equals(n, column, StringComparison.OrdinalIgnoreCase));
+    return $"no column \"{column}\"" + (hint is null ? "" : $" (did you mean \"{hint}\"?)") +
+           $"; columns: {string.Join(", ", names)}";
+}
+
+
 // pads or truncates to the column width, never splitting an emoji's surrogate pair
 static string Fit(string text, int width)
 {
@@ -219,6 +280,6 @@ static async Task<string[]> ColumnNamesAsync(string file)
 
 static int Usage()
 {
-    Console.Error.WriteLine("usage: acrux <schema|columns|head [-n N]|rows|type> <file>");
+    Console.Error.WriteLine("usage: acrux <schema|columns|head [-n N]|rows|type> <file> | acrux column <file> <name> [-n N]");
     return 2;
 }
