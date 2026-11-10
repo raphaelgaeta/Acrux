@@ -327,7 +327,7 @@ private async Task LoadFileAsync(string fileName)
         if (sourceIsTemp && !ReferenceEquals(sourcePath, _tempParquetPath) && sourcePath != _tempParquetPath)
             TryDeleteTemp(sourcePath);
         MessageBox.Show(
-            $"Error loading DataFrame:\n\n{ex.Message}",
+            $"Error loading DataFrame:\n\n{PolarsErrors.Describe(ex)}",
             "Error",
             MessageBoxButtons.OK,
             MessageBoxIcon.Error);
@@ -491,7 +491,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         }
         catch (Exception ex)
         {
-            _terminal.AppendError(ex.Message);
+            _terminal.AppendError(PolarsErrors.Describe(ex));
             UpdateInfo();
         }
         finally
@@ -552,7 +552,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         catch (Exception ex)
         {
             MessageBox.Show(
-                $"Error restoring the file:\n\n{ex.Message}",
+                $"Error restoring the file:\n\n{PolarsErrors.Describe(ex)}",
                 "Error",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
@@ -614,7 +614,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         catch (Exception ex)
         {
             MessageBox.Show(
-                $"Error filtering column \"{column}\":\n\n{ex.Message}",
+                $"Error filtering column \"{column}\":\n\n{PolarsErrors.Describe(ex)}",
                 "Error",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);

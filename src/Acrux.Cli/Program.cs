@@ -29,7 +29,7 @@ catch (Exception ex)
     // the operator gets the message, not a stack trace; ACRUX_DEBUG=1 shows everything
     Console.Error.WriteLine(Environment.GetEnvironmentVariable("ACRUX_DEBUG") == "1"
         ? ex.ToString()
-        : $"acrux: {ex.Message}");
+        : $"acrux: {PolarsErrors.Brief(ex)}");   // without the plan Polars appends
     return 1;   // 1 = failed while running; 2 = usage error
 }
 

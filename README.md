@@ -292,6 +292,7 @@ nothing at all.
 | `src/Acrux.Core/DataFrameProvider.cs` | Format detection by content and CSV/Excel/SQLite→parquet conversion |
 | `src/Acrux.Core/TextDates.cs` | Dates stored as text become dates only when unambiguous |
 | `src/Acrux.Core/FilterEngine.cs` | Excel-style filters as Polars lazy queries |
+| `src/Acrux.Core/PolarsErrors.cs` | Polars errors without the query plan Polars appends |
 | `src/Acrux.Core/TimeFilter.cs` | Relative time windows (`--last "2 days"`) as Polars expressions |
 | `src/Acrux.Core/PolarsTableAdapter.cs` | O(1) per-cell reads from Arrow arrays, for every column type |
 | `src/Acrux.Core/ScriptHost.cs` | Roslyn evaluation of chained Polars scripts |

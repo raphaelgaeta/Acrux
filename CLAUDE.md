@@ -44,8 +44,9 @@ diferentes dá números sem sentido, e a mesma coluna pode ter tipos
 diferentes em cada tabela. Os que citam colunas (`values`, `column`,
 `filter`, `--where`) respondem só pelas tabelas que têm todas elas. O
 `schema` e o `rows` de parquet leem só os metadados, sem os dados.
-Erros saem em uma linha com código 1 (`ACRUX_DEBUG=1` mostra a exceção
-inteira); uso errado sai com código 2. `acrux version` diz qual commit está
+Erros saem em uma linha com código 1, sem o plano que o Polars anexa
+(`PolarsErrors.Brief`; `ACRUX_DEBUG=1` mostra a exceção inteira); uso errado
+sai com código 2. `acrux version` diz qual commit está
 instalado (ver "Deploy de teste do CLI" abaixo).
 
 Três projetos sob `src/`, agregados pelo `Acrux.sln` da raiz: `Acrux.Core`
@@ -419,6 +420,7 @@ aceitar fonte lazy genérica).
 | `src/Acrux.Core/PolarsTableAdapter.cs` | `GetCellValue`: leitura O(1) por célula do Arrow |
 | `src/Acrux.Core/ScriptHost.cs` | Terminal C#: avaliação Roslyn de scripts Polars |
 | `src/Acrux.Core/TextDates.cs` | Datas guardadas como texto (CSV, SQLite) viram data só quando não há ambiguidade |
+| `src/Acrux.Core/PolarsErrors.cs` | Erros do Polars para gente: a mensagem sem o plano que ele anexa (CLI e app) |
 | `src/Acrux.Core/TimeFilter.cs` | Filtro de tempo relativo: lê períodos no padrão do systemd, monta o predicado por tipo de coluna e acha as posições das N linhas mais recentes |
 | `src/Acrux.WinForms/Program.cs` | Entrada do app: limpeza de temporários órfãos, o arquivo recebido como argumento (duplo clique, "Abrir com") e `Environment.Exit(0)` |
 | `src/Acrux.WinForms/AppIcon.cs` | Ícone das janelas, lido do `.ico` embutido |
@@ -613,6 +615,14 @@ aceitar fonte lazy genérica).
   `POLARS_IGNORE_TIMEZONE_PARSE_ERROR=1`.
 - `DataType.String` etc. seguem estáticos e **fora do XML doc** do pacote.
 - Para validar APIs novas do pacote, use a skill `polars-probe`.
+- **Erro de plano do Polars traz o plano inteiro** (coluna inexistente, tipo
+  que não combina). A mensagem útil vem numa linha, seguida de uma linha em
+  branco, `Resolved plan until failure:` e o plano, que pode listar todas as
+  colunas selecionadas (visto no terminal C#, 2026-11-10). O
+  `PolarsErrors.Brief` corta nesse marcador, e o app e o CLI mostram só a
+  mensagem. Formato conferido na 1.0.1 com `select`, `filter` e `group_by`
+  de coluna inexistente e com texto + número. Erro sem plano (um `Cast`
+  impossível, por exemplo) sai igual.
 - **Leitura de banco via ADO.NET** (probe no Linux, 2026-11):
   `DataFrame.ReadDatabase(IDataReader, batchSize)` recebe um *leitor*, não
   um caminho, e lê tudo para Arrow (eager). **Não fecha o leitor**: o
