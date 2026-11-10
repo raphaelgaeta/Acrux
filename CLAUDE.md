@@ -192,6 +192,40 @@ mesmo assim.
   própria; o nome aparece só como imagem, via logo. Azul no branco dá 1,54:1 de
   contraste, por isso o README usa roxo no tema claro e gradiente no escuro.
 
+**Tema do app de janela** (`Theme.cs`, desenho aprovado em 2026-11-10): claro
+ou escuro conforme o Windows, e a marca só onde ajuda a ler. É o "tema
+mínimo": nada desenhado à mão além dos nulos, porque o que se gasta em
+aparência no WinForms se perde na troca para o Avalonia.
+
+- **Modo escuro:** `Application.SetColorMode(SystemColorMode.System)` no
+  `Program`, antes de qualquer janela; não é mais experimental no .NET 10.
+  Só existe no Windows 11 (o Wine fica no claro), é lido uma vez (trocar o
+  tema do Windows pede reabrir o app) e não vale em alto contraste.
+- **Nenhuma cor fixa** (`Color.White`, `Color.Black`): elas viram blocos no
+  escuro. Use `SystemColors` ou o `Theme`.
+- **Cada cor da marca no modo em que se lê** (WCAG; texto pede 4,5:1):
+  - barra de título roxa com texto branco, 4,94:1, nos dois modos
+    (`FormCaptionBackColor`; o Windows 10 ignora);
+  - destaque (seleção, cabeçalho filtrado): preto sobre azul no claro,
+    13,6:1; branco sobre roxo no escuro, 4,94:1. Branco sobre azul daria
+    1,54:1;
+  - o cabeçalho filtrado mantém o " ▼": a cor não pode ser o único sinal.
+- **Em alto contraste, a marca sai** (`SystemInformation.HighContrast`): o
+  esquema do usuário vale mais.
+- **Cinza e vermelho calculados, não do sistema:** o texto secundário
+  (nulos, eco do terminal) fica a 60% entre o fundo e o texto, ~5,7:1 no
+  claro e ~6,6:1 num fundo `#202020`. O erro é `Firebrick` no claro (6,7:1)
+  e `#f48771` no escuro, porque o `Firebrick` daria 2,4:1.
+- **Os nulos são desenhados só na pintura** (`CellPainting` das células
+  `DBNull`): na tela, `null` cinza em itálico; o valor continua `DBNull`, e o
+  Ctrl+C copia vazio, como antes.
+- **Números à direita, pelo tipo Arrow.** Atenção: **no Arrow,
+  `BooleanType` herda de `NumberType`**, e por isso o `IsNumeric` o exclui.
+  Os decimais (`Decimal32Type` a `Decimal256Type`) não herdam de
+  `NumberType`. Conferido no parquet de 20 tipos.
+- **Aparência se confere na VM do Windows 11**, nos dois modos. Os GIFs do
+  README são anteriores ao tema.
+
 ## Porte multiplataforma (em andamento)
 
 Onde estamos:
@@ -379,6 +413,7 @@ aceitar fonte lazy genérica).
 | `src/Acrux.Core/TimeFilter.cs` | Filtro de tempo relativo: lê períodos no padrão do systemd, monta o predicado por tipo de coluna e acha as posições das N linhas mais recentes |
 | `src/Acrux.WinForms/Program.cs` | Entrada do app: limpeza de temporários órfãos, o arquivo recebido como argumento (duplo clique, "Abrir com") e `Environment.Exit(0)` |
 | `src/Acrux.WinForms/AppIcon.cs` | Ícone das janelas, lido do `.ico` embutido |
+| `src/Acrux.WinForms/Theme.cs` | Cores do app: a marca onde se lê, as do sistema no resto; modo claro e escuro |
 | `src/Acrux.WinForms/MainForm.cs` | Grid virtual, carga do arquivo, costura dos filtros |
 | `src/Acrux.WinForms/ColumnSelectorForm.cs` | Diálogo de seleção de colunas na abertura |
 | `src/Acrux.WinForms/SheetSelectorForm.cs` | Diálogo de escolha da aba do xlsx ou da tabela do SQLite (2+) |
@@ -634,6 +669,9 @@ aceitar fonte lazy genérica).
   estoura. Toda coluna criada recebe `FillWeight = 1`.
 - Colunas do grid: `Name` é sempre o nome real da coluna do parquet;
   `HeaderText` pode ganhar sufixo " ▼" quando há filtro ativo.
+- **Cor de fundo no cabeçalho exige `EnableHeadersVisualStyles = false`:**
+  com os estilos visuais ligados, o cabeçalho ignora `BackColor`. Desligados,
+  ele fica plano e segue o modo escuro.
 
 ## Convenções
 

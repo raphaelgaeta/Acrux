@@ -9,6 +9,7 @@ using Polars.CSharp;
 
 using Apache.Arrow;
 using Apache.Arrow.Ipc;
+using ArrowTypes = Apache.Arrow.Types;
 namespace Acrux;
 
 public partial class MainForm : Form
@@ -40,6 +41,7 @@ public MainForm(string? initialFile = null)
 {
     Text = "Acrux";
     Icon = AppIcon.Value;
+    Theme.Apply(this);
     Width = 1280;
     Height = 760;
     StartPosition = FormStartPosition.CenterScreen;
@@ -114,7 +116,6 @@ public MainForm(string? initialFile = null)
         SelectionMode = DataGridViewSelectionMode.CellSelect,
         MultiSelect = true,
         ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableAlwaysIncludeHeaderText,
-        BackgroundColor = Color.White,
         BorderStyle = BorderStyle.None,
 
         // ── virtual-mode tuning ──────────────────────────
@@ -138,8 +139,12 @@ public MainForm(string? initialFile = null)
     _grid.RowTemplate.Resizable = DataGridViewTriState.False;
 
     _grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 10, FontStyle.Bold);
-    _grid.DefaultCellStyle.Font = new Font("Segoe UI", 10);
+    var cellFont = new Font("Segoe UI", 10);
+    _grid.DefaultCellStyle.Font = cellFont;
     _grid.DefaultCellStyle.WrapMode = DataGridViewTriState.False;
+    Theme.StyleGrid(_grid);
+    _nullFont = new Font(cellFont, FontStyle.Italic);
+    _grid.CellPainting += Grid_CellPainting;
 
     // supplies values only for visible cells
     _grid.CellValueNeeded += Grid_CellValueNeeded;
@@ -193,6 +198,32 @@ private void Grid_CellValueNeeded(object sender, DataGridViewCellValueEventArgs 
     int dataRow = _filteredRows is null ? e.RowIndex : _filteredRows[e.RowIndex];
     e.Value = PolarsTableAdapter.GetCellValue(_batch.Column(e.ColumnIndex), dataRow);
 }
+
+// Nulls as a muted, italic "null", drawn at paint time only: the cell's value
+// stays DBNull, so Ctrl+C still copies an empty cell, and an empty string
+// still shows empty. Every other cell is left to the grid.
+private readonly Font _nullFont;
+private void Grid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+{
+    if (e.RowIndex < 0 || e.Value is not DBNull || e.Graphics is null || e.CellStyle is null)
+        return;
+
+    e.Paint(e.ClipBounds, DataGridViewPaintParts.All & ~DataGridViewPaintParts.ContentForeground);
+    bool selected = (e.State & DataGridViewElementStates.Selected) != 0;
+    var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis
+        | (e.CellStyle.Alignment == DataGridViewContentAlignment.MiddleRight ? TextFormatFlags.Right : TextFormatFlags.Left);
+    TextRenderer.DrawText(e.Graphics, "null", _nullFont, Rectangle.Inflate(e.CellBounds, -3, 0),
+        selected ? e.CellStyle.SelectionForeColor : Theme.Muted, flags);
+    e.Handled = true;
+}
+
+// Integers and floats share NumberType, and so does BooleanType (True/False
+// stays left); Arrow keeps the decimals apart. Checked on the 20-type fixture.
+private static bool IsNumeric(ArrowTypes.IArrowType type) => type
+    is (ArrowTypes.NumberType and not ArrowTypes.BooleanType)
+    or ArrowTypes.Decimal32Type or ArrowTypes.Decimal64Type
+    or ArrowTypes.Decimal128Type or ArrowTypes.Decimal256Type;
+
 private async void BtnLoad_Click(object? sender, EventArgs e)
 {
     using var dialog = new OpenFileDialog
@@ -351,7 +382,11 @@ protected override void OnFormClosed(FormClosedEventArgs e)
                 HeaderText = field.Name,
                 Width      = 120,
                 SortMode   = DataGridViewColumnSortMode.Programmatic,
-                FillWeight = 1   // default is 100 and the sum caps at 65535
+                FillWeight = 1,   // default is 100 and the sum caps at 65535
+                // numbers to the right, as in a spreadsheet: magnitudes line up
+                DefaultCellStyle = { Alignment = IsNumeric(field.DataType)
+                    ? DataGridViewContentAlignment.MiddleRight
+                    : DataGridViewContentAlignment.MiddleLeft }
             })
             .ToArray();
 
@@ -645,9 +680,11 @@ protected override void OnFormClosed(FormClosedEventArgs e)
     {
         foreach (DataGridViewColumn col in _grid.Columns)
         {
-            var wanted = _activeFilters.ContainsKey(col.Name) ? col.Name + " ▼" : col.Name;
+            bool filtered = _activeFilters.ContainsKey(col.Name);
+            var wanted = filtered ? col.Name + " ▼" : col.Name;
             if (col.HeaderText != wanted)
                 col.HeaderText = wanted;
+            Theme.MarkFiltered(col, filtered);
         }
     }
 

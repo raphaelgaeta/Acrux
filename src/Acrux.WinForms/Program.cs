@@ -7,6 +7,9 @@ internal static class Program
     static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
+        // light or dark as Windows is set (Windows 11; read once: switching
+        // takes a restart). Before any window exists, so every one follows.
+        Application.SetColorMode(SystemColorMode.System);
 
         // leftovers from previous runs killed before their cleanup
         DataFrameProvider.CleanStaleTempFiles();

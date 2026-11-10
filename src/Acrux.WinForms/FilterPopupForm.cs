@@ -44,6 +44,7 @@ public sealed class FilterPopupForm : Form
 
         Text = $"Filter: {column}";
         FormBorderStyle = FormBorderStyle.FixedToolWindow;
+        Theme.Apply(this);
         StartPosition = FormStartPosition.Manual;   // positioned by the caller
         ShowInTaskbar = false;
         Width = 340;
