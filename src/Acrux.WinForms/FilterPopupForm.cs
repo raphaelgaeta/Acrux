@@ -40,7 +40,7 @@ public sealed class FilterPopupForm : Form
         // no active filter = everything checked (Excel behavior)
         _checked = current is null
             ? new HashSet<string>(values)
-            : new HashSet<string>(values.Where(current.SelectedValues.Contains));
+            : new HashSet<string>(values.Where(current.Values.Contains));
 
         Text = $"Filter: {column}";
         FormBorderStyle = FormBorderStyle.FixedToolWindow;
@@ -140,11 +140,7 @@ public sealed class FilterPopupForm : Form
 
         ResultFilter = allChecked
             ? null
-            : new ColumnFilter
-            {
-                SelectedValues = new HashSet<string>(_checked),
-                IncludeBlanks = _hasBlanks && _chkBlanks.Checked
-            };
+            : new ColumnFilter(new HashSet<string>(_checked), _hasBlanks && _chkBlanks.Checked);
     }
 
     private void List_ItemCheck(object? sender, ItemCheckEventArgs e)

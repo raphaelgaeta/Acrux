@@ -301,9 +301,13 @@ processo fantasma; relato de campo em 2026-07, não reproduzido em matriz de
 inicialização, pulando PIDs vivos (multi-instância seguro).
 
 Fluxo de filtro: clique no cabeçalho → `FilterEngine.GetDistinctValuesAsync`
-(semântica Excel: aplica os filtros das *outras* colunas antes de coletar os
-distintos; dropdown limitado a `DistinctCap = 10.000`) → `FilterPopupForm` →
+(dropdown limitado a `DistinctCap = 10.000`) → `FilterPopupForm` →
 `GetVisibleRowsAsync` (máscara booleana varrida em C#) → `_filteredRows`.
+**Toda consulta do `FilterEngine` recebe o filtro pronto, como `Expr?`**
+(desde 2026-11-09): quem chama monta com `BuildPredicate` (valores por
+coluna), `TimeFilter.Between` (tempo), ou os dois unidos por `&`. A
+semântica Excel (a lista de uma coluna ignora o filtro dela mesma) é do
+app: `BuildPredicate(_activeFilters, except: coluna)`.
 Filtros concorrentes são cancelados via `_filterCts`.
 
 Terminal C# (botão "C# terminal"): scripts Roslyn encadeados por **replay** —
@@ -331,7 +335,7 @@ aceitar fonte lazy genérica).
 | Arquivo | Papel |
 |---|---|
 | `src/Acrux.Core/DataFrameProvider.cs` | Detecção de formato pelo conteúdo, conversão para parquet, leitura via LazyFrame |
-| `src/Acrux.Core/FilterEngine.cs` | Filtros estilo Excel via Polars (distintos + máscara) |
+| `src/Acrux.Core/FilterEngine.cs` | Filtros via Polars (distintos e máscara), recebendo o filtro como `Expr` |
 | `src/Acrux.Core/PolarsTableAdapter.cs` | `GetCellValue`: leitura O(1) por célula do Arrow |
 | `src/Acrux.Core/ScriptHost.cs` | Terminal C#: avaliação Roslyn de scripts Polars |
 | `src/Acrux.Core/TextDates.cs` | Datas guardadas como texto (CSV, SQLite) viram data só quando não há ambiguidade |
@@ -466,9 +470,9 @@ aceitar fonte lazy genérica).
   (validado). Ainda assim não usar para filtrar em memória (princípio 1). O
   DataFrame **sobrevive ao `Dispose` do RecordBatch de origem**: validado
   com 20 rodadas de GC e realocação nativa, com somas e valores intactos.
-- `Expr.IsIn`: o estilo antigo `IsIn(Lit(Series.From(...)).Implode())`
-  continua funcionando; desde a 0.6.0 há overload direto `IsIn(IEnumerable<T>)`
-  (validado, mesma semântica) — simplificação disponível para o futuro.
+- `Expr.IsIn`: desde a 0.6.0 há overload direto `IsIn(IEnumerable<T>)`, e o
+  `BuildPredicate` o usa desde 2026-11-09 (mesmas contagens que o antigo
+  `IsIn(Lit(Series.From(...)).Implode())`, conferidas na 1.0.1).
 - `WithRowIndex`/`ArgWhere` **agora existem** (índices como `UInt32Array`,
   validados) e poderiam substituir a varredura de máscara booleana no
   `FilterEngine` — mudança de desenho, requer aval do dono.
