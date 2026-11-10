@@ -14,6 +14,7 @@ public sealed class SheetSelectorForm : Form
     {
         Text = title;
         Icon = AppIcon.Value;
+        Theme.Apply(this);
         Width = 340;
         Height = 380;
         StartPosition = FormStartPosition.CenterParent;

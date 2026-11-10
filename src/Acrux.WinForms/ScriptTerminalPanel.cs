@@ -34,7 +34,7 @@ public sealed class ScriptTerminalPanel : Panel
         {
             Dock = DockStyle.Fill,
             ReadOnly = true,
-            BackColor = Color.White,
+            BackColor = SystemColors.Window,   // read-only would turn it gray
             Font = mono,
             BorderStyle = BorderStyle.None,
             Text = "// C# Polars terminal — `lf` is the previous step's result.\n" +
@@ -101,12 +101,12 @@ public sealed class ScriptTerminalPanel : Panel
     public void AppendCode(string code)
     {
         var prefixed = "> " + code.ReplaceLineEndings("\n").Replace("\n", "\n> ");
-        Append(prefixed + "\n", Color.Gray);
+        Append(prefixed + "\n", Theme.Muted);
     }
 
-    public void AppendResult(string text) => Append(text + "\n\n", Color.Black);
+    public void AppendResult(string text) => Append(text + "\n\n", SystemColors.WindowText);
 
-    public void AppendError(string text) => Append(text + "\n\n", Color.Firebrick);
+    public void AppendError(string text) => Append(text + "\n\n", Theme.Error);
 
     private void Append(string text, Color color)
     {

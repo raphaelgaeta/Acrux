@@ -34,6 +34,7 @@ public sealed class ColumnSelectorForm : Form
 
         Text = "Select columns";
         Icon = AppIcon.Value;
+        Theme.Apply(this);
         Width = 420;
         Height = 560;
         MinimumSize = new Size(320, 400);

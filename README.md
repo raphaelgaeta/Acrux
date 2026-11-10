@@ -140,6 +140,10 @@ nothing downstream can tell.
   from disk.
 - **Filter like Excel.** Click a header, get the distinct values (blanks
   included), check what you want. Filters compose across columns.
+- **A null looks like a null.** A missing value shows as a muted *null*, never
+  as an empty string, though copying it still gives an empty cell. Numbers line
+  up on the right, and on Windows 11 the app follows the light or dark mode
+  you set in Windows.
 - **Drop into a C# terminal.** The full Polars expression API, with `lf` as
   your LazyFrame — starting from exactly what you see: column selection and
   active header filters are inherited by the script as an implicit first step:
@@ -293,6 +297,7 @@ nothing at all.
 | `src/Acrux.Core/ScriptHost.cs` | Roslyn evaluation of chained Polars scripts |
 | `src/Acrux.WinForms/Program.cs` | Entry point: stale temp sweep and guaranteed process exit |
 | `src/Acrux.WinForms/AppIcon.cs` | Window icon, loaded from the embedded `.ico` |
+| `src/Acrux.WinForms/Theme.cs` | The app's colors: the brand where it reads, the system's everywhere else |
 | `src/Acrux.WinForms/MainForm.cs` | Virtual grid, file loading, filter orchestration |
 | `src/Acrux.WinForms/ColumnSelectorForm.cs` | Column picker shown on open |
 | `src/Acrux.WinForms/SheetSelectorForm.cs` | Sheet or table picker for .xlsx and SQLite |
