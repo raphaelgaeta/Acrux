@@ -10,6 +10,8 @@ public static class DataFrameProvider
     /// <summary>
     /// Open-dialog filter. Extensions only narrow the listing: the format is
     /// decided by content (<see cref="DetectFormat"/>), so "All files" works too.
+    /// The installer offers "Open with Acrux" for the same extensions
+    /// (installer/acrux.iss, [Registry]): change both together.
     /// </summary>
     public const string OpenDialogFilter =
         "Data files (*.parquet;*.csv;*.xlsx;*.db;*.sqlite;*.sqlite3)|*.parquet;*.csv;*.xlsx;*.db;*.sqlite;*.sqlite3|" +

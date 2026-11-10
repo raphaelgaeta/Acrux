@@ -111,6 +111,30 @@ Pelo GitHub Actions (`.github/workflows/release.yml`, desenho aprovado em
   embutir, evita redistribuir o pacote, que pela licença é restrito a quem
   tem Visual Studio. Se o download falhar ou o pedido de admin for recusado,
   o Acrux se instala mesmo assim, e o setup mostra o link.
+- **"Abrir com" no Explorer** (desenho aprovado em 2026-11-10): o `[Registry]`
+  do `.iss` cria o ProgID `Acrux.DataFile` (`"Acrux.exe" "%1"`) e o põe no
+  `OpenWithProgids` de `.parquet`, `.csv`, `.xlsx`, `.db`, `.sqlite` e
+  `.sqlite3`, as extensões do `OpenDialogFilter`: mudou uma lista, mude a
+  outra. É por usuário (`HKA` = `HKCU` com `PrivilegesRequired=lowest`), e
+  `ChangesAssociations=yes` avisa o Explorer na instalação e na remoção.
+  - **Nenhum app se torna o padrão sozinho:** desde o Windows 8, só o
+    usuário escolhe o padrão, na UI do sistema. Escrever o `UserChoice` não
+    funciona, porque o driver UCPD.sys protege essa chave (documentação da
+    Microsoft, *Windows app defaults platform*). Muito guia antigo ainda
+    ensina isso.
+  - **Só o `.parquet` ganha o valor padrão:** em geral, nenhum outro app o
+    reivindica, então o duplo clique abre o Acrux. CSV, xlsx e `.db` têm dono
+    (o Excel, por exemplo), e o Acrux só entra na lista. O valor padrão do
+    `.parquet` fica na desinstalação, como a Microsoft recomenda: sem o
+    ProgID, o Windows o ignora.
+  - **O registro é do instalador, nunca do app:** o desinstalador apaga o que
+    o instalador escreveu. Um app que se registrasse a cada abertura
+    gravaria no registro de quem usa o zip, e deixaria um "Abrir com"
+    apontando para um `.exe` apagado.
+  - **Verbos extras** (um "Acrux: schema" no clique direito) cairiam no
+    "Mostrar mais opções" do Windows 11. O menu principal exige
+    `IExplorerCommand` numa DLL COM nativa, num pacote MSIX ou sparse, que
+    precisa de assinatura. Por ora, só o "Abrir com".
 - **`AppId` fixo** no `.iss`: o Windows reconhece a instalação por ele.
   Nunca mude.
 - O `.iss` só compila no Windows (na CI). Para testar, baixe o artefato
@@ -353,7 +377,7 @@ aceitar fonte lazy genérica).
 | `src/Acrux.Core/ScriptHost.cs` | Terminal C#: avaliação Roslyn de scripts Polars |
 | `src/Acrux.Core/TextDates.cs` | Datas guardadas como texto (CSV, SQLite) viram data só quando não há ambiguidade |
 | `src/Acrux.Core/TimeFilter.cs` | Filtro de tempo relativo: lê períodos no padrão do systemd, monta o predicado por tipo de coluna e acha as posições das N linhas mais recentes |
-| `src/Acrux.WinForms/Program.cs` | Entrada do app: limpeza de temporários órfãos e `Environment.Exit(0)` |
+| `src/Acrux.WinForms/Program.cs` | Entrada do app: limpeza de temporários órfãos, o arquivo recebido como argumento (duplo clique, "Abrir com") e `Environment.Exit(0)` |
 | `src/Acrux.WinForms/AppIcon.cs` | Ícone das janelas, lido do `.ico` embutido |
 | `src/Acrux.WinForms/MainForm.cs` | Grid virtual, carga do arquivo, costura dos filtros |
 | `src/Acrux.WinForms/ColumnSelectorForm.cs` | Diálogo de seleção de colunas na abertura |

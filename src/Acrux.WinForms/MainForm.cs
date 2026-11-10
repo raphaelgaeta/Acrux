@@ -36,8 +36,7 @@ public partial class MainForm : Form
     private CancellationTokenSource? _scriptCts;
 
 
-
-public MainForm()
+public MainForm(string? initialFile = null)
 {
     Text = "Acrux";
     Icon = AppIcon.Value;
@@ -164,6 +163,11 @@ public MainForm()
 
     Controls.Add(_split);
     Controls.Add(topPanel);
+
+    // opened from Explorer: load once the window is on screen, so the
+    // column selector has its owner
+    if (initialFile is not null)
+        Shown += async (_, _) => await LoadFileAsync(initialFile);
 }
 
 private void ToggleTerminal()
@@ -197,10 +201,12 @@ private async void BtnLoad_Click(object? sender, EventArgs e)
         Filter = DataFrameProvider.OpenDialogFilter
     };
 
-    if (dialog.ShowDialog(this) != DialogResult.OK)
-        return;
+    if (dialog.ShowDialog(this) == DialogResult.OK)
+        await LoadFileAsync(dialog.FileName);
+}
 
-    var fileName = dialog.FileName;
+private async Task LoadFileAsync(string fileName)
+{
     string sourcePath = fileName;
     bool sourceIsTemp = false;
     try

@@ -29,9 +29,11 @@ The latest build is on the [Releases](https://github.com/raphaelgaeta/Acrux/rele
 - **Windows app** — `Acrux-vX.Y.Z-setup.exe` installs it for your user, no
   admin rights needed. Acrux also needs the Microsoft Visual C++ runtime. If
   your PC doesn't have it, setup downloads it from Microsoft, and Windows asks
-  for permission to install it.
+  for permission to install it. Setup also puts Acrux in Explorer's
+  **Open with** menu for Parquet, CSV, xlsx and SQLite files, and a Parquet
+  file opens in Acrux with a double click.
 - **Windows app, no install** — `Acrux-vX.Y.Z-win-x64.zip`: unzip it and run
-  `Acrux.exe` (the .NET runtime is inside). It needs the
+  `Acrux.exe` (the .NET runtime is inside), or drop a file on it. It needs the
   [Microsoft Visual C++ Redistributable (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe),
   which most PCs already have.
 - **Command line, Linux** — `acrux-cli-vX.Y.Z-linux-x64.tar.gz`: extract it and
