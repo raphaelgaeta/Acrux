@@ -4,11 +4,11 @@ using System.Windows.Forms;
 namespace Acrux;
 
 /// <summary>
-/// The app's few colors in one place: the brand on the title bar and where it
-/// helps read the grid, the system's colors everywhere else, so both light and
-/// dark mode (Application.SetColorMode in Program) hold. High contrast turns
-/// the brand off: the user's own scheme wins. Contrast ratios are WCAG, for
-/// text; 4.5:1 is the floor.
+/// The app's few colors in one place: the brand on the window border and where
+/// it helps read the grid, the system's colors everywhere else, so both light
+/// and dark mode (Application.SetColorMode in Program) hold. High contrast
+/// turns the brand off: the user's own scheme wins. Contrast ratios are WCAG:
+/// 4.5:1 is the floor for text, 3:1 for the rest.
 /// </summary>
 internal static class Theme
 {
@@ -33,13 +33,18 @@ internal static class Theme
     /// <summary>Errors: Firebrick on light (6.7:1) is 2.4:1 on dark, hence a lighter red there (6.6:1).</summary>
     public static Color Error => Dark ? ColorTranslator.FromHtml("#f48771") : Color.Firebrick;
 
-    /// <summary>The purple title bar, white text 4.9:1. Windows 11 only; older systems ignore it.</summary>
+    /// <summary>
+    /// A purple window border (3:1 or more against light and dark, the floor
+    /// for non-text). The title bar stays the system's: the icon's bear and
+    /// star are cutouts that show the bar's color (white on light, black on
+    /// dark), and on a purple bar the bear vanished into the icon's purple
+    /// half. Windows 11 only; older systems ignore it.
+    /// </summary>
     public static void Apply(Form form)
     {
         if (!Branded)
             return;
-        form.FormCaptionBackColor = Purple;
-        form.FormCaptionTextColor = Color.White;
+        form.FormBorderColor = Purple;
     }
 
     public static void StyleGrid(DataGridView grid)

@@ -180,6 +180,9 @@ mesmo assim.
   do fundo (claros no tema claro, escuros no escuro), como nos mockups da autora.
   Não preencher. "Ícone Preto" some no tema escuro; o ícone com nome só é legível
   a partir de ~48 px; a ilustração sem moldura se perde abaixo de 32 px.
+  **Por isso o ícone pede fundo neutro:** numa barra de título roxa, o urso
+  fica roxo sobre a metade roxa do degradê e some (visto pelo dono na VM,
+  2026-11-10). A marca na barra é o próprio ícone.
 - **`acrux.ico`:** gerado de `assets/brand/acrux-icon.svg`. A arte não é quadrada
   (1022,4×1009,25): vai com margem transparente, sem esticar. Quadros 16 a 64 px
   em BMP e 256 em PNG, pelo `Icon` do System.Drawing.
@@ -204,8 +207,11 @@ aparência no WinForms se perde na troca para o Avalonia.
 - **Nenhuma cor fixa** (`Color.White`, `Color.Black`): elas viram blocos no
   escuro. Use `SystemColors` ou o `Theme`.
 - **Cada cor da marca no modo em que se lê** (WCAG; texto pede 4,5:1):
-  - barra de título roxa com texto branco, 4,94:1, nos dois modos
-    (`FormCaptionBackColor`; o Windows 10 ignora);
+  - a barra de título fica a do sistema, e só a borda da janela é roxa
+    (`FormBorderColor`; o Windows 10 ignora). O roxo dá 4,94:1 contra o
+    branco e 3,30:1 contra `#202020`, acima do mínimo de 3:1 para o que não
+    é texto. Uma barra roxa apagava o urso do ícone (ver "O ícone é recorte",
+    acima);
   - destaque (seleção, cabeçalho filtrado): preto sobre azul no claro,
     13,6:1; branco sobre roxo no escuro, 4,94:1. Branco sobre azul daria
     1,54:1;
