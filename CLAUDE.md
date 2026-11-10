@@ -473,6 +473,10 @@ aceitar fonte lazy genérica).
 - `Expr.IsIn`: desde a 0.6.0 há overload direto `IsIn(IEnumerable<T>)`, e o
   `BuildPredicate` o usa desde 2026-11-09 (mesmas contagens que o antigo
   `IsIn(Lit(Series.From(...)).Implode())`, conferidas na 1.0.1).
+- **O nulo ordena primeiro e ocupa uma vaga do `Limit`** da lista de
+  valores: com `Limit(cap + 1)`, uma coluna com nulos e mais valores que o
+  teto dizia que não fora cortada (achado em 2026-11-09). Por isso
+  `Limit(cap + 2)`.
 - `WithRowIndex`/`ArgWhere` **agora existem** (índices como `UInt32Array`,
   validados) e poderiam substituir a varredura de máscara booleana no
   `FilterEngine` — mudança de desenho, requer aval do dono.

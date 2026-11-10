@@ -40,14 +40,15 @@ public static class FilterEngine
         {
             using var rows = Scan(parquetPath, where);
 
-            // +1 past the limit to detect truncation. Engine.Streaming: ~2x
-            // faster than Auto/InMemory for this Unique+Sort+Limit shape
+            // +2 past the limit: one slot for the null, which sorts first,
+            // and one to tell a full list from a truncated one. Engine.Streaming:
+            // ~2x faster than Auto/InMemory for this Unique+Sort+Limit shape
             // (benchmarked on a 700col x 5M file; every other query ties)
             using var distinct = rows
                 .Select(Col(column).Cast(DataType.String).Alias("v"))
                 .Unique()
                 .Sort("v")
-                .Limit((uint)limit + 1);
+                .Limit((uint)limit + 2);
             using var df = distinct.Collect(Engine.Streaming);
             using var batch = df.ToArrow();
             var array = batch.Column(0);
