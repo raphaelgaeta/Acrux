@@ -223,6 +223,9 @@ aparência no WinForms se perde na troca para o Avalonia.
   `BooleanType` herda de `NumberType`**, e por isso o `IsNumeric` o exclui.
   Os decimais (`Decimal32Type` a `Decimal256Type`) não herdam de
   `NumberType`. Conferido no parquet de 20 tipos.
+- **Barra do topo em `FlowLayoutPanel`**, não por pixel: texto maior (DPI,
+  fonte) empurra o vizinho em vez de sobrepor, e botão escondido não deixa
+  buraco.
 - **Aparência se confere na VM do Windows 11**, nos dois modos. Os GIFs do
   README são anteriores ao tema.
 

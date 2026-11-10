@@ -46,19 +46,21 @@ public MainForm(string? initialFile = null)
     Height = 760;
     StartPosition = FormStartPosition.CenterScreen;
 
-    var topPanel = new Panel
+    // laid out by flow, not by pixel: wider text (DPI, fonts) pushes the
+    // next control instead of overlapping it, and a hidden button leaves no gap
+    var topPanel = new FlowLayoutPanel
     {
         Dock = DockStyle.Top,
-        Height = 64,
+        AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        WrapContents = false,
         Padding = new Padding(10)
     };
 
     _btnLoad = new Button
     {
         Text = "Open file",
-        AutoSize = true,
-        Left = 10,
-        Top = 15
+        AutoSize = true
     };
     _btnLoad.Click += BtnLoad_Click;
 
@@ -66,8 +68,6 @@ public MainForm(string? initialFile = null)
     {
         Text = "Clear all filters",
         AutoSize = true,
-        Left = 165,
-        Top = 15,
         Enabled = false
     };
     _btnClearFilters.Click += BtnClearFilters_Click;
@@ -76,8 +76,6 @@ public MainForm(string? initialFile = null)
     {
         Text = "C# terminal",
         AutoSize = true,
-        Left = 340,
-        Top = 15,
         Enabled = false
     };
     _btnTerminal.Click += (_, _) => ToggleTerminal();
@@ -86,8 +84,6 @@ public MainForm(string? initialFile = null)
     {
         Text = "Restore file",
         AutoSize = true,
-        Left = 460,
-        Top = 15,
         Visible = false
     };
     _btnRestore.Click += BtnRestore_Click;
@@ -95,8 +91,8 @@ public MainForm(string? initialFile = null)
     _lblInfo = new FormsLabel
     {
         AutoSize = true,
-        Left = 620,
-        Top = 20,
+        Anchor = AnchorStyles.Left,   // no Top: centered on the buttons' row
+        Margin = new Padding(12, 0, 3, 0),
         Text = "No data loaded"
     };
 
