@@ -1,3 +1,4 @@
+using System.Globalization;
 using Apache.Arrow;
 using Polars.CSharp;
 using static Polars.CSharp.Polars;
@@ -103,6 +104,25 @@ public static class FilterEngine
             }
 
             return indices.ToArray();
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// How many rows pass <paramref name="where"/>. Without a filter, parquet
+    /// answers from its metadata: no data is read.
+    /// </summary>
+    public static async Task<long> CountRowsAsync(
+        string parquetPath,
+        Expr? where = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await Task.Run(() =>
+        {
+            using var rows = Scan(parquetPath, where);
+            using var counted = rows.Select(Len());
+            using var df = counted.Collect();
+            using var batch = df.ToArrow();
+            return Convert.ToInt64(PolarsTableAdapter.GetCellValue(batch.Column(0), 0), CultureInfo.InvariantCulture);
         }, cancellationToken);
     }
 

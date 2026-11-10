@@ -16,9 +16,11 @@ dotnet run --project src/Acrux.Cli -- head arquivo.parquet -n 10   # CLI, roda n
 ```
 
 O CLI tem os comandos `schema` (nome e tipo do Polars de cada coluna, uma
-por linha), `columns`, `head [-n N]`, `rows`, `type`,
-`column <arquivo> <nome> [-n N]` (padrão: 10 linhas; num `.db`, procura a
-coluna em todas as tabelas) e `filter <arquivo> <coluna> --last <período>
+por linha), `columns`, `head [-n N]`, `rows [--where col=valor]...`, `type`,
+`values <arquivo> <coluna> [--where col=valor]... [-n N]` (valores
+distintos, ordenados; padrão: 100), `column <arquivo> <nome> [-n N]`
+(padrão: 10 linhas; num `.db`, procura a coluna em todas as tabelas) e
+`filter <arquivo> <coluna> --last <período>
 [-n N]` (no espírito do `journalctl --since`: unidades do systemd, como
 `30min`, `1h 30min`, `2 days`, `1M` = mês; a janela termina agora, então
 linhas com data no futuro ficam de fora — numa coluna só de data, o dia de
@@ -27,10 +29,21 @@ linhas e quantas casaram; horários iguais saem na ordem do arquivo). Ele
 lê só a coluna de tempo para achar as linhas e depois busca cada uma onde
 ela está: a memória fica perto de 0,6 GB mesmo num parquet de 700 colunas,
 ao custo de ~28 ms por linha mostrada nesse arquivo (~4 ms com 5 colunas).
+O `--where col=valor` (desenho do dono, 2026-11-09) compara o **texto** da
+coluna, o mesmo que o `values` imprime: a conversão do Polars para texto,
+que não é o texto do `head` (`true` × `True`, `1e-9` × `1E-09`). Repetido, a
+mesma coluna é OU e outra coluna é E; `col=` casa os vazios (nulo). Por ora
+só no `rows` e no `values`, onde **todos** os filtros valem, inclusive o da
+própria coluna (a regra do Excel é do popup). `head` e `column` esperam
+medição no parquet de 700 colunas; `--since`/`--until`, no padrão do
+journalctl, vêm depois. Medido nesse arquivo: `values` e `rows --where` em
+~150 ms, com pico de `RssAnon` abaixo de 160 MB.
 **Num `.db`, cada comando responde por tabela** (`schema`, `columns`,
-`rows`, `head`, `column`, `filter`): somar ou unir tabelas diferentes dá
-números sem sentido, e a mesma coluna pode ter tipos diferentes em cada
-tabela. O `schema` e o `rows` de parquet leem só os metadados, sem os dados.
+`rows`, `head`, `values`, `column`, `filter`): somar ou unir tabelas
+diferentes dá números sem sentido, e a mesma coluna pode ter tipos
+diferentes em cada tabela. Os que citam colunas (`values`, `column`,
+`filter`, `--where`) respondem só pelas tabelas que têm todas elas. O
+`schema` e o `rows` de parquet leem só os metadados, sem os dados.
 Erros saem em uma linha com código 1 (`ACRUX_DEBUG=1` mostra a exceção
 inteira); uso errado sai com código 2. `acrux version` diz qual commit está
 instalado (ver "Deploy de teste do CLI" abaixo).
@@ -307,7 +320,7 @@ Fluxo de filtro: clique no cabeçalho → `FilterEngine.GetDistinctValuesAsync`
 (desde 2026-11-09): quem chama monta com `BuildPredicate` (valores por
 coluna), `TimeFilter.Between` (tempo), ou os dois unidos por `&`. A
 semântica Excel (a lista de uma coluna ignora o filtro dela mesma) é do
-app: `BuildPredicate(_activeFilters, except: coluna)`.
+app: `BuildPredicate(_activeFilters, except: coluna)`. O CLI aplica todos.
 Filtros concorrentes são cancelados via `_filterCts`.
 
 Terminal C# (botão "C# terminal"): scripts Roslyn encadeados por **replay** —
@@ -335,7 +348,7 @@ aceitar fonte lazy genérica).
 | Arquivo | Papel |
 |---|---|
 | `src/Acrux.Core/DataFrameProvider.cs` | Detecção de formato pelo conteúdo, conversão para parquet, leitura via LazyFrame |
-| `src/Acrux.Core/FilterEngine.cs` | Filtros via Polars (distintos e máscara), recebendo o filtro como `Expr` |
+| `src/Acrux.Core/FilterEngine.cs` | Filtros via Polars (distintos, máscara e contagem), todos recebendo o filtro como `Expr` |
 | `src/Acrux.Core/PolarsTableAdapter.cs` | `GetCellValue`: leitura O(1) por célula do Arrow |
 | `src/Acrux.Core/ScriptHost.cs` | Terminal C#: avaliação Roslyn de scripts Polars |
 | `src/Acrux.Core/TextDates.cs` | Datas guardadas como texto (CSV, SQLite) viram data só quando não há ambiguidade |
@@ -473,10 +486,19 @@ aceitar fonte lazy genérica).
 - `Expr.IsIn`: desde a 0.6.0 há overload direto `IsIn(IEnumerable<T>)`, e o
   `BuildPredicate` o usa desde 2026-11-09 (mesmas contagens que o antigo
   `IsIn(Lit(Series.From(...)).Implode())`, conferidas na 1.0.1).
+- **A lista de valores (`values` e o dropdown do filtro) converte a coluna
+  para texto antes de ordenar** (`Cast(DataType.String)`, 2026-11-09):
+  números saem em ordem de texto (`10.5, 32.9, 7.25`), e binário que não é
+  UTF-8, lista e duração **falham** ("invalid utf8", "cannot cast List
+  type", "casting from Duration('ms') to String not supported"). Pendente:
+  ordenar pelo tipo nativo e converter cada tipo para texto, validado por
+  probe. O texto também difere do grid (fuso do arquivo, não o local; `true`
+  × `True`), mas o filtro funciona: a lista e o `BuildPredicate` usam a mesma
+  conversão.
 - **O nulo ordena primeiro e ocupa uma vaga do `Limit`** da lista de
   valores: com `Limit(cap + 1)`, uma coluna com nulos e mais valores que o
   teto dizia que não fora cortada (achado em 2026-11-09). Por isso
-  `Limit(cap + 2)`.
+  `Limit(cap + 2)`; o smoke test cobre (`values tipos.parquet i8 -n 1`).
 - `WithRowIndex`/`ArgWhere` **agora existem** (índices como `UInt32Array`,
   validados) e poderiam substituir a varredura de máscara booleana no
   `FilterEngine` — mudança de desenho, requer aval do dono.
