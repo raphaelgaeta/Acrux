@@ -650,11 +650,16 @@ protected override void OnFormClosed(FormClosedEventArgs e)
             if (cts.Token.IsCancellationRequested) return;   // another interaction took over
 
             var swGrid = System.Diagnostics.Stopwatch.StartNew();
-            _filteredRows = rows;
 
             // Shrinking RowCount removes rows one by one (minutes on millions
             // of rows); Rows.Clear() is an O(1) reset and re-adding is bulk.
+            // Clear BEFORE swapping the indices: Rows.Clear() first leaves the
+            // current cell (CurrentCell = null) and reads its value, so while
+            // the old rows exist, _filteredRows must still be the old array.
+            // Swapped first, a current cell past the new count read past its
+            // end (IndexOutOfRange in a paint: red X, crash dialog).
             _grid.Rows.Clear();
+            _filteredRows = rows;
             int newCount = rows?.Length ?? _rowCount;
             if (newCount > 0)
                 _grid.RowCount = newCount;

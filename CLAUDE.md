@@ -678,6 +678,14 @@ aceitar fonte lazy genérica).
   estoura. Toda coluna criada recebe `FillWeight = 1`.
 - Colunas do grid: `Name` é sempre o nome real da coluna do parquet;
   `HeaderText` pode ganhar sufixo " ▼" quando há filtro ativo.
+- **`Rows.Clear()` lê a célula atual antes de apagar as linhas** (o
+  `OnClearingRows` faz `CurrentCell = null`, e sair da célula pede o valor
+  dela). Por isso a indireção (`_filteredRows`) só troca **depois** do
+  `Rows.Clear()`: trocada antes, uma célula atual além do novo total lia
+  fora da lista nova (IndexOutOfRange na pintura, X vermelho e a janela de
+  erro do .NET). Achado pelo dono na VM, em 2026-11-10: filtrar o
+  `tipos.parquet` com a célula atual na linha 3. Estava assim desde
+  2026-09.
 - **Cor de fundo no cabeçalho exige `EnableHeadersVisualStyles = false`:**
   com os estilos visuais ligados, o cabeçalho ignora `BackColor`. Desligados,
   ele fica plano e segue o modo escuro.
