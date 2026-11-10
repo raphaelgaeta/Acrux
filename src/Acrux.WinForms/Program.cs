@@ -4,14 +4,17 @@ namespace Acrux;
 internal static class Program
 {
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
 
         // leftovers from previous runs killed before their cleanup
         DataFrameProvider.CleanStaleTempFiles();
 
-        Application.Run(new MainForm());
+        // A file opened from Explorer arrives as the first argument (the
+        // installer registers "Acrux.exe" "%1"). A path that doesn't exist
+        // still goes through: the load shows the error, not an empty window.
+        Application.Run(new MainForm(args.FirstOrDefault()));
 
         // Guaranteed exit: the embedded native runtime (Polars/rayon) and
         // Roslyn may own threads the CLR would wait on past the message loop.
