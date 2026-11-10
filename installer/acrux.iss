@@ -42,6 +42,8 @@ UninstallDisplayIcon={app}\Acrux.exe
 Compression=lzma2
 SolidCompression=yes
 OutputBaseFilename=Acrux-{#Label}-setup
+; Explorer rereads file associations at the end of install and uninstall
+ChangesAssociations=yes
 
 [Tasks]
 Name: desktopicon; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -54,6 +56,25 @@ Source: "..\assets\brand\NOTICE.md"; DestDir: "{app}"; DestName: "NOTICE-logo.md
 [Icons]
 Name: "{autoprograms}\Acrux"; Filename: "{app}\Acrux.exe"
 Name: "{autodesktop}\Acrux"; Filename: "{app}\Acrux.exe"; Tasks: desktopicon
+
+[Registry]
+; "Open with Acrux" for the formats the app reads (keep in step with
+; DataFrameProvider.OpenDialogFilter). Per user, like the install: HKA is
+; HKCU here. Windows lets no app make itself the default (only the user, in
+; its own UI), so this only puts Acrux on the list. Parquet is the exception:
+; nothing else usually claims it, so Acrux becomes its handler and a double
+; click opens it. That default value stays on uninstall, as Microsoft advises:
+; Windows ignores it once the ProgID below is gone.
+Root: HKA; Subkey: "Software\Classes\Acrux.DataFile"; ValueType: string; ValueData: "Acrux data file"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Acrux.DataFile\DefaultIcon"; ValueType: string; ValueData: """{app}\Acrux.exe"",0"
+Root: HKA; Subkey: "Software\Classes\Acrux.DataFile\shell\open\command"; ValueType: string; ValueData: """{app}\Acrux.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\.parquet"; ValueType: string; ValueData: "Acrux.DataFile"
+Root: HKA; Subkey: "Software\Classes\.parquet\OpenWithProgids"; ValueType: string; ValueName: "Acrux.DataFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.csv\OpenWithProgids"; ValueType: string; ValueName: "Acrux.DataFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.xlsx\OpenWithProgids"; ValueType: string; ValueName: "Acrux.DataFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.db\OpenWithProgids"; ValueType: string; ValueName: "Acrux.DataFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.sqlite\OpenWithProgids"; ValueType: string; ValueName: "Acrux.DataFile"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.sqlite3\OpenWithProgids"; ValueType: string; ValueName: "Acrux.DataFile"; ValueData: ""; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\Acrux.exe"; Description: "{cm:LaunchProgram,Acrux}"; Flags: nowait postinstall skipifsilent
