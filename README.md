@@ -140,10 +140,13 @@ nothing downstream can tell.
   from disk.
 - **Filter like Excel.** Click a header, get the distinct values (blanks
   included), check what you want. Filters compose across columns.
-- **A null looks like a null.** A missing value shows as a muted *null*, never
-  as an empty string, though copying it still gives an empty cell. Numbers line
-  up on the right, and on Windows 11 the app follows the light or dark mode
-  you set in Windows.
+- **The grid never bends the data to fit the screen.** A missing value shows
+  as a muted *null*, never as an empty string. A number too wide for its
+  column shows `###`, as in Excel, never cut-off digits that read as another
+  number. Text with line breaks stays on one line, with `↵` where each break
+  was. All of that is drawing only: copying a cell copies the data. Numbers
+  line up on the right, and on Windows 11 the app follows the light or dark
+  mode you set in Windows.
 - **Drop into a C# terminal.** The full Polars expression API, with `lf` as
   your LazyFrame — starting from exactly what you see: column selection and
   active header filters are inherited by the script as an implicit first step:
@@ -292,11 +295,13 @@ nothing at all.
 | `src/Acrux.Core/DataFrameProvider.cs` | Format detection by content and CSV/Excel/SQLite→parquet conversion |
 | `src/Acrux.Core/TextDates.cs` | Dates stored as text become dates only when unambiguous |
 | `src/Acrux.Core/FilterEngine.cs` | Excel-style filters as Polars lazy queries |
+| `src/Acrux.Core/PolarsErrors.cs` | Polars errors without the query plan Polars appends |
 | `src/Acrux.Core/TimeFilter.cs` | Relative time windows (`--last "2 days"`) as Polars expressions |
 | `src/Acrux.Core/PolarsTableAdapter.cs` | O(1) per-cell reads from Arrow arrays, for every column type |
 | `src/Acrux.Core/ScriptHost.cs` | Roslyn evaluation of chained Polars scripts |
 | `src/Acrux.WinForms/Program.cs` | Entry point: stale temp sweep and guaranteed process exit |
 | `src/Acrux.WinForms/AppIcon.cs` | Window icon, loaded from the embedded `.ico` |
+| `src/Acrux.WinForms/GridPainting.cs` | What the grid draws without changing the data: null, `###`, `↵`, the filter's `▼` |
 | `src/Acrux.WinForms/Theme.cs` | The app's colors: the brand where it reads, the system's everywhere else |
 | `src/Acrux.WinForms/MainForm.cs` | Virtual grid, file loading, filter orchestration |
 | `src/Acrux.WinForms/ColumnSelectorForm.cs` | Column picker shown on open |

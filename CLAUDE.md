@@ -44,8 +44,9 @@ diferentes dá números sem sentido, e a mesma coluna pode ter tipos
 diferentes em cada tabela. Os que citam colunas (`values`, `column`,
 `filter`, `--where`) respondem só pelas tabelas que têm todas elas. O
 `schema` e o `rows` de parquet leem só os metadados, sem os dados.
-Erros saem em uma linha com código 1 (`ACRUX_DEBUG=1` mostra a exceção
-inteira); uso errado sai com código 2. `acrux version` diz qual commit está
+Erros saem em uma linha com código 1, sem o plano que o Polars anexa
+(`PolarsErrors.Brief`; `ACRUX_DEBUG=1` mostra a exceção inteira); uso errado
+sai com código 2. `acrux version` diz qual commit está
 instalado (ver "Deploy de teste do CLI" abaixo).
 
 Três projetos sob `src/`, agregados pelo `Acrux.sln` da raiz: `Acrux.Core`
@@ -222,9 +223,25 @@ aparência no WinForms se perde na troca para o Avalonia.
   (nulos, eco do terminal) fica a 60% entre o fundo e o texto, ~5,7:1 no
   claro e ~6,6:1 num fundo `#202020`. O erro é `Firebrick` no claro (6,7:1)
   e `#f48771` no escuro, porque o `Firebrick` daria 2,4:1.
-- **Os nulos são desenhados só na pintura** (`CellPainting` das células
-  `DBNull`): na tela, `null` cinza em itálico; o valor continua `DBNull`, e o
-  Ctrl+C copia vazio, como antes.
+- **O grid desenha, mas não muda o dado** (`GridPainting.cs`, desenho
+  aprovado em 2026-11-10). O `CellPainting` muda só a pintura; a célula
+  guarda o valor, e o Ctrl+C copia o dado, não o desenho. A dica de uma
+  célula cortada mostra o valor inteiro. Quatro casos:
+  - **nulo:** `null` cinza em itálico. O Ctrl+C copia vazio, e um texto vazio
+    continua vazio;
+  - **número que não cabe:** `###`, como no Excel. Cortado no fim, o número
+    parecia outro (`922337203685…` para um valor de 19 dígitos). A medida usa
+    a área e os flags do próprio `DataGridViewTextBoxCell` (código do
+    .NET 10: menos borda e `Padding`, 2 px em cima e 1 embaixo, `SingleLine`,
+    `NoPrefix`), então o grid nunca corta com reticências um número que a
+    regra deixou passar;
+  - **texto com quebra de linha:** uma linha só, com `↵` onde havia cada
+    quebra. Antes aparecia colado (`linha 1linha 2`). O CLI troca por espaço;
+    no grid, o símbolo mostra que havia uma quebra;
+  - **coluna filtrada:** o `▼` é desenhado na borda direita do cabeçalho, que
+    ganha `Padding` à direita para o nome não passar por baixo. O
+    `HeaderText` é sempre o nome real: com o `▼` no texto, o Ctrl+C levava
+    `bool ▼` para o dado colado.
 - **Números à direita, pelo tipo Arrow.** Atenção: **no Arrow,
   `BooleanType` herda de `NumberType`**, e por isso o `IsNumeric` o exclui.
   Os decimais (`Decimal32Type` a `Decimal256Type`) não herdam de
@@ -419,9 +436,11 @@ aceitar fonte lazy genérica).
 | `src/Acrux.Core/PolarsTableAdapter.cs` | `GetCellValue`: leitura O(1) por célula do Arrow |
 | `src/Acrux.Core/ScriptHost.cs` | Terminal C#: avaliação Roslyn de scripts Polars |
 | `src/Acrux.Core/TextDates.cs` | Datas guardadas como texto (CSV, SQLite) viram data só quando não há ambiguidade |
+| `src/Acrux.Core/PolarsErrors.cs` | Erros do Polars para gente: a mensagem sem o plano que ele anexa (CLI e app) |
 | `src/Acrux.Core/TimeFilter.cs` | Filtro de tempo relativo: lê períodos no padrão do systemd, monta o predicado por tipo de coluna e acha as posições das N linhas mais recentes |
 | `src/Acrux.WinForms/Program.cs` | Entrada do app: limpeza de temporários órfãos, o arquivo recebido como argumento (duplo clique, "Abrir com") e `Environment.Exit(0)` |
 | `src/Acrux.WinForms/AppIcon.cs` | Ícone das janelas, lido do `.ico` embutido |
+| `src/Acrux.WinForms/GridPainting.cs` | O que o grid desenha sem mudar o dado: nulo, `###`, `↵` e o `▼` do filtro |
 | `src/Acrux.WinForms/Theme.cs` | Cores do app: a marca onde se lê, as do sistema no resto; modo claro e escuro |
 | `src/Acrux.WinForms/MainForm.cs` | Grid virtual, carga do arquivo, costura dos filtros |
 | `src/Acrux.WinForms/ColumnSelectorForm.cs` | Diálogo de seleção de colunas na abertura |
@@ -613,6 +632,14 @@ aceitar fonte lazy genérica).
   `POLARS_IGNORE_TIMEZONE_PARSE_ERROR=1`.
 - `DataType.String` etc. seguem estáticos e **fora do XML doc** do pacote.
 - Para validar APIs novas do pacote, use a skill `polars-probe`.
+- **Erro de plano do Polars traz o plano inteiro** (coluna inexistente, tipo
+  que não combina). A mensagem útil vem numa linha, seguida de uma linha em
+  branco, `Resolved plan until failure:` e o plano, que pode listar todas as
+  colunas selecionadas (visto no terminal C#, 2026-11-10). O
+  `PolarsErrors.Brief` corta nesse marcador, e o app e o CLI mostram só a
+  mensagem. Formato conferido na 1.0.1 com `select`, `filter` e `group_by`
+  de coluna inexistente e com texto + número. Erro sem plano (um `Cast`
+  impossível, por exemplo) sai igual.
 - **Leitura de banco via ADO.NET** (probe no Linux, 2026-11):
   `DataFrame.ReadDatabase(IDataReader, batchSize)` recebe um *leitor*, não
   um caminho, e lê tudo para Arrow (eager). **Não fecha o leitor**: o
@@ -676,8 +703,9 @@ aceitar fonte lazy genérica).
   linhas). Caminho rápido: `Rows.Clear()` (O(1)) e então setar o novo valor.
 - `FillWeight` padrão é 100 com soma máxima 65535 → mais de ~655 colunas
   estoura. Toda coluna criada recebe `FillWeight = 1`.
-- Colunas do grid: `Name` é sempre o nome real da coluna do parquet;
-  `HeaderText` pode ganhar sufixo " ▼" quando há filtro ativo.
+- Colunas do grid: `Name` e `HeaderText` são sempre o nome real da coluna
+  do parquet. O `ClipboardCopyMode` inclui o `HeaderText` no Ctrl+C, então
+  nada de tela entra nele: o `▼` do filtro é desenhado (`GridPainting`).
 - **`Rows.Clear()` lê a célula atual antes de apagar as linhas** (o
   `OnClearingRows` faz `CurrentCell = null`, e sair da célula pede o valor
   dela). Por isso a indireção (`_filteredRows`) só troca **depois** do

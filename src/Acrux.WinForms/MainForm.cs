@@ -135,12 +135,10 @@ public MainForm(string? initialFile = null)
     _grid.RowTemplate.Resizable = DataGridViewTriState.False;
 
     _grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 10, FontStyle.Bold);
-    var cellFont = new Font("Segoe UI", 10);
-    _grid.DefaultCellStyle.Font = cellFont;
+    _grid.DefaultCellStyle.Font = new Font("Segoe UI", 10);
     _grid.DefaultCellStyle.WrapMode = DataGridViewTriState.False;
     Theme.StyleGrid(_grid);
-    _nullFont = new Font(cellFont, FontStyle.Italic);
-    _grid.CellPainting += Grid_CellPainting;
+    _painting = new GridPainting(_grid, column => _activeFilters.ContainsKey(column));
 
     // supplies values only for visible cells
     _grid.CellValueNeeded += Grid_CellValueNeeded;
@@ -195,23 +193,8 @@ private void Grid_CellValueNeeded(object sender, DataGridViewCellValueEventArgs 
     e.Value = PolarsTableAdapter.GetCellValue(_batch.Column(e.ColumnIndex), dataRow);
 }
 
-// Nulls as a muted, italic "null", drawn at paint time only: the cell's value
-// stays DBNull, so Ctrl+C still copies an empty cell, and an empty string
-// still shows empty. Every other cell is left to the grid.
-private readonly Font _nullFont;
-private void Grid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
-{
-    if (e.RowIndex < 0 || e.Value is not DBNull || e.Graphics is null || e.CellStyle is null)
-        return;
-
-    e.Paint(e.ClipBounds, DataGridViewPaintParts.All & ~DataGridViewPaintParts.ContentForeground);
-    bool selected = (e.State & DataGridViewElementStates.Selected) != 0;
-    var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis
-        | (e.CellStyle.Alignment == DataGridViewContentAlignment.MiddleRight ? TextFormatFlags.Right : TextFormatFlags.Left);
-    TextRenderer.DrawText(e.Graphics, "null", _nullFont, Rectangle.Inflate(e.CellBounds, -3, 0),
-        selected ? e.CellStyle.SelectionForeColor : Theme.Muted, flags);
-    e.Handled = true;
-}
+// nulls, numbers too wide, line breaks and the filter's "▼": drawn, never in the data
+private readonly GridPainting _painting;
 
 // Integers and floats share NumberType, and so does BooleanType (True/False
 // stays left); Arrow keeps the decimals apart. Checked on the 20-type fixture.
@@ -327,7 +310,7 @@ private async Task LoadFileAsync(string fileName)
         if (sourceIsTemp && !ReferenceEquals(sourcePath, _tempParquetPath) && sourcePath != _tempParquetPath)
             TryDeleteTemp(sourcePath);
         MessageBox.Show(
-            $"Error loading DataFrame:\n\n{ex.Message}",
+            $"Error loading DataFrame:\n\n{PolarsErrors.Describe(ex)}",
             "Error",
             MessageBoxButtons.OK,
             MessageBoxIcon.Error);
@@ -491,7 +474,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         }
         catch (Exception ex)
         {
-            _terminal.AppendError(ex.Message);
+            _terminal.AppendError(PolarsErrors.Describe(ex));
             UpdateInfo();
         }
         finally
@@ -552,7 +535,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         catch (Exception ex)
         {
             MessageBox.Show(
-                $"Error restoring the file:\n\n{ex.Message}",
+                $"Error restoring the file:\n\n{PolarsErrors.Describe(ex)}",
                 "Error",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
@@ -614,7 +597,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         catch (Exception ex)
         {
             MessageBox.Show(
-                $"Error filtering column \"{column}\":\n\n{ex.Message}",
+                $"Error filtering column \"{column}\":\n\n{PolarsErrors.Describe(ex)}",
                 "Error",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
@@ -676,15 +659,16 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         }
     }
 
-    /// <summary>▼ suffix on the headers of columns with an active filter.</summary>
+    /// <summary>
+    /// Marks the headers of columns with an active filter: the accent color and
+    /// a drawn "▼". The header text stays the real name, so Ctrl+C copies it.
+    /// </summary>
     private void UpdateHeaderIndicators()
     {
         foreach (DataGridViewColumn col in _grid.Columns)
         {
             bool filtered = _activeFilters.ContainsKey(col.Name);
-            var wanted = filtered ? col.Name + " ▼" : col.Name;
-            if (col.HeaderText != wanted)
-                col.HeaderText = wanted;
+            _painting.MarkFiltered(col, filtered);
             Theme.MarkFiltered(col, filtered);
         }
     }
