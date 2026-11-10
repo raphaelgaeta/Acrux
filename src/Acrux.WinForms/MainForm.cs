@@ -545,8 +545,9 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         {
             _lblInfo.Text = $"Reading values of \"{column}\"...";
 
+            // Excel: the column's own filter doesn't narrow its list
             var (values, hasBlanks, capped) = await FilterEngine.GetDistinctValuesAsync(
-                _parquetPath, column, _activeFilters);
+                _parquetPath, column, FilterEngine.BuildPredicate(_activeFilters, except: column));
 
             using var popup = new FilterPopupForm(
                 column, values, hasBlanks, capped,
@@ -606,7 +607,8 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         try
         {
             var swQuery = System.Diagnostics.Stopwatch.StartNew();
-            var rows = await FilterEngine.GetVisibleRowsAsync(_parquetPath, _activeFilters, cts.Token);
+            var rows = await FilterEngine.GetVisibleRowsAsync(
+                _parquetPath, FilterEngine.BuildPredicate(_activeFilters), cts.Token);
             swQuery.Stop();
             if (cts.Token.IsCancellationRequested) return;   // another interaction took over
 

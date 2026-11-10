@@ -182,6 +182,16 @@ channel_id | sent_at                    | text                | price
 (2 rows × 4 columns)
 2 matching rows
 
+$ acrux values shop.db price
+== messages
+45
+89
+free
+(3 values)
+
+$ acrux rows shop.db --where price=free
+messages -> 1
+
 $ acrux head us_orders.csv
 order | shipped    | code
 ------+------------+-----------
@@ -199,7 +209,8 @@ order | shipped    | code
 | `type <file>` | The detected format, and its tables or sheets |
 | `schema <file>` | Every column with its type |
 | `columns <file>` | Column names only |
-| `rows <file>` | Row count — read from Parquet metadata, without the data |
+| `rows <file> [--where col=value]...` | Row count — read from Parquet metadata, without the data; with `--where`, the rows that match |
+| `values <file> <column> [--where col=value]... [-n N]` | A column's distinct values, sorted (100 by default) |
 | `head <file> [-n N]` | The first rows (5 by default) |
 | `column <file> <name> [-n N]` | One column's first values (10 by default) |
 | `filter <file> <column> --last <span> [-n N]` | Rows from the last span, newest first |
@@ -207,7 +218,10 @@ order | shipped    | code
 
 Spans follow `journalctl` and systemd: `30min`, `1h 30min`, `2 days`, `1M`
 (a month — `m` is a minute). The window ends now, so rows dated in the future
-stay out. Errors are one line with exit code 1; a usage error exits with 2.
+stay out. `--where col=value` keeps the rows whose column, as text, is that
+value — the same text `values` prints. Repeat it: the same column again is an
+OR, another column an AND, and `col=` matches empty cells. Errors are one line
+with exit code 1; a usage error exits with 2.
 
 ## How it stays fast
 

@@ -282,11 +282,73 @@ $ acrux filter banco.db data --last 1 parsec
 acrux: unknown time unit "parsec"; use one of: us/usec/µs, ms/msec, s/sec/second/seconds, m/min/minute/minutes, h/hr/hour/hours, d/day/days, w/week/weeks, M/month/months, y/year/years
 [exit 1]
 
+$ acrux values vendas.csv produto
+Açaí
+Café
+Pão de queijo
+(3 values)
+[exit 0]
+
+$ acrux values vendas.csv produto --where produto=Café --where produto=Açaí
+Açaí
+Café
+(2 values)
+[exit 0]
+
+$ acrux values tipos.parquet i64
+1099511627776
+3
+(2 values and null)
+[exit 0]
+
+$ acrux values tipos.parquet i8 -n 1
+-2
+(first 1 value and null; there are more: -n raises the limit)
+[exit 0]
+
+$ acrux values banco.db titulo
+== canais
+Cupons & Promoções
+Ofertas do Dia
+(2 values)
+[exit 0]
+
+$ acrux values banco.db canal_id --where texto=Café em grão 1 kg
+== mensagens
+1
+(1 value)
+[exit 0]
+
+$ acrux rows vendas.csv --where produto=Café --where valor=32.9
+1
+[exit 0]
+
+$ acrux rows tipos.parquet --where i8= --where i8=1
+2
+[exit 0]
+
+$ acrux rows banco.db --where canal_id=1
+mensagens -> 2
+v_por_canal -> 1
+[exit 0]
+
+$ acrux values banco.db Titulo
+acrux: no column "Titulo" (did you mean "titulo"?); columns: c1, c2, c3, id, titulo, ultimo_id, pedido_id, item, canal_id, msg_id, data, texto, links, codigo, nome, n
+[exit 1]
+
+$ acrux values banco.db titulo --where msg_id=1
+acrux: no table has all of: titulo, msg_id
+[exit 1]
+
+$ acrux rows vendas.csv --where produto
+usage: acrux <schema|columns|head [-n N]|type> <file> | acrux rows <file> [--where col=value]... | acrux values <file> <column> [--where col=value]... [-n N] | acrux column <file> <name> [-n N] | acrux filter <file> <column> --last <span> [-n N] | acrux version
+[exit 2]
+
 $ acrux head nao_existe.csv
 acrux: Could not find file '<work>/nao_existe.csv'.
 [exit 1]
 
 $ acrux head vendas.csv -n 0
-usage: acrux <schema|columns|head [-n N]|rows|type> <file> | acrux column <file> <name> [-n N] | acrux filter <file> <column> --last <span> [-n N] | acrux version
+usage: acrux <schema|columns|head [-n N]|type> <file> | acrux rows <file> [--where col=value]... | acrux values <file> <column> [--where col=value]... [-n N] | acrux column <file> <name> [-n N] | acrux filter <file> <column> --last <span> [-n N] | acrux version
 [exit 2]
 

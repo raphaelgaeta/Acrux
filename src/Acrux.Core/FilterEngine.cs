@@ -1,53 +1,57 @@
+using System.Globalization;
 using Apache.Arrow;
 using Polars.CSharp;
 using static Polars.CSharp.Polars;
 
 namespace Acrux;
 
-/// <summary>Active filter for one column (Excel-style: checked values + blanks).</summary>
-public sealed class ColumnFilter
-{
-    public required HashSet<string> SelectedValues { get; init; }
-    public bool IncludeBlanks { get; init; }
-}
+/// <summary>
+/// One column's filter, Excel-style: the values kept, as text, and whether
+/// blank (null) cells are kept too.
+/// </summary>
+public sealed record ColumnFilter(IReadOnlySet<string> Values, bool IncludeBlanks);
 
 /// <summary>
 /// Filter queries over the parquet file via LazyFrame. Rescans use projection
-/// pushdown (only the predicate's columns are read), keeping the app's memory
-/// flat regardless of file size.
+/// pushdown (only the predicate's columns are read), keeping memory flat
+/// regardless of file size. Every query takes the filter as a predicate
+/// (<see cref="Expr"/>), whatever built it: <see cref="BuildPredicate"/>,
+/// <see cref="TimeFilter.Between"/>, or both joined with <c>&amp;</c>.
 /// </summary>
 public static class FilterEngine
 {
+    /// <summary>How many distinct values the grid's filter dropdown lists.</summary>
     public const int DistinctCap = 10_000;
 
     /// <summary>
-    /// Distinct column values for the dropdown, stringified and sorted.
-    /// Excel semantics: filters on the OTHER columns apply before collecting.
+    /// The column's distinct values among the rows passing <paramref name="where"/>,
+    /// as text (the same text <see cref="BuildPredicate"/> matches), sorted,
+    /// at most <paramref name="limit"/> of them. Excel's "the column's own
+    /// filter doesn't narrow its list" is the caller's choice: build
+    /// <paramref name="where"/> with BuildPredicate(filters, except: column).
     /// </summary>
     public static async Task<(string[] Values, bool HasBlanks, bool Capped)> GetDistinctValuesAsync(
         string parquetPath,
         string column,
-        IReadOnlyDictionary<string, ColumnFilter> activeFilters,
+        Expr? where = null,
+        int limit = DistinctCap,
         CancellationToken cancellationToken = default)
     {
         return await Task.Run(() =>
         {
-            var lf = LazyFrame.ScanParquet(parquetPath);
+            using var rows = Scan(parquetPath, where);
 
-            var predicate = BuildPredicate(activeFilters, excludeColumn: column);
-            if (predicate is not null)
-                lf = lf.Filter(predicate);
-
-            // +1 past the cap to detect truncation. Engine.Streaming: ~2x
-            // faster than Auto/InMemory for this Unique+Sort+Limit shape
+            // +2 past the limit: one slot for the null, which sorts first,
+            // and one to tell a full list from a truncated one. Engine.Streaming:
+            // ~2x faster than Auto/InMemory for this Unique+Sort+Limit shape
             // (benchmarked on a 700col x 5M file; every other query ties)
-            using var df = lf
+            using var distinct = rows
                 .Select(Col(column).Cast(DataType.String).Alias("v"))
                 .Unique()
                 .Sort("v")
-                .Limit((uint)DistinctCap + 1)
-                .Collect(Engine.Streaming);
-            var batch = df.ToArrow();
+                .Limit((uint)limit + 2);
+            using var df = distinct.Collect(Engine.Streaming);
+            using var batch = df.ToArrow();
             var array = batch.Column(0);
 
             bool hasBlanks = false;
@@ -55,42 +59,37 @@ public static class FilterEngine
             for (int i = 0; i < batch.Length; i++)
             {
                 if (array.IsNull(i))
-                {
                     hasBlanks = true;
-                    continue;
-                }
-                values.Add((string)PolarsTableAdapter.GetCellValue(array, i));
+                else
+                    values.Add((string)PolarsTableAdapter.GetCellValue(array, i));
             }
 
-            bool capped = values.Count > DistinctCap;
+            bool capped = values.Count > limit;
             if (capped)
-                values.RemoveRange(DistinctCap, values.Count - DistinctCap);
+                values.RemoveRange(limit, values.Count - limit);
 
             return (values.ToArray(), hasBlanks, capped);
         }, cancellationToken);
     }
 
     /// <summary>
-    /// Indices (0-based, file order) of the rows passing ALL active filters.
-    /// Returns null when no filter is active (grid shows everything).
+    /// Indices (0-based, file order) of the rows passing <paramref name="where"/>.
+    /// Null when there is no filter (the grid shows everything).
     /// </summary>
     public static async Task<int[]?> GetVisibleRowsAsync(
         string parquetPath,
-        IReadOnlyDictionary<string, ColumnFilter> activeFilters,
+        Expr? where,
         CancellationToken cancellationToken = default)
     {
-        if (activeFilters.Count == 0)
+        if (where is null)
             return null;
 
         return await Task.Run(() =>
         {
-            var predicate = BuildPredicate(activeFilters, excludeColumn: null)!;
-
-            using var df = LazyFrame.ScanParquet(parquetPath)
-                .Select(predicate.Alias("mask"))
-                .Collect();
-
-            var batch = df.ToArrow();
+            using var scan = LazyFrame.ScanParquet(parquetPath);
+            using var masked = scan.Select(where.Alias("mask"));
+            using var df = masked.Collect();
+            using var batch = df.ToArrow();
             var mask = (BooleanArray)batch.Column(0);
 
             var indices = new List<int>();
@@ -109,37 +108,55 @@ public static class FilterEngine
     }
 
     /// <summary>
-    /// AND of all active filters, for callers outside the engine (the script
-    /// chain uses it to inherit the grid's visual state as its base).
+    /// How many rows pass <paramref name="where"/>. Without a filter, parquet
+    /// answers from its metadata: no data is read.
     /// </summary>
-    public static Expr? BuildPredicate(IReadOnlyDictionary<string, ColumnFilter> filters)
-        => BuildPredicate(filters, excludeColumn: null);
+    public static async Task<long> CountRowsAsync(
+        string parquetPath,
+        Expr? where = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await Task.Run(() =>
+        {
+            using var rows = Scan(parquetPath, where);
+            using var counted = rows.Select(Len());
+            using var df = counted.Collect();
+            using var batch = df.ToArrow();
+            return Convert.ToInt64(PolarsTableAdapter.GetCellValue(batch.Column(0), 0), CultureInfo.InvariantCulture);
+        }, cancellationToken);
+    }
+
+    // The parquet's rows passing `where`, or all of them. The filtered plan
+    // outlives its source's Dispose (the script chain relies on it too).
+    private static LazyFrame Scan(string parquetPath, Expr? where)
+    {
+        var scan = LazyFrame.ScanParquet(parquetPath);
+        if (where is null)
+            return scan;
+        using (scan)
+            return scan.Filter(where);
+    }
 
     /// <summary>
-    /// AND across the filtered columns; within each column,
-    /// IsIn(values) OR IsNull() when "(Blanks)" is checked.
+    /// AND across the filtered columns, skipping <paramref name="except"/>;
+    /// within a column, its values OR blank when "(Blanks)" is kept. Values
+    /// are matched as text, the way <see cref="GetDistinctValuesAsync"/> lists
+    /// them. Null when nothing is left to filter.
     /// </summary>
-    private static Expr? BuildPredicate(
-        IReadOnlyDictionary<string, ColumnFilter> filters,
-        string? excludeColumn)
+    public static Expr? BuildPredicate(IReadOnlyDictionary<string, ColumnFilter> filters, string? except = null)
     {
-        Expr? acc = null;
-
+        Expr? all = null;
         foreach (var (column, filter) in filters)
         {
-            if (column == excludeColumn)
+            if (column == except)
                 continue;
 
-            Expr cond = Col(column)
-                .Cast(DataType.String)
-                .IsIn(Lit(Series.From("__values", filter.SelectedValues.ToArray())).Implode());
-
+            var cond = Col(column).Cast(DataType.String).IsIn(filter.Values);
             if (filter.IncludeBlanks)
-                cond = cond | Col(column).IsNull();
+                cond |= Col(column).IsNull();
 
-            acc = acc is null ? cond : acc & cond;
+            all = all is null ? cond : all & cond;
         }
-
-        return acc;
+        return all;
     }
 }

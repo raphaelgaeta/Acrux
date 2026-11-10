@@ -13,11 +13,12 @@ try
         ["head", var file] => await ShowHead(file, 5),
         ["head", var file, "-n", var n] when int.TryParse(n, out var rows) && rows > 0 => await ShowHead(file, rows),
         ["columns", var file] => await ShowColumns(file),
-        ["rows", var file] => await ShowRowNumber(file),
+        ["rows", var file, .. var rest] when TryOptions(rest, out var where, out var n) && n is null => await ShowRowNumber(file, where),
         ["type", var file] => ShowFormat(file),
         ["version"] => ShowVersion(),
         ["column", var file, var column] => await ShowSpecificColumn(file, column, 10),
         ["column", var file, var column, "-n", var n] when int.TryParse(n, out var rows) && rows > 0 => await ShowSpecificColumn(file, column, rows),
+        ["values", var file, var column, .. var rest] when TryOptions(rest, out var where, out var n) => await ShowValues(file, column, where, n ?? 100),
         ["filter", var file, var column, "--last", var span] => await FilterLast(file, column, span, 10),
         ["filter", var file, var column, "--last", var span, "-n", var n] when int.TryParse(n, out var rows) && rows > 0 => await FilterLast(file, column, span, rows),
         _ => Usage(),
@@ -108,40 +109,106 @@ static async Task<int> ShowColumns(string file)
     return 0;
 }
 
-static async Task<int> ShowRowNumber(string file)
+// Without --where, parquet answers from its metadata: no data is read.
+// SQLite: one count per table (a sum across tables means nothing), and with
+// --where, only the tables that have its columns.
+static async Task<int> ShowRowNumber(string file, Dictionary<string, ColumnFilter> where)
 {
-    if (DataFrameProvider.DetectFormat(file) == SourceFormat.Sqlite)
+    await ForEachTable(file, [.. where.Keys], async (table, parquet) =>
     {
-        // one count per table: a sum across tables means nothing
-        var tables = await DataFrameProvider.ReadSqliteTablesAsync(file);
+        var count = await FilterEngine.CountRowsAsync(parquet, FilterEngine.BuildPredicate(where));
+        Console.WriteLine(table is null ? $"{count}" : $"{table} -> {count}");
+    });
+    return 0;
+}
+
+// Distinct values of a column, one per line, sorted as text: the exact text
+// --where matches. Every --where applies, the column's own included, unlike
+// the grid's dropdown, which keeps a filtered column's other values on show
+// so they can be checked back.
+static async Task<int> ShowValues(string file, string column, Dictionary<string, ColumnFilter> where, int limit)
+{
+    await ForEachTable(file, [column, .. where.Keys], async (table, parquet) =>
+    {
+        if (table is not null)
+            Console.WriteLine($"== {table}");
+        var (values, hasBlanks, capped) = await FilterEngine.GetDistinctValuesAsync(
+            parquet, column, FilterEngine.BuildPredicate(where), limit);
+        foreach (var value in values)
+            Console.WriteLine(value.ReplaceLineEndings(" "));
+        var shown = $"{values.Length} value{(values.Length == 1 ? "" : "s")}{(hasBlanks ? " and null" : "")}";
+        Console.WriteLine(capped ? $"(first {shown}; there are more: -n raises the limit)" : $"({shown})");
+    });
+    return 0;
+}
+
+// --where col=value, repeatable: the same column again is OR, another column
+// is AND, and an empty value means null. The column ends at the first "=".
+// Also -n N. Anything else is a usage error.
+static bool TryOptions(string[] args, out Dictionary<string, ColumnFilter> where, out int? rows)
+{
+    where = [];
+    rows = null;
+    if (args.Length % 2 != 0)
+        return false;
+
+    var kept = new Dictionary<string, (HashSet<string> Values, bool Blanks)>();
+    for (int i = 0; i < args.Length; i += 2)
+    {
+        var (option, value) = (args[i], args[i + 1]);
+        int eq = value.IndexOf('=');
+        if (option == "-n" && rows is null && int.TryParse(value, out var n) && n > 0)
+            rows = n;
+        else if (option == "--where" && eq > 0)
+        {
+            var (column, text) = (value[..eq], value[(eq + 1)..]);
+            var (values, blanks) = kept.GetValueOrDefault(column, (new HashSet<string>(), false));
+            if (text.Length == 0)
+                blanks = true;
+            else
+                values.Add(text);
+            kept[column] = (values, blanks);
+        }
+        else
+            return false;
+    }
+    where = kept.ToDictionary(c => c.Key, c => new ColumnFilter(c.Value.Values, c.Value.Blanks));
+    return true;
+}
+
+// Runs `action` on the file as parquet: once (table = null), or once per
+// SQLite table that has every column in `needs`. Checked against the schema
+// first: Polars' own error dumps the whole query plan.
+static async Task ForEachTable(string file, string[] needs, Func<string?, string, Task> action)
+{
+    string[] tables = DataFrameProvider.DetectFormat(file) == SourceFormat.Sqlite
+        ? DataFrameProvider.GetTableNames(file)
+        : [];
+
+    var seen = new List<string>();
+    bool any = false;
+    for (int i = 0; i < Math.Max(tables.Length, 1); i++)
+    {
+        var (parquet, isTemp) = await DataFrameProvider.EnsureParquetAsync(file, tableIndex: i);
         try
         {
-            foreach (var (table, df) in tables)
-                Console.WriteLine($"{table} -> {df.Len}");
+            var columns = await DataFrameProvider.GetColumnNamesAsync(parquet);
+            seen.AddRange(columns);
+            if (!needs.All(columns.Contains))
+                continue;
+            any = true;
+            await action(tables.Length > 0 ? tables[i] : null, parquet);
         }
         finally
         {
-            foreach (var df in tables.Values)
-                df.Dispose();
+            if (isTemp) File.Delete(parquet);
         }
-        return 0;
     }
 
-    var (parquet, isTemp) = await DataFrameProvider.EnsureParquetAsync(file);
-    try
-    {
-        // parquet keeps the row count in its metadata: no data is read
-        using var lf = LazyFrame.ScanParquet(parquet);
-        using var counted = lf.Select(Len());
-        using var count = counted.Collect();
-        using var batch = count.ToArrow();
-        Console.WriteLine(PolarsTableAdapter.GetCellValue(batch.Column(0), 0));
-    }
-    finally
-    {
-        if (isTemp) File.Delete(parquet);
-    }
-    return 0;
+    if (!any)
+        throw new ArgumentException(needs.FirstOrDefault(c => !seen.Contains(c)) is { } missing
+            ? ColumnNotFound(missing, seen)
+            : $"no table has all of: {string.Join(", ", needs.Distinct())}");
 }
 
 // The grid's own path: parquet (converted if needed) → projection + limit →
@@ -434,6 +501,6 @@ static async Task<string[]> ColumnNamesAsync(string file)
 
 static int Usage()
 {
-    Console.Error.WriteLine("usage: acrux <schema|columns|head [-n N]|rows|type> <file> | acrux column <file> <name> [-n N] | acrux filter <file> <column> --last <span> [-n N] | acrux version");
+    Console.Error.WriteLine("usage: acrux <schema|columns|head [-n N]|type> <file> | acrux rows <file> [--where col=value]... | acrux values <file> <column> [--where col=value]... [-n N] | acrux column <file> <name> [-n N] | acrux filter <file> <column> --last <span> [-n N] | acrux version");
     return 2;
 }

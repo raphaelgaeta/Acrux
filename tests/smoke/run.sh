@@ -51,6 +51,20 @@ run() {
     run filter banco.db data --last "100 years"
     run filter vendas.csv produto --last "1 day"
     run filter banco.db data --last "1 parsec"
+    # values and --where: same column repeated = OR, another column = AND,
+    # an empty value = null; matched as the text `values` prints
+    run values vendas.csv produto
+    run values vendas.csv produto --where produto=Café --where produto=Açaí
+    run values tipos.parquet i64      # numbers still sort as text
+    run values tipos.parquet i8 -n 1  # null sorts first: the list must still say it was cut
+    run values banco.db titulo
+    run values banco.db canal_id --where "texto=Café em grão 1 kg"
+    run rows vendas.csv --where produto=Café --where valor=32.9
+    run rows tipos.parquet --where i8= --where i8=1
+    run rows banco.db --where canal_id=1
+    run values banco.db Titulo
+    run values banco.db titulo --where msg_id=1
+    run rows vendas.csv --where produto
     run head nao_existe.csv
     run head vendas.csv -n 0
 } > "$work/actual.txt"
