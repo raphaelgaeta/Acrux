@@ -63,21 +63,21 @@ public static class ScriptHost
             var lf = LazyFrame.ScanParquet(parquetPath);
             try
             {
-                // implicit step 0: the grid's visual state. Select first —
-                // header filters can only reference selected columns.
-                if (baseColumns is { Length: > 0 })
-                {
-                    var selected = lf.Select(baseColumns);
-                    lf.Dispose();
-                    lf = selected;
-                }
-
+                // implicit step 0: the grid's visual state. Filter first: a
+                // filter can sit on a column the grid hides.
                 if (baseFilters is { Count: > 0 } &&
                     FilterEngine.BuildPredicate(baseFilters) is { } predicate)
                 {
                     var filtered = lf.Filter(predicate);
                     lf.Dispose();
                     lf = filtered;
+                }
+
+                if (baseColumns is { Length: > 0 })
+                {
+                    var selected = lf.Select(baseColumns);
+                    lf.Dispose();
+                    lf = selected;
                 }
 
                 for (int i = 0; i < steps.Count; i++)
