@@ -6,8 +6,9 @@ using System.Windows.Forms;
 namespace Acrux;
 
 /// <summary>
-/// Dialog shown on open: pick which columns get collected and displayed.
-/// Only the selected columns are read from disk (projection pushdown).
+/// Dialog behind the "Columns" button: which of the file's columns the grid
+/// shows. A hidden column is never read; a shown one loads when it reaches
+/// the screen.
 /// </summary>
 public sealed class ColumnSelectorForm : Form
 {
@@ -27,12 +28,12 @@ public sealed class ColumnSelectorForm : Form
     public string[] SelectedColumns =>
         _allColumns.Where(c => _checked.Contains(c)).ToArray();
 
-    public ColumnSelectorForm(string[] columns)
+    public ColumnSelectorForm(string[] columns, IReadOnlySet<string> hidden)
     {
         _allColumns = columns;
-        _checked = new HashSet<string>(columns);   // all checked by default
+        _checked = new HashSet<string>(columns.Where(c => !hidden.Contains(c)));
 
-        Text = "Select columns";
+        Text = "Columns";
         Icon = AppIcon.Value;
         Theme.Apply(this);
         Width = 420;
@@ -87,7 +88,7 @@ public sealed class ColumnSelectorForm : Form
             AutoSize = true,
             Padding = new Padding(0, 4, 0, 4)
         };
-        _btnOk = new Button { Text = "Load", AutoSize = true, DialogResult = DialogResult.OK };
+        _btnOk = new Button { Text = "Show", AutoSize = true, DialogResult = DialogResult.OK };
         _btnCancel = new Button { Text = "Cancel", AutoSize = true, DialogResult = DialogResult.Cancel };
         bottomButtons.Controls.Add(_btnOk);
         bottomButtons.Controls.Add(_btnCancel);
@@ -160,7 +161,7 @@ public sealed class ColumnSelectorForm : Form
 
     private void UpdateCount()
     {
-        _lblCount.Text = $"{_checked.Count:N0} of {_allColumns.Length:N0} columns selected";
+        _lblCount.Text = $"{_checked.Count:N0} of {_allColumns.Length:N0} columns shown";
         _btnOk.Enabled = _checked.Count > 0;
     }
 }

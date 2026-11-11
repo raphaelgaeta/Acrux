@@ -17,9 +17,9 @@ public class ScriptGlobals
 /// <summary>
 /// Runs the terminal's C# Polars scripts through Roslyn. Stateless: every
 /// execution starts from a fresh <c>LazyFrame.ScanParquet</c>; each script
-/// must end in a <c>LazyFrame</c> or <c>DataFrame</c> expression, which becomes
-/// the RecordBatch shown in the grid (same zero-materialization path as the
-/// rest of the app).
+/// must end in a <c>LazyFrame</c> or <c>DataFrame</c> expression. The result
+/// is a plan, not data: <see cref="ColumnCache.FromPlanAsync"/> computes it
+/// column by column as the grid reaches each one.
 /// </summary>
 public static class ScriptHost
 {
@@ -41,13 +41,14 @@ public static class ScriptHost
     /// Replays the script chain: step 1 receives in <c>lf</c> the file *as
     /// shown in the grid* — base column selection and base filters applied as
     /// an implicit step 0 — and every following step receives the previous
-    /// step's LazyFrame. Nothing is collected in between — the steps compose
-    /// a single lazy plan, collected only at the end (optionally capped at
-    /// <see cref="RowCap"/> rows). Returns the result RecordBatch (caller owns
-    /// it). Throws <see cref="CompilationErrorException"/> for syntax errors
-    /// and the Polars exception for query errors (e.g. unknown column).
+    /// step's LazyFrame. Nothing is collected: the steps compose a single
+    /// lazy plan (optionally capped at <see cref="RowCap"/> rows), returned
+    /// for the caller to own and run. Throws
+    /// <see cref="CompilationErrorException"/> for syntax errors and the
+    /// Polars exception for query errors (e.g. unknown column), which may
+    /// also surface only when the plan runs.
     /// </summary>
-    public static async Task<RecordBatch> RunChainAsync(
+    public static async Task<LazyFrame> BuildChainAsync(
         IReadOnlyList<string> steps,
         string parquetPath,
         string[]? baseColumns,
@@ -63,21 +64,21 @@ public static class ScriptHost
             var lf = LazyFrame.ScanParquet(parquetPath);
             try
             {
-                // implicit step 0: the grid's visual state. Select first —
-                // header filters can only reference selected columns.
-                if (baseColumns is { Length: > 0 })
-                {
-                    var selected = lf.Select(baseColumns);
-                    lf.Dispose();
-                    lf = selected;
-                }
-
+                // implicit step 0: the grid's visual state. Filter first: a
+                // filter can sit on a column the grid hides.
                 if (baseFilters is { Count: > 0 } &&
                     FilterEngine.BuildPredicate(baseFilters) is { } predicate)
                 {
                     var filtered = lf.Filter(predicate);
                     lf.Dispose();
                     lf = filtered;
+                }
+
+                if (baseColumns is { Length: > 0 })
+                {
+                    var selected = lf.Select(baseColumns);
+                    lf.Dispose();
+                    lf = selected;
                 }
 
                 for (int i = 0; i < steps.Count; i++)
@@ -107,21 +108,15 @@ public static class ScriptHost
                     }
                 }
 
-                var query = applyRowCap ? lf.Limit(RowCap) : lf;
-                try
-                {
-                    using var df = query.Collect();
-                    return df.ToArrow();
-                }
-                finally
-                {
-                    if (!ReferenceEquals(query, lf))
-                        query.Dispose();
-                }
+                if (!applyRowCap)
+                    return lf;
+                using (lf)
+                    return lf.Limit(RowCap);
             }
-            finally
+            catch
             {
                 lf.Dispose();
+                throw;
             }
         }, cancellationToken);
     }
