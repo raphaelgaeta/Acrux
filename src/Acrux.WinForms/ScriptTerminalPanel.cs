@@ -37,11 +37,12 @@ public sealed class ScriptTerminalPanel : Panel
             BackColor = SystemColors.Window,   // read-only would turn it gray
             Font = mono,
             BorderStyle = BorderStyle.None,
-            Text = "// C# Polars terminal — `lf` is the previous step's result.\n" +
-                   "// On the first run, `lf` is the file AS SHOWN in the grid:\n" +
+            Text = "// C# Polars terminal — `df` is the previous step's result.\n" +
+                   "// On the first run, `df` is the file AS SHOWN in the grid:\n" +
                    "// selected columns and active header filters included.\n" +
+                   "// `df` is lazy (a LazyFrame): nothing is read until the grid shows it.\n" +
                    "// End with a LazyFrame or DataFrame expression. E.g.:\n" +
-                   "//   lf.Filter(Col(\"value\") > 1000).Sort(\"value\", descending: true)\n\n"
+                   "//   df.Filter(Col(\"value\") > 1000).Sort(\"value\", descending: true)\n\n"
         };
 
         _input = new TextBox

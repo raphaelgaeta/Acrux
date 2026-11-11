@@ -494,7 +494,7 @@ Filtros concorrentes são cancelados via `_filterCts`.
 
 Terminal C# (botão "C# terminal"): scripts Roslyn encadeados por **replay** —
 `MainForm._scriptChain` guarda os textos dos passos; cada execução re-roda a
-cadeia inteira sobre um `ScanParquet` fresco, com o passo N recebendo em `lf`
+cadeia inteira sobre um `ScanParquet` fresco, com o passo N recebendo em `df`
 o `LazyFrame` (plano lazy, não dados) do passo N-1. O passo 1 recebe o arquivo
 **como exibido no grid**: colunas visíveis + filtros ativos aplicados como
 "passo 0" implícito (`FilterEngine.BuildPredicate` público é reutilizado), o
@@ -517,6 +517,19 @@ relê as colunas que cederam memória ao resultado. Imports do script:
 filtros de cabeçalho ficam desativados — o grid não espelha mais o arquivo —
 até "Restore file" (decisão V1; a V2 composável exigiria FilterEngine
 aceitar fonte lazy genérica).
+
+**O nome é `df`** (desenho do dono, 2026-11-11: é o nome que quem mexe com
+dados usa). Até então era `lf`, que continua como apelido do mesmo plano
+(`ScriptGlobals.lf => df`), para scripts antigos rodarem. O nome promete
+dados, e o `df` é um plano: quem escreve `df.Height`, `df.Transpose()` ou
+`df["a"]` recebe o erro do compilador e uma dica do `ScriptHost.Describe`,
+de que o `df` é lazy e de como coletar só as colunas necessárias. A dica sai
+quando o erro é CS1061 (membro que falta) ou CS0021 (indexador) sobre
+`LazyFrame` e o `DataFrame` tem o membro, e o exemplo só continua com o
+membro quando ele devolve uma tabela: um passo que termina num número ou
+numa `Series` falha por si. **O Roslyn traduz as mensagens** (pt-BR num
+Windows em português, conferido no laptop), mas não o nome do tipo; por isso
+o `Describe` lê a mensagem na cultura invariante.
 
 | Arquivo | Papel |
 |---|---|

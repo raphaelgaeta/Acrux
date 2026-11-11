@@ -1,4 +1,8 @@
+using System.Globalization;
+using System.Reflection;
+using System.Text.RegularExpressions;
 using Apache.Arrow;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
 using Polars.CSharp;
@@ -10,8 +14,15 @@ namespace Acrux;
 /// </summary>
 public class ScriptGlobals
 {
-    /// <summary>LazyFrame the script operates on (fresh scan, stateless).</summary>
-    public LazyFrame lf = null!;
+    /// <summary>
+    /// The table the step works on: the previous step's result, or the file as
+    /// the grid shows it. Named df because that is the name people who work
+    /// with data reach for, but it is a LazyFrame: a plan, with no data yet.
+    /// </summary>
+    public LazyFrame df = null!;
+
+    /// <summary>The same plan as <see cref="df"/>, under its earlier name, so older scripts still run.</summary>
+    public LazyFrame lf => df;
 }
 
 /// <summary>
@@ -38,7 +49,7 @@ public static class ScriptHost
         .WithImports("System", "System.Linq", "Polars.CSharp", "Polars.CSharp.Polars"));
 
     /// <summary>
-    /// Replays the script chain: step 1 receives in <c>lf</c> the file *as
+    /// Replays the script chain: step 1 receives in <c>df</c> the file *as
     /// shown in the grid* — base column selection and base filters applied as
     /// an implicit step 0 — and every following step receives the previous
     /// step's LazyFrame. Nothing is collected: the steps compose a single
@@ -84,7 +95,7 @@ public static class ScriptHost
                 for (int i = 0; i < steps.Count; i++)
                 {
                     var state = await CSharpScript.RunAsync(
-                        steps[i], Options.Value, new ScriptGlobals { lf = lf }, typeof(ScriptGlobals), cancellationToken);
+                        steps[i], Options.Value, new ScriptGlobals { df = lf }, typeof(ScriptGlobals), cancellationToken);
 
                     var next = state.ReturnValue switch
                     {
@@ -125,5 +136,42 @@ public static class ScriptHost
     {
         using (df)
             return df.Lazy();
+    }
+
+    /// <summary>
+    /// The compiler's errors, one per line, plus a hint when the script used a
+    /// DataFrame member on a LazyFrame: whoever works with data expects
+    /// <c>df</c> to hold data, and here it is a plan.
+    /// </summary>
+    public static string Describe(CompilationErrorException ex)
+    {
+        var lines = ex.Diagnostics.Select(d => d.ToString()).ToList();
+        if (ex.Diagnostics.Select(DataFrameOnly).FirstOrDefault(m => m is not null) is { } use)
+            lines.Add($"df is lazy: a LazyFrame, a plan with no data yet. {use.What} belongs to DataFrame, so "
+                + $"collect the columns you need first, e.g. df.Select(\"a\", \"b\").Collect(){use.Example}");
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    // Read in the invariant culture: Roslyn translates its messages (pt-BR on
+    // a Portuguese Windows), but not the type name.
+    private static readonly Regex MissingMember = new(
+        @"^'(?:Polars\.CSharp\.)?LazyFrame' does not contain a definition for '(\w+)'");
+
+    // The example goes on with the member only when it gives a table: a step
+    // that ends in a number (Height) or a Series ([]) fails on its own.
+    private static (string What, string Example)? DataFrameOnly(Diagnostic d)
+    {
+        var message = d.GetMessage(CultureInfo.InvariantCulture);
+        if (d.Id == "CS0021" && message.EndsWith("of type 'LazyFrame'", StringComparison.Ordinal))
+            return ("Indexing with []", "");
+        if (d.Id != "CS1061" || MissingMember.Match(message) is not { Success: true } m)
+            return null;
+        var name = m.Groups[1].Value;
+        var members = typeof(DataFrame).GetMember(name, BindingFlags.Public | BindingFlags.Instance);
+        if (members.Length == 0)
+            return null;
+        return members.Any(x => x is MethodInfo { ReturnType: var t } && t == typeof(DataFrame)) ? (name, $".{name}(…)")
+            : members.Any(x => x is PropertyInfo { PropertyType: var t } && t == typeof(DataFrame)) ? (name, $".{name}")
+            : (name, "");
     }
 }
