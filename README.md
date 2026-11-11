@@ -154,17 +154,18 @@ nothing downstream can tell.
   was. All of that is drawing only: copying a cell copies the data. Numbers
   line up on the right, and on Windows 11 the app follows the light or dark
   mode you set in Windows.
-- **Drop into a C# terminal.** The full Polars expression API, with `lf` as
-  your LazyFrame — starting from exactly what you see: the columns shown and
+- **Drop into a C# terminal.** The full Polars expression API, with `df` as
+  your table — starting from exactly what you see: the columns shown and
   the active header filters are inherited by the script as an implicit first
   step:
 
   ```csharp
-  lf.Filter(Col("city") == "São Paulo")
-  lf.GroupBy("product").Agg(Col("value").Sum().Alias("total"))
+  df.Filter(Col("city") == "São Paulo")
+  df.GroupBy("product").Agg(Col("value").Sum().Alias("total"))
   ```
 
-  Each command chains on the previous result — applied steps, Power Query
+  `df` is lazy, a Polars `LazyFrame`: a plan, so nothing is read until the
+  grid shows it. Each command chains on the previous result — applied steps, Power Query
   style — with one-click undo and restore. The result loads column by column
   as you scroll, like the file, so a filter over all 700 columns still fits
   in memory; an optional 1M-row cap keeps results bounded.

@@ -773,7 +773,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         }
         catch (Microsoft.CodeAnalysis.Scripting.CompilationErrorException ex)
         {
-            _terminal.AppendError(string.Join(Environment.NewLine, ex.Diagnostics));
+            _terminal.AppendError(ScriptHost.Describe(ex));
             UpdateInfo();
         }
         catch (Exception ex)

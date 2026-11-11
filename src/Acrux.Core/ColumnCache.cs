@@ -163,7 +163,7 @@ public sealed class ColumnCache : IDisposable
                     $"This result uses {unstable}, whose row order can change from run to run, so it is computed in one go. "
                     + $"Its {fields.Count:N0} columns could take up to {FormatBytes(expected)} "
                     + $"(with as many rows as the file), and the memory budget is {FormatBytes(memory.Limit)} now. "
-                    + "Select the columns you need first, e.g. lf.Select(\"a\", \"b\").");
+                    + "Select the columns you need first, e.g. df.Select(\"a\", \"b\").");
 
             var whole = await Task.Run(() =>
             {
