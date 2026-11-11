@@ -164,8 +164,9 @@ nothing downstream can tell.
   ```
 
   Each command chains on the previous result — applied steps, Power Query
-  style — with one-click undo and restore. An optional 1M-row cap saves you
-  from accidentally collecting the whole file.
+  style — with one-click undo and restore. The result loads column by column
+  as you scroll, like the file, so a filter over all 700 columns still fits
+  in memory; an optional 1M-row cap keeps results bounded.
 
   ![Chaining Polars queries in the C# terminal](assets/script_terminal.gif)
 
@@ -305,10 +306,12 @@ nothing at all.
 | `src/Acrux.Core/FilterEngine.cs` | Excel-style filters as Polars lazy queries |
 | `src/Acrux.Core/PolarsErrors.cs` | Polars errors without the query plan Polars appends |
 | `src/Acrux.Core/TimeFilter.cs` | Relative time windows (`--last "2 days"`) as Polars expressions |
-| `src/Acrux.Core/ColumnCache.cs` | The file's columns, read as the screen reaches them and kept within half of the free memory |
+| `src/Acrux.Core/ColumnCache.cs` | A table's columns (the file's or a script result's), read as the screen reaches them |
+| `src/Acrux.Core/MemoryBudget.cs` | The memory the caches share: half of what is free, theirs included |
+| `src/Acrux.Core/PlanOrder.cs` | Reads a Polars plan to tell whether its rows come in the same order every run |
 | `src/Acrux.Core/SystemMemory.cs` | The physical memory free right now, on Windows and Linux |
 | `src/Acrux.Core/PolarsTableAdapter.cs` | O(1) per-cell reads from Arrow arrays, for every column type |
-| `src/Acrux.Core/ScriptHost.cs` | Roslyn evaluation of chained Polars scripts |
+| `src/Acrux.Core/ScriptHost.cs` | Roslyn evaluation of chained Polars scripts into one lazy plan |
 | `src/Acrux.WinForms/Program.cs` | Entry point: stale temp sweep and guaranteed process exit |
 | `src/Acrux.WinForms/AppIcon.cs` | Window icon, loaded from the embedded `.ico` |
 | `src/Acrux.WinForms/GridPainting.cs` | What the grid draws without changing the data: null, `###`, `↵`, the filter's `▼` |

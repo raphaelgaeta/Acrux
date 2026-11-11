@@ -28,8 +28,14 @@ public partial class MainForm : Form
 
     private string? _parquetPath;
     private string? _tempParquetPath;   // parquet converted from CSV (delete on switch/close)
-    // the file on screen, column by column (null before a file opens)
+    // the memory the caches share: half of what is free, them included
+    private readonly MemoryBudget _memory = new();
+    // the file, column by column (null before a file opens); it stays alive
+    // under a script result, unpinned, so "Restore file" rereads only the
+    // columns that gave their memory to the result
     private ColumnCache? _cache;
+    // a script result on screen, also column by column; null when the grid shows the file
+    private ColumnCache? _result;
     // hidden by the "Columns" dialog: they stay in the grid with Visible =
     // false, so a grid column's index is always the file column's
     private readonly HashSet<string> _hiddenColumns = new();
@@ -191,7 +197,7 @@ public MainForm(string? initialFile = null)
     _loadTimer.Tick += LoadTimer_Tick;
     _trimTimer.Tick += (_, _) =>
     {
-        _cache?.Trim();
+        _memory.Trim();
         UpdateMemoryInfo();
     };
     _trimTimer.Start();
@@ -233,21 +239,18 @@ private void ToggleTerminal()
 private int[]?      _filteredRows;      // filtered row indices (null = no filter)
 private int         _rowCount;
 
-private RecordBatch? _batch;   // a script result on screen; null when the grid shows the file
+// the table on screen: the script result, or else the file
+private ColumnCache? OnScreen => _result ?? _cache;
+
 private void Grid_CellValueNeeded(object? sender, DataGridViewCellValueEventArgs e)
 {
     // reads the cell straight from the Arrow buffer (O(1), no column materialization)
+    if (OnScreen is not { } cache) return;
     int dataRow = _filteredRows is null ? e.RowIndex : _filteredRows[e.RowIndex];
-    if (_batch is not null)
-    {
-        e.Value = PolarsTableAdapter.GetCellValue(_batch.Column(e.ColumnIndex), dataRow);
-        return;
-    }
-    if (_cache is null) return;
 
-    if (_cache.TryGet(e.ColumnIndex) is { } column)
+    if (cache.TryGet(e.ColumnIndex) is { } column)
         e.Value = PolarsTableAdapter.GetCellValue(column, dataRow);
-    else if (_cache.Failure(e.ColumnIndex) is not null)
+    else if (cache.Failure(e.ColumnIndex) is not null)
         e.Value = CellPlaceholder.Failed;
     else
     {
@@ -323,12 +326,11 @@ private async Task LoadFileAsync(string fileName)
         // metadata only, fast on any file: the schema and the row count. The
         // columns load as the grid reaches them.
         _lblInfo.Text = "Reading schema...";
-        cache = await ColumnCache.OpenAsync(sourcePath);
+        cache = await ColumnCache.OpenAsync(sourcePath, _memory);
 
         // the grid empties while the old file is still its source
         ClearGrid();
-        _batch?.Dispose();
-        _batch = null;
+        CloseResult();
         _filteredRows = null;
         CloseCache();
         _cache = cache;
@@ -387,6 +389,7 @@ private static void TryDeleteTemp(string path)
 
 protected override void OnFormClosed(FormClosedEventArgs e)
 {
+    CloseResult();
     CloseCache();
     if (_tempParquetPath is not null)
         TryDeleteTemp(_tempParquetPath);
@@ -421,18 +424,20 @@ protected override void OnFormClosed(FormClosedEventArgs e)
 
     /// <summary>
     /// Shows a script result (ownership transfers to the form). The file's
-    /// cache stays alive underneath, unpinned, so "Restore file" reads nothing.
+    /// cache stays alive underneath, unpinned: its columns give way first when
+    /// the result needs memory, and "Restore file" reads only what left.
     /// </summary>
-    private void DisplayBatch(RecordBatch batch)
+    private void ShowResult(ColumnCache result)
     {
         ClearGrid();
-        _batch?.Dispose();
-        _batch = batch;
-        _rowCount = batch.Length;
+        CloseResult();
+        _result = result;
+        _result.ColumnLoaded += Cache_ColumnLoaded;
+        _rowCount = result.RowCount;
         _filteredRows = null;
         _cache?.Unpin();
 
-        AddColumns(batch.Schema.FieldsList, hidden: null);
+        AddColumns(result.Fields, hidden: null);
         if (_rowCount > 0)
             _grid.RowCount = _rowCount;
     }
@@ -467,10 +472,18 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         _cache = null;
     }
 
+    private void CloseResult()
+    {
+        if (_result is null) return;
+        _result.ColumnLoaded -= Cache_ColumnLoaded;
+        _result.Dispose();
+        _result = null;
+    }
+
     private async void LoadTimer_Tick(object? sender, EventArgs e)
     {
         _loadTimer.Stop();
-        if (_cache is not { } cache || _batch is not null) return;
+        if (OnScreen is not { } cache) return;
         var columns = ColumnsAroundView();
         if (columns.Count == 0) return;
 
@@ -518,12 +531,22 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         return columns;
     }
 
-    private void Cache_ColumnLoaded(int column, Exception? error)
+    private void Cache_ColumnLoaded(ColumnCache cache, int column, Exception? error)
     {
-        if (_batch is null)
-            _grid.InvalidateColumn(column);
         UpdateMemoryInfo();
-        if (error is null || _showingColumnError) return;
+        if (cache != OnScreen) return;   // the file's column, arriving under a script result
+        _grid.InvalidateColumn(column);
+        if (error is null) return;
+
+        // a script's column fails when it is computed (a Cast that can't
+        // convert, say), after the step joined the chain: said where the
+        // script was typed, next to "Undo step"
+        if (cache == _result)
+        {
+            _terminal.AppendError($"column \"{cache.Fields[column].Name}\": {PolarsErrors.Describe(error)}");
+            return;
+        }
+        if (_showingColumnError) return;
 
         // one dialog at a time: a file gone bad fails every column at once,
         // and each failed cell says "error"
@@ -531,7 +554,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         try
         {
             MessageBox.Show(
-                $"Error reading column \"{_cache?.Fields[column].Name}\":\n\n{PolarsErrors.Describe(error)}",
+                $"Error reading column \"{cache.Fields[column].Name}\":\n\n{PolarsErrors.Describe(error)}",
                 "Error",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
@@ -547,7 +570,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         // the grid's own copy keys: Ctrl+C, Ctrl+Shift+C and Ctrl+Insert
         bool copy = (e.KeyCode == Keys.C && e.Modifiers is Keys.Control or (Keys.Control | Keys.Shift))
             || (e.KeyCode == Keys.Insert && e.Modifiers == Keys.Control);
-        if (!copy || _cache is not { } cache || _batch is not null)   // a script result is all in memory
+        if (!copy || OnScreen is not { } cache)
             return;
 
         e.Handled = true;
@@ -587,7 +610,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
                 {
                     MessageBox.Show(
                         $"The selection spans {columns.Count:N0} columns, about {FormatBytes(cache.SizeOf(columns))} in memory, "
-                        + $"and the cache can hold {FormatBytes(cache.Budget)} now (half of the free memory).\n\n"
+                        + $"and the cache can hold {FormatBytes(cache.Memory.Limit)} now (half of the free memory).\n\n"
                         + "Select fewer columns to copy.",
                         "Copy",
                         MessageBoxButtons.OK,
@@ -606,7 +629,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
                     UseWaitCursor = false;
                 }
                 UpdateInfo();
-                if (cache != _cache || _batch is not null) return;   // another file or a script took over
+                if (cache != OnScreen) return;   // another file or script, or the file restored, took over
                 // the selection may have changed meanwhile: check it again
             }
 
@@ -635,7 +658,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
 
     private void BtnColumns_Click(object? sender, EventArgs e)
     {
-        if (_cache is not { } cache || _batch is not null) return;
+        if (_cache is not { } cache || _result is not null) return;
 
         var names = cache.Fields.Select(f => f.Name).ToArray();
         using var selector = new ColumnSelectorForm(names, _hiddenColumns);
@@ -711,11 +734,13 @@ protected override void OnFormClosed(FormClosedEventArgs e)
                 ? new Dictionary<string, ColumnFilter>(_activeFilters)
                 : _chainBaseFilters;
 
-            var batch = await ScriptHost.RunChainAsync(
+            var plan = await ScriptHost.BuildChainAsync(
                 steps, _parquetPath, baseColumns, baseFilters, applyRowCap, cts.Token);
+            // counts the rows; the columns are computed as the grid reaches them
+            var result = await ColumnCache.FromPlanAsync(plan, _memory, _cache?.RowCount ?? 0);
             if (cts.Token.IsCancellationRequested)
             {
-                batch.Dispose();
+                result.Dispose();
                 return;
             }
 
@@ -729,17 +754,17 @@ protected override void OnFormClosed(FormClosedEventArgs e)
                 }
             }
 
-            DisplayBatch(batch);
+            ShowResult(result);
             EnterScriptMode();
 
             var inherited = startingChain && baseFilters is { Count: > 0 }
                 ? $" — inheriting {baseFilters.Count} active filter(s)"
                 : "";
-            var capped = applyRowCap && batch.Length == ScriptHost.RowCap
+            var capped = applyRowCap && result.RowCount == ScriptHost.RowCap
                 ? $" — result capped at {ScriptHost.RowCap:N0} rows"
                 : "";
             _terminal.AppendResult(
-                $"step {_scriptChain.Count}: {batch.Length:N0} rows × {batch.ColumnCount} columns in {sw.ElapsedMilliseconds:N0} ms{inherited}{capped}");
+                $"step {_scriptChain.Count}: {result.RowCount:N0} rows × {result.Fields.Count:N0} columns in {sw.ElapsedMilliseconds:N0} ms{inherited}{capped}");
             UpdateInfo();
         }
         catch (OperationCanceledException)
@@ -790,10 +815,10 @@ protected override void OnFormClosed(FormClosedEventArgs e)
 
         try
         {
-            // the cache stayed alive under the script: nothing to read again
+            // the file's cache stayed alive under the script: what is still
+            // in memory shows at once, the rest loads as the grid reaches it
             ClearGrid();
-            _batch?.Dispose();
-            _batch = null;
+            CloseResult();
             _filteredRows = null;
             _scriptMode = false;
             _btnRestore.Visible = false;
@@ -948,7 +973,7 @@ private void UpdateInfo()
 {
     var total   = _rowCount;
     var showing = _filteredRows?.Length ?? total;
-    var columns = _batch is not null ? $"{_batch.ColumnCount:N0} columns"
+    var columns = _result is not null ? $"{_result.Fields.Count:N0} columns"
         : _cache is null ? "0 columns"
         : _hiddenColumns.Count > 0 ? $"{_cache.Fields.Count - _hiddenColumns.Count:N0} of {_cache.Fields.Count:N0} columns"
         : $"{_cache.Fields.Count:N0} columns";
@@ -961,18 +986,18 @@ private void UpdateInfo()
     UpdateMemoryInfo();
 }
 
-// How much of the file is in memory, against the budget (half of what is
-// free, the cache included): honest about the cost, and the demo
+// How much of the table on screen is in memory, and what the caches hold
+// against the budget (half of what is free, them included): honest about
+// the cost, and the demo
 private void UpdateMemoryInfo()
 {
-    var cache = _cache;
-    bool show = cache is not null && _batch is null;
-    _lblMemory.Visible = show;
-    if (!show) return;
+    var cache = OnScreen;
+    _lblMemory.Visible = cache is not null;
+    if (cache is null) return;
 
-    var loading = cache!.LoadingCount > 0 ? $" · loading {cache.LoadingCount:N0}" : "";
+    var loading = cache.LoadingCount > 0 ? $" · loading {cache.LoadingCount:N0}" : "";
     _lblMemory.Text = $"{cache.LoadedCount:N0} of {cache.Fields.Count:N0} columns in memory "
-        + $"({FormatBytes(cache.HeldBytes)} of {FormatBytes(cache.Budget)}){loading}";
+        + $"({FormatBytes(_memory.HeldBytes)} of {FormatBytes(_memory.Limit)}){loading}";
 }
 
 private static string FormatBytes(long bytes) =>

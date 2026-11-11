@@ -50,8 +50,9 @@ sai com código 2. `acrux version` diz qual commit está
 instalado (ver "Deploy de teste do CLI" abaixo).
 
 Três projetos sob `src/`, agregados pelo `Acrux.sln` da raiz: `Acrux.Core`
-(net10.0, sem UI — `DataFrameProvider`, `FilterEngine`, `PolarsTableAdapter`,
-`ScriptHost`, `TextDates`, `TimeFilter`), `Acrux.WinForms` (net10.0-windows,
+(net10.0, sem UI — `ColumnCache`, `DataFrameProvider`, `FilterEngine`,
+`MemoryBudget`, `PlanOrder`, `PolarsTableAdapter`, `ScriptHost`, `SystemMemory`,
+`TextDates`, `TimeFilter`), `Acrux.WinForms` (net10.0-windows,
 WinForms, `AssemblyName` mantido como `Acrux`) e `Acrux.Cli` (net10.0,
 console); os dois últimos referenciam o Core. `dotnet build` na raiz basta, mas
 **`dotnet run` e `dotnet publish` exigem apontar o projeto**: na raiz o `run`
@@ -400,10 +401,12 @@ Armadilhas).
   descartar uma coluna de um lote importado não devolve nada (ver
   Armadilhas), e 15 `Collect`s paralelos levaram 174 ms contra 299 de um só
   (VM de 8 núcleos).
-- **Teto = (memória disponível + o próprio cache) ÷ 2** (direção do dono:
-  "o quanto está disponível", na referência de um PC de 16 GB com o Chrome,
-  ~8 GB livres). O cache entra na conta para o teto não encolher enquanto
-  ele cresce. "Disponível" é o do Gerenciador de Tarefas
+- **Teto = (memória disponível + o que os caches guardam) ÷ 2** (direção do
+  dono: "o quanto está disponível", na referência de um PC de 16 GB com o
+  Chrome, ~8 GB livres). Um teto só (`MemoryBudget`) para o cache do
+  arquivo e o do resultado de script; com um script na tela, as colunas do
+  arquivo cedem primeiro. Os caches entram na conta para o teto não
+  encolher enquanto eles crescem. "Disponível" é o do Gerenciador de Tarefas
   (`GlobalMemoryStatusEx`; `MemAvailable` no Linux, em `SystemMemory`), a
   RAM física, não o limite de commit. Sem teto fixo: máquina com folga
   guarda o arquivo inteiro.
@@ -430,6 +433,41 @@ Armadilhas).
 - **Ctrl+C** (e Ctrl+Shift+C, Ctrl+Insert) carrega antes as colunas da
   seleção; se elas não cabem juntas no teto, avisa em vez de copiar pela
   metade.
+- **O resultado de um script também vem coluna por coluna** (desenho
+  aprovado em 2026-11-11, `ColumnCache.FromPlanAsync`): cada coluna é uma
+  execução do plano com só ela selecionada (`plano.Select(coluna)`), e o
+  Polars lê do arquivo só o que ela precisa; as linhas, por
+  `Select(Len())`. Calculado inteiro, um filtro sobre as 700 colunas morria
+  (ver Armadilhas). Quatro colunas por vez (`PlanConcurrency`): cada uma
+  refaz o trabalho do plano, e o Polars já usa todos os núcleos em cada
+  execução. Com 30 de uma vez, filtrar e ordenar passou de 8 GB.
+  - **Só quando a ordem das linhas se repete** (`PlanOrder`, lendo o
+    `Explain(true)`): cada coluna vem de uma execução diferente, e uma
+    ordem que mudasse entre elas desalinharia as colunas sem erro nenhum.
+    Por lista do que se mediu estável: leitura, filtro, `Select`,
+    `WithColumns`, `Limit`/`Head`/`Tail`, ordenação, `GroupBy` com ordem
+    mantida, `Explode`, `Unpivot`, um passo que termina em `Collect()`.
+    `Unique` sem `maintainOrder`, join, `Shuffle`/`Sample`, nó
+    desconhecido: o resultado é calculado inteiro, numa execução, se
+    couber no teto contando com tantas linhas quanto o arquivo; se não, o
+    terminal mostra os tamanhos e sugere o `Select` antes.
+  - O plano é do cache e só é liberado depois da última carga em
+    andamento: fechar o resultado no meio de uma carga não usa um handle
+    liberado (conferido com 30 colunas em voo).
+  - **Erro que só aparece ao calcular uma coluna** (um `Cast` que não
+    converte, por exemplo) não impede o passo de entrar na cadeia: a
+    contagem de linhas nem calcula essa coluna. A célula mostra `error`, e o
+    terminal diz por quê, ao lado do "Undo step". Antes, com o `Collect`
+    inteiro, o passo falhava no terminal e ficava fora da cadeia.
+- Medido pelo `Acrux.Core`, no laptop, com teto de 3 GB e o processo
+  limitado a 8 GB (2026-11-11), passando pelo `ScriptHost` como o app:
+  `lf.Filter(Col("c001_i32") > Lit(0))` (1M × 700) abriu em 0,8 s (a
+  compilação incluída) e rolou as 47 telas em ~100 ms cada, com o arquivo
+  cedendo a memória; ordenar por coluna com milhões de empates, ~0,6 s por
+  tela; filtrar e ordenar por texto, ~1,1 s, pico de 5,3 GB; `GroupBy`, 47
+  ms. Alinhamento conferido pelo `row_id`: 240 mil células por script, nenhuma
+  errada. `Unique` com as 700 colunas: a mensagem (25 GB contra 3 GB), sem
+  executar.
 - Medido pelo `Acrux.Core`, no laptop (2026-11-10): rolar as 700 colunas
   em telas de 15, com 8 de margem, deu ~100 ms por tela; com o teto de
   3,8 GB (metade de 7,6 livres), 96 colunas ficaram na memória, e voltar 9
@@ -465,15 +503,16 @@ Esse estado visual é **congelado no 1º passo** (`_chainBaseColumns`/
 `_chainBaseFilters`) — obrigatório, pois o replay re-executa tudo a cada
 comando e a base não pode derivar; "Restore file"/novo arquivo zeram a base.
 Os `_activeFilters` NÃO são mais limpos ao entrar em modo script: sobrevivem
-como base da cadeia e são **reaplicados ao restaurar**. Nada é coletado no meio:
-a cadeia compõe um único plano, coletado só no fim (`Limit(ScriptHost.RowCap)`
-opcional) → `ToArrow` → `DisplayBatch` (caminho único de exibição). Passo que
+como base da cadeia e são **reaplicados ao restaurar**. Nada é coletado:
+a cadeia compõe um único plano lazy (`Limit(ScriptHost.RowCap)` opcional),
+que o `ScriptHost.BuildChainAsync` devolve e o `ColumnCache.FromPlanAsync`
+mostra coluna por coluna (ver "O cache de colunas"). Passo que
 termina em `DataFrame` (ex.: `.Collect()`) volta ao lazy via `df.Lazy()`
 (validado; os dados dele ficam materializados no plano durante o replay).
 Um passo com erro não entra na cadeia. "Undo step" remove o último e
-re-executa; "Restore file" zera a cadeia e volta ao arquivo sem ler nada: o
-cache de colunas continua vivo sob o resultado do script, sem colunas
-fixadas. Imports do script:
+re-executa; "Restore file" zera a cadeia e volta ao arquivo: o cache do
+arquivo continua vivo sob o resultado do script, sem colunas fixadas, e só
+relê as colunas que cederam memória ao resultado. Imports do script:
 `Polars.CSharp` + estáticos (`Col`/`Lit`). Em modo script (`_scriptMode`) os
 filtros de cabeçalho ficam desativados — o grid não espelha mais o arquivo —
 até "Restore file" (decisão V1; a V2 composável exigiria FilterEngine
@@ -483,10 +522,12 @@ aceitar fonte lazy genérica).
 |---|---|
 | `src/Acrux.Core/DataFrameProvider.cs` | Detecção de formato pelo conteúdo, conversão para parquet, leitura via LazyFrame |
 | `src/Acrux.Core/FilterEngine.cs` | Filtros via Polars (distintos, máscara e contagem), todos recebendo o filtro como `Expr` |
-| `src/Acrux.Core/ColumnCache.cs` | As colunas do arquivo, lidas quando chegam à tela e guardadas até metade da memória livre |
+| `src/Acrux.Core/ColumnCache.cs` | As colunas de uma tabela (o arquivo ou o resultado de um script), lidas quando chegam à tela |
+| `src/Acrux.Core/MemoryBudget.cs` | O teto que os caches dividem: metade da memória livre, eles incluídos |
+| `src/Acrux.Core/PlanOrder.cs` | Lê o plano do Polars e diz se as linhas saem na mesma ordem a cada execução |
 | `src/Acrux.Core/SystemMemory.cs` | A memória física disponível agora, no Windows e no Linux |
 | `src/Acrux.Core/PolarsTableAdapter.cs` | `GetCellValue`: leitura O(1) por célula do Arrow |
-| `src/Acrux.Core/ScriptHost.cs` | Terminal C#: avaliação Roslyn de scripts Polars |
+| `src/Acrux.Core/ScriptHost.cs` | Terminal C#: os scripts Polars pelo Roslyn, encadeados num plano lazy |
 | `src/Acrux.Core/TextDates.cs` | Datas guardadas como texto (CSV, SQLite) viram data só quando não há ambiguidade |
 | `src/Acrux.Core/PolarsErrors.cs` | Erros do Polars para gente: a mensagem sem o plano que ele anexa (CLI e app) |
 | `src/Acrux.Core/TimeFilter.cs` | Filtro de tempo relativo: lê períodos no padrão do systemd, monta o predicado por tipo de coluna e acha as posições das N linhas mais recentes |
@@ -505,7 +546,8 @@ aceitar fonte lazy genérica).
 
 1. **Zero materialização**: os dados vivem só em buffers Arrow: os do
    arquivo no `ColumnCache`, uma coluna por lote, até metade da memória
-   livre; o resultado de um script no `_batch`. Células são lidas por demanda
+   livre; o resultado de um script também, num segundo `ColumnCache`
+   (inteiro só quando a ordem pode mudar e ele cabe). Células são lidas por demanda
    em `CellValueNeeded` via `PolarsTableAdapter.GetCellValue`. NUNCA
    converter colunas inteiras em `object[]` — com milhões de linhas isso
    esgota a RAM e trava a máquina. E nunca carregar todas as colunas de uma
@@ -541,6 +583,24 @@ aceitar fonte lazy genérica).
   Avalonia) vai precisar dos dois.
 - **Memória no Windows se mede pelos bytes privados**
   (`Process.PrivateMemorySize64`), o equivalente do `RssAnon`.
+- **Filtrar ou ordenar com todas as colunas estoura, mesmo com `Limit` no
+  fim** (2026-11-11, laptop, processo limitado a 8 GB). Com o arquivo aberto
+  inteiro, a base do terminal são as 700 colunas: `lf.Filter(Col("c001_i32")
+  > Lit(0))`, e até com `.Limit(1000)` no fim, morreu num `Collect` só; o
+  `SinkParquet` em streaming também, com 8 ou com 2 threads. É a armadilha
+  de "ordenar e cortar linhas largas" (abaixo): o Polars guarda as linhas
+  que casam, com todas as colunas, antes de cortar. Por isso o resultado do
+  script vem coluna por coluna. Um passo que termina em `.Collect()` sobre
+  as 700 colunas continua perigoso, e o app não tem como interceptá-lo.
+- **A ordem das linhas entre execuções está no `Explain(true)`.** O
+  `GroupBy` do Polars.NET mantém a ordem por padrão
+  (`AGGREGATE[maintain_order: true]`); o `Unique`, não
+  (`UNIQUE[maintain_order: false]`), e deu uma ordem diferente em cada uma
+  de 7 execuções. Filtro, ordenação com milhões de empates e `GroupBy`
+  deram a mesma ordem em 9, sozinhos, ao lado de outras colunas e em
+  paralelo. O `Sort` só mostra `maintain_order: true` quando ligado; sem
+  ele, a ordem dos empates se repetiu nas medições, mas não é garantida
+  pelo Polars.
 
 ### Polars.NET 1.0.1 (0.4.0 → 0.6.0 em 2026-07, por probe; → 1.0.1 em 2026-11-08)
 - **No Windows, o nativo do Polars exige o runtime do Visual C++.** O
