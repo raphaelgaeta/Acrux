@@ -4,14 +4,20 @@
     <ProjectReference Include="..\Acrux.Core\Acrux.Core.csproj" />
   </ItemGroup>
 
+  <!-- The managed Polars.NET comes from Acrux.Core, but the native library
+       is one package per platform: the one of the RID being published
+       (dotnet publish -r linux-arm64), or else the build machine's, by OS and
+       architecture. Polars.NET has no win-arm64 package. -->
+  <PropertyGroup>
+    <PolarsNativeRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</PolarsNativeRid>
+    <PolarsNativeArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant())</PolarsNativeArch>
+    <PolarsNativeRid Condition="'$(PolarsNativeRid)' == '' And $([MSBuild]::IsOSPlatform('Windows'))">win-$(PolarsNativeArch)</PolarsNativeRid>
+    <PolarsNativeRid Condition="'$(PolarsNativeRid)' == '' And $([MSBuild]::IsOSPlatform('Linux'))">linux-$(PolarsNativeArch)</PolarsNativeRid>
+    <PolarsNativeRid Condition="'$(PolarsNativeRid)' == '' And $([MSBuild]::IsOSPlatform('OSX'))">osx-$(PolarsNativeArch)</PolarsNativeRid>
+  </PropertyGroup>
+
   <ItemGroup>
-    <!-- Native engine picked from the machine doing the build: the managed
-         Polars.NET comes transitively from Acrux.Core, but the native library
-         is a per-RID package. Cross-RID publish would need an explicit choice. -->
-    <PackageReference Include="Polars.NET.Native.win-x64" Version="1.0.1"
-                      Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
-    <PackageReference Include="Polars.NET.Native.linux-x64" Version="1.0.1"
-                      Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
+    <PackageReference Include="Polars.NET.Native.$(PolarsNativeRid)" Version="1.0.1" />
   </ItemGroup>
 
   <PropertyGroup>

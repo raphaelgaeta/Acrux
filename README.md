@@ -36,8 +36,16 @@ The latest build is on the [Releases](https://github.com/raphaelgaeta/Acrux/rele
   `Acrux.exe` (the .NET runtime is inside), or drop a file on it. It needs the
   [Microsoft Visual C++ Redistributable (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe),
   which most PCs already have.
-- **Command line, Linux** — `acrux-cli-vX.Y.Z-linux-x64.tar.gz`: extract it and
-  put the `acrux-cli` folder on your `PATH`; no .NET needed.
+- **Command line, Linux** — `acrux-cli-vX.Y.Z-linux-x64.tar.gz` (Intel or AMD)
+  or `acrux-cli-vX.Y.Z-linux-arm64.tar.gz` (64-bit ARM, from a Raspberry Pi to
+  a cloud server): extract it and put the `acrux-cli` folder on your `PATH`;
+  no .NET needed.
+
+The x64 builds, Windows and Linux, need a CPU with AVX2: Intel since 2013, AMD
+since 2015, though some Celeron and Pentium models lack it. The Linux arm64
+build needs glibc 2.39 or newer (Ubuntu 24.04, Debian 13, Fedora 40 and
+later), so it doesn't run on Debian 12, Raspberry Pi OS Bookworm or Ubuntu
+22.04 yet. Both requirements come from the Polars engine's native library.
 
 The files aren't code-signed yet, so on first run Windows SmartScreen warns
 about an unknown publisher: **More info → Run anyway**. Signing is on its way
@@ -294,7 +302,7 @@ nothing at all.
 
 | Package | Version | What it's for |
 |---|---|---|
-| [Polars.NET](https://www.nuget.org/packages/Polars.NET) (+ `Linq`, `ML`, `Native.win-x64`, `Native.linux-x64`) | 1.0.1 | The data engine — Rust Polars, reachable from C#; the native package matches the OS |
+| [Polars.NET](https://www.nuget.org/packages/Polars.NET) (+ `Linq`, `ML`, `Native.win-x64`, `Native.linux-x64`, `Native.linux-arm64`) | 1.0.1 | The data engine — Rust Polars, reachable from C#; the native package matches the OS and the architecture |
 | [Apache.Arrow](https://www.nuget.org/packages/Apache.Arrow) | 23.0.0 | The in-memory columnar format cells are read from (Polars.NET 1.0.1 requires ≥ 23) |
 | [Microsoft.Data.Sqlite](https://www.nuget.org/packages/Microsoft.Data.Sqlite) | 10.0.14 | Reads SQLite databases; brings the native SQLite for Windows and Linux |
 | [Microsoft.CodeAnalysis.CSharp.Scripting](https://www.nuget.org/packages/Microsoft.CodeAnalysis.CSharp.Scripting) | 5.6.0 | Roslyn — compiles the terminal's C# scripts at runtime |

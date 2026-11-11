@@ -38,7 +38,16 @@ jobs:
 
   linux:
     needs: version
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-latest
+          # GitHub's arm64 runner, free for public repositories: the smoke
+          # test runs on the architecture it ships for
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -51,15 +60,15 @@ jobs:
           tests/smoke/run.sh src/Acrux.Cli/bin/Release/net10.0/Acrux.Cli
       - name: "Publish the command line (self-contained: no .NET needed)"
         run: |
-          dotnet publish src/Acrux.Cli/Acrux.Cli.csproj -c Release -r linux-x64 \
+          dotnet publish src/Acrux.Cli/Acrux.Cli.csproj -c Release -r ${{ matrix.rid }} \
             --self-contained true -p:Version=${{ needs.version.outputs.version }} -o out/acrux-cli
           ln -s Acrux.Cli out/acrux-cli/acrux
           cp LICENSE out/acrux-cli/
           out/acrux-cli/acrux version
-          tar -czf acrux-cli-${{ needs.version.outputs.label }}-linux-x64.tar.gz -C out acrux-cli
+          tar -czf acrux-cli-${{ needs.version.outputs.label }}-${{ matrix.rid }}.tar.gz -C out acrux-cli
       - uses: actions/upload-artifact@v7
         with:
-          name: linux
+          name: ${{ matrix.rid }}
           path: acrux-cli-*.tar.gz
           retention-days: 7
 
@@ -134,9 +143,13 @@ jobs:
           through the SignPath Foundation: see the [Code signing
           policy](https://github.com/${{ github.repository }}#code-signing-policy).
 
-          **Command line, Linux** — extract `acrux-cli-…-linux-x64.tar.gz` and put the
+          **Command line, Linux** — extract `acrux-cli-…-linux-x64.tar.gz` (Intel or
+          AMD) or `acrux-cli-…-linux-arm64.tar.gz` (64-bit ARM) and put the
           `acrux-cli` folder on your `PATH` (the `acrux` link inside starts it); no
-          .NET needed.
+          .NET needed. The x64 build needs a CPU with AVX2 (Intel since 2013, AMD
+          since 2015; some Celeron and Pentium models lack it). The arm64 build
+          needs glibc 2.39 or newer: Ubuntu 24.04, Debian 13, Fedora 40 and later;
+          not Debian 12, Raspberry Pi OS Bookworm or Ubuntu 22.04.
 
           Check a download against `SHA256SUMS`: `sha256sum -c SHA256SUMS
           --ignore-missing` on Linux, `Get-FileHash <file>` on Windows.

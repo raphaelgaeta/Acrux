@@ -63,7 +63,7 @@ baixa os reference assemblies do Windows e permite **compilar** contra a API do
 Windows a partir do Linux — o binário resultante continua rodando só no
 Windows.
 
-Pacotes: Polars.NET 1.0.1 (+ Native.win-x64/linux-x64, Linq, ML), Apache.Arrow
+Pacotes: Polars.NET 1.0.1 (+ Native.win-x64/linux-x64/linux-arm64, Linq, ML), Apache.Arrow
 23 (a 1.0.1 exige Arrow ≥ 23.0.0 — não fazer downgrade),
 Microsoft.CodeAnalysis.CSharp.Scripting (terminal C#) e Microsoft.Data.Sqlite
 (leitura de SQLite; traz o `e_sqlite3` nativo). Não há projeto de testes; o
@@ -91,8 +91,11 @@ Pelo GitHub Actions (`.github/workflows/release.yml`, desenho aprovado em
 2026-11-08):
 
 1. Na `master`, crie e suba a tag: `git tag v0.1.0 && git push origin v0.1.0`.
-2. O workflow compila e testa: no Linux, o smoke test e o CLI self-contained
-   (`acrux-cli-v0.1.0-linux-x64.tar.gz`, com um link `acrux` dentro); no
+2. O workflow compila e testa: no Linux, o smoke test e o CLI self-contained,
+   duas vezes, cada uma na sua arquitetura: `ubuntu-latest` para o x64 e
+   `ubuntu-24.04-arm` (runner ARM do GitHub, grátis em repositório público)
+   para o arm64 (`acrux-cli-v0.1.0-linux-x64.tar.gz` e `…-linux-arm64.tar.gz`,
+   com um link `acrux` dentro); no
    Windows, o instalador (`Acrux-v0.1.0-setup.exe`) e o app single-file
    (`Acrux-v0.1.0-win-x64.zip`); os dois levam a `LICENSE` e o `NOTICE` da
    arte.
@@ -275,12 +278,20 @@ Onde estamos:
   3. CSV cp1252 e vírgula decimal, xlsx, SQLite, temporários em
      `/tmp/Acrux`: **ok**;
   4. o terminal C# (`ScriptHost`/Roslyn) no Linux: **pendente**.
-- O `Acrux.Cli` escolhe o nativo do Polars **pela máquina que compila**:
-  `Polars.NET.Native.win-x64` no Windows, `.linux-x64` no Linux
-  (`$([MSBuild]::IsOSPlatform(...))`, vindo do protótipo de 2026-09-08). A
-  condição olha a máquina, não o RID do publish: publish para outro sistema
-  exige escolha explícita. As versões managed e nativa precisam ser
-  idênticas: divergência dá segfault em runtime, não erro de build.
+- O `Acrux.Cli` escolhe o nativo do Polars **pelo RID do publish**
+  (`dotnet publish -r linux-arm64` leva o `Polars.NET.Native.linux-arm64`)
+  e, sem RID, **pela máquina que compila**, pelo sistema e pela arquitetura
+  (`PolarsNativeRid` no `.csproj`; desde 2026-11-11, antes só o sistema). O
+  publish para outra arquitetura sai do próprio laptop: o `linux-arm64`
+  levou 6 s. O Polars.NET não tem `win-arm64`. As versões managed e nativa
+  precisam ser idênticas: divergência dá segfault em runtime, não erro de
+  build.
+- **O CLI roda em ARM64** (2026-11-11): o smoke test inteiro passou numa
+  Arduino UNO Q (Debian 13, 4 núcleos ARMv8.0, 1,7 GB) em 40 s, e num
+  contêiner Ubuntu 24.04 arm64 pelo qemu. Na placa, com teto de 700 MB:
+  comandos sobre um CSV de 2M linhas em ~4,6 s e ~160 MB (o laptop: 0,4 s),
+  sobre um parquet de 1M × 21 de 0,5 a 1,6 s, até 74 MB. Ver a armadilha da
+  glibc, abaixo.
 
 Próximos passos:
 
@@ -635,6 +646,27 @@ o `Describe` lê a mensagem na cultura invariante.
   (`+crt-static`; ErrorLSC/Polars.NET #37, 2026-11-10). Conferir as
   importações de um `.dll` novo: tabela de importação PE (o `objdump` do
   Fedora não lê PE).
+- **O nativo de cada plataforma pede outra coisa da máquina** (1.0.1 e
+  1.1.0, conferido em 2026-11-11):
+  - **x64 (Windows e Linux): AVX2.** O autor compila com
+    `target-cpu=x86-64-v3` (o `release.yml` dele), então CPU sem AVX2
+    (Intel antes de 2013, AMD antes de 2015, alguns Celeron e Pentium) cai
+    com instrução ilegal. No Windows em ARM, o emulador (Prism) só tem AVX2
+    a partir do Windows 11 24H2;
+  - **linux-x64: glibc 2.28**, porque sai de um contêiner
+    `manylinux_2_28`;
+  - **linux-arm64: glibc 2.39** (`pidfd_spawnp`, `__isoc23_strtol`), porque
+    sai do `cross`, sem esse contêiner. No Debian 12 (e no Raspberry Pi OS
+    Bookworm), a primeira chamada ao Polars falha com "GLIBC_2.38 not found"
+    (contêiner arm64 pelo qemu), e o `acrux version`, que não chama o
+    Polars, responde. Ficam de fora também Ubuntu 22.04, RHEL 9 e Amazon
+    Linux 2023. Relatado com a sugestão do contêiner
+    `manylinux_2_28_aarch64` no runner ARM, e pedido o `win-arm64`, que não
+    existe (ErrorLSC/Polars.NET #40). O nativo arm64 não tem `target-cpu`:
+    roda numa CPU ARMv8.0.
+
+  Conferir num pacote novo: `readelf -V libnative_shim.so | grep -o
+  'GLIBC_[0-9.]*' | sort -V | tail -1`.
 - **A troca 0.6.0 → 1.0.1 foi medida antes e depois** (branch
   `refactor/polars-1.0.1`): o smoke test deu a mesma saída, e uma bateria de
   19 testes de estresse (CLI e caminhos da janela no parquet de 700 colunas ×
