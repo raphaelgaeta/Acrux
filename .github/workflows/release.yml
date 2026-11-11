@@ -130,7 +130,9 @@ jobs:
           was not found".
 
           Neither file is code-signed yet, so Windows SmartScreen warns about an
-          unknown publisher: **More info → Run anyway**.
+          unknown publisher: **More info → Run anyway**. Signing is on its way
+          through the SignPath Foundation: see the [Code signing
+          policy](https://github.com/${{ github.repository }}#code-signing-policy).
 
           **Command line, Linux** — extract `acrux-cli-…-linux-x64.tar.gz` and put the
           `acrux-cli` folder on your `PATH` (the `acrux` link inside starts it); no

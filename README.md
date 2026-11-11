@@ -40,8 +40,9 @@ The latest build is on the [Releases](https://github.com/raphaelgaeta/Acrux/rele
   put the `acrux-cli` folder on your `PATH`; no .NET needed.
 
 The files aren't code-signed yet, so on first run Windows SmartScreen warns
-about an unknown publisher: **More info → Run anyway**. Each release lists the
-SHA-256 of its files in `SHA256SUMS`.
+about an unknown publisher: **More info → Run anyway**. Signing is on its way
+through the SignPath Foundation; see the [code signing policy](#code-signing-policy).
+Each release lists the SHA-256 of its files in `SHA256SUMS`.
 
 ## Why this exists
 
@@ -334,6 +335,21 @@ Personal project, maintained in my free time. Issues and PRs are welcome —
 just don't expect an SLA. The desktop app is Windows-only (WinForms); the core
 and the command line run on Linux today and build for Windows too, and a
 cross-platform desktop front end is the next step being explored.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/),
+certificate by [SignPath Foundation](https://signpath.org/). The application
+is under review, so the current releases are not signed yet.
+
+- Committers and reviewers: [raphaelgaeta](https://github.com/raphaelgaeta)
+- Approvers: [raphaelgaeta](https://github.com/raphaelgaeta)
+
+**Privacy:** this program will not transfer any information to other
+networked systems unless specifically requested by the user or the person
+installing or operating it. The installer's only download is the Microsoft
+Visual C++ runtime, from Microsoft, and only when it is missing
+([Microsoft's privacy statement](https://privacy.microsoft.com/privacystatement)).
 
 ## License
 
