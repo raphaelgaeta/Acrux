@@ -149,8 +149,14 @@ Em PR, o mesmo workflow só compila e testa, sem release. A versão vem da tag
 (`Directory.Build.props`), e na CI de PR, `0.0.0-ci.N`. O `acrux version`
 mostra a versão e o commit (`0.1.0 (b0bdb9a)`); num deploy local, o arquivo
 `COMMIT` tem prioridade. **Sem assinatura ainda:** o Windows mostra o aviso do
-SmartScreen. Próximo passo: o pedido de assinatura grátis da SignPath
-Foundation (exige um release anterior e a conta do dono com 2FA). Store,
+SmartScreen. O pedido de assinatura grátis da SignPath Foundation foi enviado
+em 2026-11-11, pela conta do dono (com 2FA). Os termos deles exigem a seção
+"Code signing policy" na página inicial (o README) e o termo na página de
+download (as notas do release, no `release.yml`): a frase de atribuição, os
+papéis do time e a privacidade. **Mudou o time ou o que o app transmite?
+Atualize a seção.** Pendências conhecidas do pedido: o ícone fora da MIT (os
+termos pedem licença aprovada pela OSI em todos os componentes) e um aviso no
+setup antes de mexer nas associações de arquivo. Store,
 winget e RPM ficam para quando houver usuários. As Actions estão nas versões
 conferidas em 2026-11-08 (checkout v7, setup-dotnet v6, upload-artifact v7,
 download-artifact v8, todas em Node 24).
