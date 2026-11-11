@@ -477,7 +477,9 @@ aceitar fonte lazy genérica).
   quase todo PC já tem o redistributable instalado: por isso ninguém tinha
   visto. As outras importações são do Windows (o UCRT `api-ms-win-crt-*`
   existe desde o Windows 10), e o `e_sqlite3.dll` não depende disso. O
-  instalador resolve; o zip pede o redistributable nas notas. Conferir as
+  instalador resolve; o zip pede o redistributable nas notas. A 1.1.0 ainda
+  importa; relatado ao autor com a sugestão de compilar com o CRT estático
+  (`+crt-static`; ErrorLSC/Polars.NET #37, 2026-11-10). Conferir as
   importações de um `.dll` novo: tabela de importação PE (o `objdump` do
   Fedora não lê PE).
 - **A troca 0.6.0 → 1.0.1 foi medida antes e depois** (branch
@@ -545,7 +547,10 @@ aceitar fonte lazy genérica).
   default, diferente do Python) e `ulong.MaxValue` dá "capacity overflow"
   nativo. **Continua assim na 1.0.1**, apesar de a nota da 0.7.0 prometer
   varrer o arquivo todo quando o parâmetro falta: `ScanCsv` sem ele ainda
-  falha com um float na linha 200.001 (probe, 2026-11-08). Estratégia do app (EnsureParquetAsync): amostra de 10k (~235 ms em
+  falha com um float na linha 200.001 (probe, 2026-11-08), nem na 1.1.0
+  (`ReadCsv` também). A causa está no shim: com o valor nulo, ele não chama
+  `with_infer_schema_length`, e o Polars fica nas suas 100 linhas
+  (ErrorLSC/Polars.NET #36, 2026-11-10). Estratégia do app (EnsureParquetAsync): amostra de 10k (~235 ms em
   104 MB) + retry com 1M (~15 s) só quando falha. `decimalComma` errado NÃO
   dá erro — a coluna vira string silenciosamente; por isso a convenção
   decimal é farejada nos dados e, no retry, o valor ofensor da mensagem de
@@ -594,7 +599,10 @@ aceitar fonte lazy genérica).
   máquina com RTX 4070: nenhuma DLL CUDA carregada, tempos idênticos à CPU;
   nunca lança erro, então try/catch NÃO detecta). A engine GPU do Polars é
   o cudf-polars, camada Python sobre libcudf, Linux/WSL2 apenas — não existe
-  no núcleo Rust que o Polars.NET embrulha. Benchmark no arquivo real
+  no núcleo Rust que o Polars.NET embrulha. No código do polars-lazy 0.55.2,
+  o `Engine::Gpu` só liga uma flag (`OptFlags::GPU`, que o Python usa para
+  entregar o plano ao cudf-polars) e roda o motor em memória; igual na
+  1.1.0 (ErrorLSC/Polars.NET #39, 2026-11-10). Benchmark no arquivo real
   (700col×5M, cache quente): `Auto`/`InMemory`/`Streaming` empatam em carga
   com projeção, máscara de filtro e groupby (diferenças = ruído de dezenas
   de ms); a única vitória consistente é `Streaming` ~2× em `Unique+Sort+
@@ -631,7 +639,9 @@ aceitar fonte lazy genérica).
   e o processo não cai; contorno do próprio Polars:
   `POLARS_IGNORE_TIMEZONE_PARSE_ERROR=1`.
 - `DataType.String` etc. seguem estáticos e **fora do XML doc** do pacote.
-- Para validar APIs novas do pacote, use a skill `polars-probe`.
+- Para validar APIs novas do pacote, use a skill `polars-probe`. Ela começa
+  pelo `llms-full.txt` do autor (busca, nunca leitura inteira), que ensina a
+  escrever, mas não cobre as armadilhas desta seção.
 - **Erro de plano do Polars traz o plano inteiro** (coluna inexistente, tipo
   que não combina). A mensagem útil vem numa linha, seguida de uma linha em
   branco, `Resolved plan until failure:` e o plano, que pode listar todas as
@@ -647,7 +657,8 @@ aceitar fonte lazy genérica).
   dois leitores (schema + dados) e fecha os dois, mas `SinkParquet` sobre ele
   **não faz streaming**: o motor novo dá panic "not yet implemented:
   AnonymousScan" no stderr e cai para escrita eager. A RAM é a mesma do
-  `ReadDatabase`, e ainda há ruído. Para SQLite, nem o `ReadDatabase` serve:
+  `ReadDatabase`, e ainda há ruído. Igual na 1.1.0 (ErrorLSC/Polars.NET
+  #38, 2026-11-10). Para SQLite, nem o `ReadDatabase` serve:
   ele confia no tipo que o leitor informa (ver SQLite abaixo).
 - **`PolarsSchema.ToFrozenDictionary()` não preserva a ordem das colunas**
   (validado: 40 colunas voltam embaralhadas). `ToList()` e `ToArrowSchema()`
