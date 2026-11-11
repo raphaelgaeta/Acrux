@@ -136,8 +136,14 @@ nothing downstream can tell.
 
 ## The desktop app (Windows)
 
-- **Pick columns before loading.** Only the selected columns are ever read
-  from disk.
+- **Open a file of any width, whole.** Every column is there from the start,
+  and each one is read from disk when it scrolls into view, a screenful in a
+  fraction of a second. The test file above would take ~25 GB in memory;
+  the app keeps what fits in half of the free memory and lets the least
+  recently seen columns go, so it gives memory back when other programs need
+  it. The status bar says how much of the file is in memory. Copying a
+  selection loads its columns first, and the **Columns** button hides the
+  ones you don't want to see.
 - **Filter like Excel.** Click a header, get the distinct values (blanks
   included), check what you want. Filters compose across columns.
 - **The grid never bends the data to fit the screen.** A missing value shows
@@ -148,8 +154,9 @@ nothing downstream can tell.
   line up on the right, and on Windows 11 the app follows the light or dark
   mode you set in Windows.
 - **Drop into a C# terminal.** The full Polars expression API, with `lf` as
-  your LazyFrame — starting from exactly what you see: column selection and
-  active header filters are inherited by the script as an implicit first step:
+  your LazyFrame — starting from exactly what you see: the columns shown and
+  the active header filters are inherited by the script as an implicit first
+  step:
 
   ```csharp
   lf.Filter(Col("city") == "São Paulo")
@@ -236,9 +243,10 @@ with exit code 1; a usage error exits with 2.
 
 Three rules, no exceptions:
 
-1. **Nothing is materialized.** The data lives in Arrow buffers; the grid asks
-   for one cell at a time, only for cells on screen. There is no `DataTable`,
-   no paging, no copy.
+1. **Nothing is materialized.** The data lives in Arrow buffers, a column at a
+   time: read when it scrolls into view, dropped when memory runs short. The
+   grid asks for one cell at a time, only for cells on screen. There is no
+   `DataTable`, no paging, no copy.
 2. **Filters are queries, not loops.** Every filter re-scans the file through
    Polars' lazy engine — which sounds slow and is actually tens of
    milliseconds, because only the filtered columns are read.
@@ -297,6 +305,8 @@ nothing at all.
 | `src/Acrux.Core/FilterEngine.cs` | Excel-style filters as Polars lazy queries |
 | `src/Acrux.Core/PolarsErrors.cs` | Polars errors without the query plan Polars appends |
 | `src/Acrux.Core/TimeFilter.cs` | Relative time windows (`--last "2 days"`) as Polars expressions |
+| `src/Acrux.Core/ColumnCache.cs` | The file's columns, read as the screen reaches them and kept within half of the free memory |
+| `src/Acrux.Core/SystemMemory.cs` | The physical memory free right now, on Windows and Linux |
 | `src/Acrux.Core/PolarsTableAdapter.cs` | O(1) per-cell reads from Arrow arrays, for every column type |
 | `src/Acrux.Core/ScriptHost.cs` | Roslyn evaluation of chained Polars scripts |
 | `src/Acrux.WinForms/Program.cs` | Entry point: stale temp sweep and guaranteed process exit |
@@ -304,7 +314,7 @@ nothing at all.
 | `src/Acrux.WinForms/GridPainting.cs` | What the grid draws without changing the data: null, `###`, `↵`, the filter's `▼` |
 | `src/Acrux.WinForms/Theme.cs` | The app's colors: the brand where it reads, the system's everywhere else |
 | `src/Acrux.WinForms/MainForm.cs` | Virtual grid, file loading, filter orchestration |
-| `src/Acrux.WinForms/ColumnSelectorForm.cs` | Column picker shown on open |
+| `src/Acrux.WinForms/ColumnSelectorForm.cs` | The Columns dialog: which columns the grid shows |
 | `src/Acrux.WinForms/SheetSelectorForm.cs` | Sheet or table picker for .xlsx and SQLite |
 | `src/Acrux.WinForms/FilterPopupForm.cs` | Distinct-values popup |
 | `src/Acrux.WinForms/ScriptTerminalPanel.cs` | Terminal UI (bottom dock) |

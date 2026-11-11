@@ -12,7 +12,9 @@ namespace Acrux;
 ///   read as another number (922337203685… for a 19-digit value);
 /// - text with line breaks: one line, a "↵" where each break was;
 /// - a filtered column: a "▼" drawn at the header's right edge. The header
-///   text stays the column's real name, so a copy doesn't carry the glyph.
+///   text stays the column's real name, so a copy doesn't carry the glyph;
+/// - a column not in memory: a muted "…" while it loads, "error" when it
+///   could not be read (<see cref="CellPlaceholder"/>).
 /// </summary>
 internal sealed class GridPainting
 {
@@ -53,6 +55,9 @@ internal sealed class GridPainting
         {
             case DBNull:
                 DrawText(e, "null", _nullFont, Theme.Muted);
+                break;
+            case CellPlaceholder placeholder:
+                DrawText(e, placeholder.Text, _nullFont, placeholder.IsError ? Theme.Error : Theme.Muted);
                 break;
             case string text when text.AsSpan().IndexOfAny('\r', '\n') >= 0:
                 DrawText(e, text.ReplaceLineEndings(LineBreak), e.CellStyle.Font, e.CellStyle.ForeColor);
@@ -110,4 +115,21 @@ internal sealed class GridPainting
             | (e.CellStyle.Alignment == DataGridViewContentAlignment.MiddleRight ? TextFormatFlags.Right : TextFormatFlags.Left);
         return (area, flags);
     }
+}
+
+/// <summary>
+/// What a cell holds while its column is not in memory: never data. The copy
+/// loads the columns first, so it never carries one.
+/// </summary>
+internal sealed class CellPlaceholder
+{
+    public static readonly CellPlaceholder Loading = new("…", isError: false);
+    public static readonly CellPlaceholder Failed = new("error", isError: true);
+
+    public string Text { get; }
+    public bool IsError { get; }
+
+    private CellPlaceholder(string text, bool isError) => (Text, IsError) = (text, isError);
+
+    public override string ToString() => Text;
 }

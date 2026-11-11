@@ -386,9 +386,56 @@ detecção de separador na 1ª linha, `decimalComma` quando `;`, `ScanCsv` →
 `TextDates.ConvertParquet` reconhece as datas em texto; temp em
 `%TEMP%\Acrux`, apagado na troca/fechamento) —
 o app opera **somente sobre parquet** daí em diante, preservando o re-scan
-barato → `GetColumnNamesAsync` (só schema) → `ColumnSelectorForm` (usuário
-escolhe colunas) → `GetDataFrameAsync` (`Select` + `Collect`, projection
-pushdown) → `ToArrow()` → grid virtual.
+barato → `ColumnCache.OpenAsync` (schema Arrow e número de linhas, só
+metadados) → grid virtual com **todas** as colunas → cada coluna é lida
+quando chega à tela (ver "O cache de colunas", abaixo). O botão "Columns"
+(`ColumnSelectorForm`) esconde e mostra colunas: a escondida fica no grid com
+`Visible = false`, para o índice da coluna no grid ser sempre o do arquivo.
+
+**O cache de colunas** (`ColumnCache`, desenho aprovado em 2026-11-10): o
+grid abre o arquivo inteiro, de qualquer largura. Antes, abrir as 700
+colunas × 5M pedia ~25 GB e derrubava o processo (ver "Memória", nas
+Armadilhas).
+- **Uma coluna por `Collect`**, inteira (todas as linhas), em paralelo:
+  descartar uma coluna de um lote importado não devolve nada (ver
+  Armadilhas), e 15 `Collect`s paralelos levaram 174 ms contra 299 de um só
+  (VM de 8 núcleos).
+- **Teto = (memória disponível + o próprio cache) ÷ 2** (direção do dono:
+  "o quanto está disponível", na referência de um PC de 16 GB com o Chrome,
+  ~8 GB livres). O cache entra na conta para o teto não encolher enquanto
+  ele cresce. "Disponível" é o do Gerenciador de Tarefas
+  (`GlobalMemoryStatusEx`; `MemAvailable` no Linux, em `SystemMemory`), a
+  RAM física, não o limite de commit. Sem teto fixo: máquina com folga
+  guarda o arquivo inteiro.
+- **Despeja antes de carregar**, a coluna usada há mais tempo primeiro, pelo
+  tamanho esperado do que vai chegar (largura do tipo; texto, 16 B por
+  linha até a 1ª coluna do tipo chegar, depois a média medida). O pico fica
+  no teto mais uma tela em carga (~600 MB na VM). Despejando depois, o pico
+  subia de 1,7 para 2,1 GB.
+- **Fixadas:** as colunas do último `EnsureAsync` (a tela mais meia tela de
+  cada lado) nunca saem; a tela sempre carrega, mesmo além do teto.
+- **Reavaliado** antes de cada carga e a cada 5 s (`Trim`): se outro
+  programa toma memória, o teto cai e o cache solta colunas fora da tela.
+  Com uma carga em andamento, o teto não é recalculado: a memória de
+  trabalho dela pareceria ocupada.
+- **Uma thread só:** o cache é chamado da thread da UI; as cargas rodam no
+  pool e voltam pelo contexto de sincronização para guardar a coluna e
+  descartar as velhas. Assim, uma célula nunca lê um buffer no meio de um
+  `Dispose`. Uma TUI ou o Avalonia precisam do mesmo contexto.
+- **No grid:** a célula de coluna fora da memória mostra `…` cinza
+  (`CellPlaceholder`, desenhado pelo `GridPainting`), ou `error` se a
+  leitura falhou (a coluna não é tentada de novo). Cada falta reinicia um
+  timer de 100 ms, e a carga só começa quando o grid para de rolar. A
+  barra de status diz quantas colunas estão na memória, contra o teto.
+- **Ctrl+C** (e Ctrl+Shift+C, Ctrl+Insert) carrega antes as colunas da
+  seleção; se elas não cabem juntas no teto, avisa em vez de copiar pela
+  metade.
+- Medido pelo `Acrux.Core`, no laptop (2026-11-10): rolar as 700 colunas
+  em telas de 15, com 8 de margem, deu ~100 ms por tela; com o teto de
+  3,8 GB (metade de 7,6 livres), 96 colunas ficaram na memória, e voltar 9
+  telas não leu nada. Células conferidas contra um `Collect` direto: 75
+  milhões nas 15 primeiras colunas e os 20 tipos do `tipos.parquet`, sem
+  diferença.
 
 Ciclo de vida do processo: `Program.Main` termina com `Environment.Exit(0)`
 (garantia contra threads estrangeiras — Polars/rayon, Roslyn — segurarem um
@@ -411,8 +458,9 @@ Terminal C# (botão "C# terminal"): scripts Roslyn encadeados por **replay** —
 `MainForm._scriptChain` guarda os textos dos passos; cada execução re-roda a
 cadeia inteira sobre um `ScanParquet` fresco, com o passo N recebendo em `lf`
 o `LazyFrame` (plano lazy, não dados) do passo N-1. O passo 1 recebe o arquivo
-**como exibido no grid**: seleção de colunas + filtros ativos aplicados como
-"passo 0" implícito (`FilterEngine.BuildPredicate` público é reutilizado).
+**como exibido no grid**: colunas visíveis + filtros ativos aplicados como
+"passo 0" implícito (`FilterEngine.BuildPredicate` público é reutilizado), o
+filtro antes do `Select`, porque o filtro pode estar numa coluna escondida.
 Esse estado visual é **congelado no 1º passo** (`_chainBaseColumns`/
 `_chainBaseFilters`) — obrigatório, pois o replay re-executa tudo a cada
 comando e a base não pode derivar; "Restore file"/novo arquivo zeram a base.
@@ -423,7 +471,9 @@ opcional) → `ToArrow` → `DisplayBatch` (caminho único de exibição). Passo
 termina em `DataFrame` (ex.: `.Collect()`) volta ao lazy via `df.Lazy()`
 (validado; os dados dele ficam materializados no plano durante o replay).
 Um passo com erro não entra na cadeia. "Undo step" remove o último e
-re-executa; "Restore file" zera a cadeia. Imports do script:
+re-executa; "Restore file" zera a cadeia e volta ao arquivo sem ler nada: o
+cache de colunas continua vivo sob o resultado do script, sem colunas
+fixadas. Imports do script:
 `Polars.CSharp` + estáticos (`Col`/`Lit`). Em modo script (`_scriptMode`) os
 filtros de cabeçalho ficam desativados — o grid não espelha mais o arquivo —
 até "Restore file" (decisão V1; a V2 composável exigiria FilterEngine
@@ -433,6 +483,8 @@ aceitar fonte lazy genérica).
 |---|---|
 | `src/Acrux.Core/DataFrameProvider.cs` | Detecção de formato pelo conteúdo, conversão para parquet, leitura via LazyFrame |
 | `src/Acrux.Core/FilterEngine.cs` | Filtros via Polars (distintos, máscara e contagem), todos recebendo o filtro como `Expr` |
+| `src/Acrux.Core/ColumnCache.cs` | As colunas do arquivo, lidas quando chegam à tela e guardadas até metade da memória livre |
+| `src/Acrux.Core/SystemMemory.cs` | A memória física disponível agora, no Windows e no Linux |
 | `src/Acrux.Core/PolarsTableAdapter.cs` | `GetCellValue`: leitura O(1) por célula do Arrow |
 | `src/Acrux.Core/ScriptHost.cs` | Terminal C#: avaliação Roslyn de scripts Polars |
 | `src/Acrux.Core/TextDates.cs` | Datas guardadas como texto (CSV, SQLite) viram data só quando não há ambiguidade |
@@ -442,8 +494,8 @@ aceitar fonte lazy genérica).
 | `src/Acrux.WinForms/AppIcon.cs` | Ícone das janelas, lido do `.ico` embutido |
 | `src/Acrux.WinForms/GridPainting.cs` | O que o grid desenha sem mudar o dado: nulo, `###`, `↵` e o `▼` do filtro |
 | `src/Acrux.WinForms/Theme.cs` | Cores do app: a marca onde se lê, as do sistema no resto; modo claro e escuro |
-| `src/Acrux.WinForms/MainForm.cs` | Grid virtual, carga do arquivo, costura dos filtros |
-| `src/Acrux.WinForms/ColumnSelectorForm.cs` | Diálogo de seleção de colunas na abertura |
+| `src/Acrux.WinForms/MainForm.cs` | Grid virtual sobre o cache de colunas, carga do arquivo, costura dos filtros, Ctrl+C |
+| `src/Acrux.WinForms/ColumnSelectorForm.cs` | O diálogo do botão "Columns": quais colunas o grid mostra |
 | `src/Acrux.WinForms/SheetSelectorForm.cs` | Diálogo de escolha da aba do xlsx ou da tabela do SQLite (2+) |
 | `src/Acrux.WinForms/FilterPopupForm.cs` | Popup de filtro aberto pelo cabeçalho da coluna |
 | `src/Acrux.WinForms/ScriptTerminalPanel.cs` | UI do terminal (painel inferior do MainForm) |
@@ -451,10 +503,13 @@ aceitar fonte lazy genérica).
 
 ### Princípios de design (não violar)
 
-1. **Zero materialização**: os dados vivem só no `RecordBatch` Arrow
-   (`_batch`). Células são lidas por demanda em `CellValueNeeded` via
-   `PolarsTableAdapter.GetCellValue`. NUNCA converter colunas inteiras em
-   `object[]` — com milhões de linhas isso esgota a RAM e trava a máquina.
+1. **Zero materialização**: os dados vivem só em buffers Arrow: os do
+   arquivo no `ColumnCache`, uma coluna por lote, até metade da memória
+   livre; o resultado de um script no `_batch`. Células são lidas por demanda
+   em `CellValueNeeded` via `PolarsTableAdapter.GetCellValue`. NUNCA
+   converter colunas inteiras em `object[]` — com milhões de linhas isso
+   esgota a RAM e trava a máquina. E nunca carregar todas as colunas de uma
+   vez: num arquivo largo, o processo cai sem exceção (ver Armadilhas).
 2. **Indireção de índices**: filtros (e futura ordenação) produzem `int[]`
    de índices (`_filteredRows`), nunca cópias dos dados. Recalculados sempre
    a partir do original + conjunto de filtros ativos (`_activeFilters`),
@@ -467,6 +522,25 @@ aceitar fonte lazy genérica).
    buffers é transferida; verificado por teste).
 
 ## Armadilhas conhecidas (custaram debugging real)
+
+### Memória (o cache de colunas, 2026-11-10)
+- **Faltou memória, o processo morre sem exceção.** Abrir as 700 colunas ×
+  5M no app (todas de uma vez) levou o `Acrux.exe` a 14,3 GB na VM (8 GB +
+  7,7 GB de paginação), e o `native_shim.dll` encerrou o processo com
+  `0xc0000409`: o Rust aborta quando uma alocação falha, e nenhum
+  `try/catch` do .NET pega. Por isso o cache de colunas, e não um aviso.
+- **Descartar uma coluna de um lote importado do Polars não devolve
+  memória:** o `RecordBatch` do `ToArrow()` é liberado inteiro, no
+  `Dispose` do lote. Para soltar colunas uma a uma, cada uma vem do seu
+  `Collect` (probe no laptop).
+- **O heap do Windows devolve a memória; o glibc do Linux, não.** Na VM,
+  depois do `Dispose`, o processo voltou a ~12 MB. No laptop (32 threads),
+  o glibc segurou ~1 GB a mais (uma arena por thread): com o teto de 1 GB,
+  o pico de `RssAnon` foi 2,3 GB; com `MALLOC_ARENA_MAX=4`, 1,9 GB, e o
+  `malloc_trim(0)` volta ao tamanho do cache. Uma tela de Linux (TUI,
+  Avalonia) vai precisar dos dois.
+- **Memória no Windows se mede pelos bytes privados**
+  (`Process.PrivateMemorySize64`), o equivalente do `RssAnon`.
 
 ### Polars.NET 1.0.1 (0.4.0 → 0.6.0 em 2026-07, por probe; → 1.0.1 em 2026-11-08)
 - **No Windows, o nativo do Polars exige o runtime do Visual C++.** O
@@ -725,6 +799,16 @@ aceitar fonte lazy genérica).
   erro do .NET). Achado pelo dono na VM, em 2026-11-10: filtrar o
   `tipos.parquet` com a célula atual na linha 3. Estava assim desde
   2026-09.
+- **O grid copia por dois caminhos** (código do .NET 10). Ctrl+C e
+  Ctrl+Insert são teclas de entrada (`IsInputKey`): passam pelo evento
+  `KeyDown`, que pode parar a cópia com `e.Handled`. O Ctrl+Shift+C não é,
+  e o `ProcessDialogKey` copia antes de qualquer `KeyDown`. Para carregar as
+  colunas da seleção antes de copiar, o app marca o Ctrl+Shift+C como tecla
+  de entrada no `PreviewKeyDown` e trata as três no `KeyDown`.
+- **O Ctrl+A seleciona célula por célula** (`SelectAll` em `CellSelect`; o
+  próprio código diz "Bonjour the scalability issues!") e desfaz o
+  compartilhamento de cada linha: num arquivo de milhões de linhas, trava.
+  Não tratado ainda.
 - **Cor de fundo no cabeçalho exige `EnableHeadersVisualStyles = false`:**
   com os estilos visuais ligados, o cabeçalho ignora `BackColor`. Desligados,
   ele fica plano e segue o modo escuro.
