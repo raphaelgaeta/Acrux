@@ -93,6 +93,11 @@ public static class TimeFilter
     /// columns, in memory — past 8 GB on a 700-column file, even with the
     /// streaming engine or TopK (measured 2026-11-08). Consumes
     /// <paramref name="source"/>.
+    /// The streaming engine runs it: the in-memory one materializes the row
+    /// index, the instants and the mask for every row, 5.5 GB and 2.8 s on
+    /// 100M rows, where streaming takes 1.2 GB and 0.44 s (bench/, 2026-11-12).
+    /// Only two columns flow through here, so the wide-row trap above doesn't
+    /// apply.
     /// </summary>
     public static long[] NewestRows(LazyFrame source, string column, DataType type,
         DateTimeOffset since, DateTimeOffset until, uint count)
@@ -103,7 +108,7 @@ public static class TimeFilter
         using var pairs = window.Select(Col(Row), Col(column));
         using var newest = pairs.Sort([(column, true), (Row, false)]);
         using var first = newest.Limit(count);
-        using var df = first.Collect();
+        using var df = first.Collect(Engine.Streaming);
         using var batch = df.ToArrow();
         var rows = new long[batch.Length];
         for (int i = 0; i < rows.Length; i++)
