@@ -1,0 +1,274 @@
+{
+ "width": 785,
+ "height": 598,
+ "read_ms": [
+  1200,
+  200,
+  3500
+ ],
+ "history": true,
+ "panes": [
+  {
+   "title": "python3 — pandas 3.0.6",
+   "prompt": ">>> ",
+   "scenes": [
+    [
+     {
+      "cmd": "import pandas as pd",
+      "seconds": 0.165,
+      "out": [],
+      "raw": [],
+      "error": false
+     },
+     {
+      "cmd": "df = pd.read_csv(\"vendas.csv\")",
+      "seconds": 0.0,
+      "out": [
+       "Traceback (most recent call last):",
+       "  …",
+       "UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe3 in position 50: invalid continuation byte"
+      ],
+      "raw": [
+       "Traceback (most recent call last):",
+       "  File \"<string>\", line 10, in <module>",
+       "    exec(compile(src, \"<stdin>\", \"single\"), ns)",
+       "    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+       "  File \"<stdin>\", line 1, in <module>",
+       "  File \"~/.local/lib/python3.14/site-packages/pandas/io/parsers/readers.py\", line 872, in read_csv",
+       "    return _read(filepath_or_buffer, kwds)",
+       "  File \"~/.local/lib/python3.14/site-packages/pandas/io/parsers/readers.py\", line 300, in _read",
+       "    parser = TextFileReader(filepath_or_buffer, **kwds)",
+       "  File \"~/.local/lib/python3.14/site-packages/pandas/io/parsers/readers.py\", line 1643, in __init__",
+       "    self._engine = self._make_engine(f, self.engine)",
+       "                   ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^",
+       "  File \"~/.local/lib/python3.14/site-packages/pandas/io/parsers/readers.py\", line 1925, in _make_engine",
+       "    return mapping[engine](f, **self.options)",
+       "           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^",
+       "  File \"~/.local/lib/python3.14/site-packages/pandas/io/parsers/c_parser_wrapper.py\", line 95, in __init__",
+       "    self._reader = parsers.TextReader(src, **kwds)",
+       "                   ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^",
+       "  File \"pandas/_libs/parsers.pyx\", line 568, in pandas._libs.parsers.TextReader.__cinit__",
+       "  File \"pandas/_libs/parsers.pyx\", line 657, in pandas._libs.parsers.TextReader._get_header",
+       "  File \"pandas/_libs/parsers.pyx\", line 868, in pandas._libs.parsers.TextReader._tokenize_rows",
+       "  File \"pandas/_libs/parsers.pyx\", line 885, in pandas._libs.parsers.TextReader._check_tokenize_status",
+       "  File \"pandas/_libs/parsers.pyx\", line 2082, in pandas._libs.parsers.raise_parser_error",
+       "  File \"<frozen codecs>\", line 325, in decode",
+       "UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe3 in position 50: invalid continuation byte"
+      ],
+      "error": true
+     },
+     {
+      "cmd": "df = pd.read_csv(\"vendas.csv\", encoding=\"latin-1\")",
+      "seconds": 0.016,
+      "out": [],
+      "raw": [],
+      "error": false
+     },
+     {
+      "cmd": "df.head()",
+      "seconds": 0.002,
+      "out": [
+       "                                      data;cidade;produto;quantidade;valor",
+       "03/02/2026;São Paulo;Açaí;2;650                                         37",
+       "25/08/2026;Goiânia;Guaraná;4;124                                         2",
+       "16/01/2026;Goiânia;Guaraná;1;913                                         4",
+       "15/05/2026;Belém;Café;6;41                                               9",
+       "01/01/2026;Ribeirão Preto;Café;7;900                                    78"
+      ],
+      "raw": [
+       "                                      data;cidade;produto;quantidade;valor",
+       "03/02/2026;São Paulo;Açaí;2;650                                         37",
+       "25/08/2026;Goiânia;Guaraná;4;124                                         2",
+       "16/01/2026;Goiânia;Guaraná;1;913                                         4",
+       "15/05/2026;Belém;Café;6;41                                               9",
+       "01/01/2026;Ribeirão Preto;Café;7;900                                    78"
+      ],
+      "error": false
+     },
+     {
+      "cmd": "df = pd.read_csv(\"vendas.csv\", encoding=\"latin-1\", sep=\";\")",
+      "seconds": 0.011,
+      "out": [],
+      "raw": [],
+      "error": false
+     },
+     {
+      "cmd": "df[\"valor\"].mean()",
+      "seconds": 0.0,
+      "out": [
+       "Traceback (most recent call last):",
+       "  …",
+       "TypeError: Cannot perform reduction 'mean' with string dtype"
+      ],
+      "raw": [
+       "Traceback (most recent call last):",
+       "  File \"<string>\", line 10, in <module>",
+       "    exec(compile(src, \"<stdin>\", \"single\"), ns)",
+       "    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+       "  File \"<stdin>\", line 1, in <module>",
+       "  File \"~/.local/lib/python3.14/site-packages/pandas/util/_decorators.py\", line 336, in wrapper",
+       "    return func(*args, **kwargs)",
+       "  File \"~/.local/lib/python3.14/site-packages/pandas/core/series.py\", line 8113, in mean",
+       "    return NDFrame.mean(",
+       "           ~~~~~~~~~~~~^",
+       "        self, axis=axis, skipna=skipna, numeric_only=numeric_only, **kwargs",
+       "        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+       "    )",
+       "    ^",
+       "  File \"~/.local/lib/python3.14/site-packages/pandas/core/generic.py\", line 11819, in mean",
+       "    return self._stat_function(",
+       "           ~~~~~~~~~~~~~~~~~~~^",
+       "        \"mean\", nanops.nanmean, axis, skipna, numeric_only, **kwargs",
+       "        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+       "    )",
+       "    ^",
+       "  File \"~/.local/lib/python3.14/site-packages/pandas/core/generic.py\", line 11773, in _stat_function",
+       "    return self._reduce(",
+       "           ~~~~~~~~~~~~^",
+       "        func, name=name, axis=axis, skipna=skipna, numeric_only=numeric_only",
+       "        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+       "    )",
+       "    ^",
+       "  File \"~/.local/lib/python3.14/site-packages/pandas/core/series.py\", line 7480, in _reduce",
+       "    result = delegate._reduce(name, skipna=skipna, **kwds)",
+       "  File \"~/.local/lib/python3.14/site-packages/pandas/core/arrays/string_arrow.py\", line 564, in _reduce",
+       "    raise TypeError(f\"Cannot perform reduction '{name}' with string dtype\")",
+       "TypeError: Cannot perform reduction 'mean' with string dtype"
+      ],
+      "error": true
+     },
+     {
+      "cmd": "df = pd.read_csv(\"vendas.csv\", encoding=\"latin-1\", sep=\";\", decimal=\",\")",
+      "seconds": 0.009,
+      "out": [],
+      "raw": [],
+      "error": false
+     },
+     {
+      "cmd": "df[\"data\"] = pd.to_datetime(df[\"data\"])",
+      "seconds": 0.002,
+      "out": [
+       "Traceback (most recent call last):",
+       "  …",
+       "ValueError: time data \"25/08/2026\" doesn't match format \"%m/%d/%Y\". You might want to try:",
+       "    - passing `format` if your strings have a consistent format;",
+       "    - passing `format='ISO8601'` if your strings are all ISO8601 but not necessarily in exactly the same format;",
+       "    - passing `format='mixed'`, and the format will be inferred for each element individually. You might want to use `dayfirst` alongside this."
+      ],
+      "raw": [
+       "Traceback (most recent call last):",
+       "  File \"<string>\", line 10, in <module>",
+       "    exec(compile(src, \"<stdin>\", \"single\"), ns)",
+       "    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+       "  File \"<stdin>\", line 1, in <module>",
+       "  File \"~/.local/lib/python3.14/site-packages/pandas/core/tools/datetimes.py\", line 1036, in to_datetime",
+       "    cache_array = _maybe_cache(arg, format, cache, convert_listlike)",
+       "  File \"~/.local/lib/python3.14/site-packages/pandas/core/tools/datetimes.py\", line 254, in _maybe_cache",
+       "    cache_dates = convert_listlike(unique_dates, format)",
+       "  File \"~/.local/lib/python3.14/site-packages/pandas/core/tools/datetimes.py\", line 435, in _convert_listlike_datetimes",
+       "    return _array_strptime_with_fallback(arg, name, utc, format, exact, errors)",
+       "  File \"~/.local/lib/python3.14/site-packages/pandas/core/tools/datetimes.py\", line 470, in _array_strptime_with_fallback",
+       "    result, tz_out = array_strptime(arg, fmt, exact=exact, errors=errors, utc=utc)",
+       "                     ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+       "  File \"pandas/_libs/tslibs/strptime.pyx\", line 564, in pandas._libs.tslibs.strptime.array_strptime",
+       "  File \"pandas/_libs/tslibs/strptime.pyx\", line 512, in pandas._libs.tslibs.strptime.array_strptime",
+       "  File \"pandas/_libs/tslibs/strptime.pyx\", line 618, in pandas._libs.tslibs.strptime._parse_with_format",
+       "ValueError: time data \"25/08/2026\" doesn't match format \"%m/%d/%Y\". You might want to try:",
+       "    - passing `format` if your strings have a consistent format;",
+       "    - passing `format='ISO8601'` if your strings are all ISO8601 but not necessarily in exactly the same format;",
+       "    - passing `format='mixed'`, and the format will be inferred for each element individually. You might want to use `dayfirst` alongside this."
+      ],
+      "error": true
+     },
+     {
+      "cmd": "df[\"data\"] = pd.to_datetime(df[\"data\"], dayfirst=True)",
+      "seconds": 0.003,
+      "out": [],
+      "raw": [],
+      "error": false
+     },
+     {
+      "cmd": "df.dtypes",
+      "seconds": 0.0,
+      "out": [
+       "data          datetime64[us]",
+       "cidade                   str",
+       "produto                  str",
+       "quantidade             int64",
+       "valor                float64",
+       "dtype: object"
+      ],
+      "raw": [
+       "data          datetime64[us]",
+       "cidade                   str",
+       "produto                  str",
+       "quantidade             int64",
+       "valor                float64",
+       "dtype: object"
+      ],
+      "error": false
+     },
+     {
+      "cmd": "(df[\"cidade\"] == \"Belém\").sum()",
+      "seconds": 0.001,
+      "out": [
+       "np.int64(3960)"
+      ],
+      "raw": [
+       "np.int64(3960)"
+      ],
+      "error": false
+     }
+    ]
+   ]
+  },
+  {
+   "title": "bash — acrux",
+   "prompt": "$ ",
+   "scenes": [
+    [
+     {
+      "cmd": "acrux schema vendas.csv",
+      "seconds": 0.138,
+      "out": [
+       "data        date",
+       "cidade      str",
+       "produto     str",
+       "quantidade  i64",
+       "valor       f64"
+      ],
+      "error": false
+     },
+     {
+      "cmd": "acrux head vendas.csv -n 5",
+      "seconds": 0.201,
+      "out": [
+       "data       | cidade         | produto | quantidade | valor ",
+       "-----------+----------------+---------+------------+-------",
+       "2026-02-03 | São Paulo      | Açaí    | 2          | 650.37",
+       "2026-08-25 | Goiânia        | Guaraná | 4          | 124.02",
+       "2026-01-16 | Goiânia        | Guaraná | 1          | 913.04",
+       "2026-05-15 | Belém          | Café    | 6          | 41.09 ",
+       "2026-01-01 | Ribeirão Preto | Café    | 7          | 900.78",
+       "(5 rows × 5 columns)"
+      ],
+      "error": false
+     },
+     {
+      "cmd": "acrux rows vendas.csv --where cidade=Belém",
+      "seconds": 0.161,
+      "out": [
+       "3960"
+      ],
+      "error": false
+     }
+    ]
+   ]
+  }
+ ],
+ "versions": {
+  "python": "3.14.8",
+  "pandas": "3.0.6",
+  "acrux": "14b3a6a 2026-11-11 Merge pull request #19 from raphaelgaeta/feat/cli-linux-arm64"
+ }
+}

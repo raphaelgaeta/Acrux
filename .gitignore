@@ -80,5 +80,8 @@ Desktop.ini
 # The smoke test fixtures are part of the repo, whatever their extension
 !tests/smoke/fixtures/*
 
+# The recordings the README's GIFs are drawn from (docs/demo/README.md)
+!docs/demo/*.json
+
 # Notes for the maintainer's own machine, loaded by Claude Code (CLAUDE.md is the public one)
 CLAUDE.local.md
