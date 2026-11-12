@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Times the desktop app's grid setup (see README.md). Not in Acrux.sln:
+       a measuring tool, built on its own. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- the app's own code, so the probe measures what the app runs -->
+    <Compile Include="../../src/Acrux.WinForms/GridRows.cs" Link="GridRows.cs" />
+  </ItemGroup>
+</Project>

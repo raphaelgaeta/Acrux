@@ -54,6 +54,11 @@ public partial class MainForm : Form
     private readonly Dictionary<string, ColumnFilter> _activeFilters = new();
     private CancellationTokenSource? _filterCts;
     private CancellationTokenSource? _scriptCts;
+    // the grid's rows, in blocks when there are many (see GridRows)
+    private readonly GridRows _rows;
+    // builds running, and what the buttons were before the first: they wait for the rows
+    private int _rowBuilds;
+    private (bool Load, bool Columns, bool ClearFilters, bool Restore) _enabledBeforeRows;
 
 
 public MainForm(string? initialFile = null)
@@ -177,6 +182,7 @@ public MainForm(string? initialFile = null)
     _grid.DefaultCellStyle.WrapMode = DataGridViewTriState.False;
     Theme.StyleGrid(_grid);
     _painting = new GridPainting(_grid, column => _activeFilters.ContainsKey(column));
+    _rows = new GridRows(_grid);
 
     // supplies values only for visible cells
     _grid.CellValueNeeded += Grid_CellValueNeeded;
@@ -358,8 +364,8 @@ private async Task LoadFileAsync(string fileName)
         _btnTerminal.Enabled = true;
         _btnColumns.Enabled = true;
 
-        ShowFile();
-        UpdateInfo();
+        if (await ShowFileAsync())
+            UpdateInfo();
     }
     catch (Exception ex)
     {
@@ -389,6 +395,7 @@ private static void TryDeleteTemp(string path)
 
 protected override void OnFormClosed(FormClosedEventArgs e)
 {
+    _rows.Abandon();
     CloseResult();
     CloseCache();
     if (_tempParquetPath is not null)
@@ -403,6 +410,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
     /// </summary>
     private void ClearGrid()
     {
+        _rows.Abandon();
         _grid.Rows.Clear();
         _grid.Columns.Clear();
     }
@@ -410,16 +418,16 @@ protected override void OnFormClosed(FormClosedEventArgs e)
     /// <summary>
     /// The grid over the file: every column of the schema (the hidden ones
     /// with Visible = false), the rows through the current indirection. No
-    /// cell is read here; the columns load as the grid reaches them.
+    /// cell is read here; the columns load as the grid reaches them. Without
+    /// <paramref name="rows"/>, the caller sets them (the filters coming back).
     /// </summary>
-    private void ShowFile()
+    /// <returns>false when something else took the grid while the rows went in</returns>
+    private Task<bool> ShowFileAsync(bool rows = true)
     {
         AddColumns(_cache!.Fields, _hiddenColumns);
-        _rowCount = _cache.RowCount;
-        int count = _filteredRows?.Length ?? _rowCount;
-        if (count > 0)
-            _grid.RowCount = count;   // registers the total; no cells are populated
         UpdateHeaderIndicators();
+        _rowCount = _cache.RowCount;
+        return rows ? SetRowCountAsync(_filteredRows?.Length ?? _rowCount) : Task.FromResult(true);
     }
 
     /// <summary>
@@ -427,7 +435,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
     /// cache stays alive underneath, unpinned: its columns give way first when
     /// the result needs memory, and "Restore file" reads only what left.
     /// </summary>
-    private void ShowResult(ColumnCache result)
+    private Task<bool> ShowResultAsync(ColumnCache result)
     {
         ClearGrid();
         CloseResult();
@@ -438,8 +446,80 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         _cache?.Unpin();
 
         AddColumns(result.Fields, hidden: null);
-        if (_rowCount > 0)
-            _grid.RowCount = _rowCount;
+        return SetRowCountAsync(_rowCount);
+    }
+
+    /// <summary>
+    /// The rows of the empty grid. With many, they go in blocks (see
+    /// <see cref="GridRows"/>), with the count in the status bar; meanwhile
+    /// the first screen's columns load, and the buttons that would replace
+    /// the grid wait.
+    /// </summary>
+    /// <returns>false when something else took the grid meanwhile</returns>
+    private async Task<bool> SetRowCountAsync(int count)
+    {
+        if (count < GridRows.BlocksFrom)
+            return await _rows.SetAsync(count);
+
+        _ = LoadColumnsAsync(FirstScreenColumns());
+        if (_rowBuilds++ == 0)
+        {
+            _enabledBeforeRows = (_btnLoad.Enabled, _btnColumns.Enabled, _btnClearFilters.Enabled, _btnRestore.Enabled);
+            _btnLoad.Enabled = _btnColumns.Enabled = _btnClearFilters.Enabled = _btnRestore.Enabled = false;
+            _terminal.SetBusy(true);
+        }
+        try
+        {
+            return await _rows.SetAsync(count, (done, total) =>
+            {
+                _lblInfo.Text = $"Preparing the grid: {done:N0} of {total:N0} rows...";
+                PaintTopBar();
+            });
+        }
+        finally
+        {
+            if (--_rowBuilds == 0)
+            {
+                (_btnLoad.Enabled, _btnColumns.Enabled, _btnClearFilters.Enabled, _btnRestore.Enabled) = _enabledBeforeRows;
+                _terminal.SetBusy(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Paints the top bar now. Windows paints only when the queue is empty,
+    /// and between blocks it may never be: the count stood still, and when it
+    /// grew, the memory label moved and left its old text behind (seen on the
+    /// Windows 11 VM). The bar's background and each label are separate
+    /// windows, so each one is painted.
+    /// </summary>
+    private void PaintTopBar()
+    {
+        var bar = _lblInfo.Parent!;
+        bar.Update();
+        foreach (Control control in bar.Controls)
+            control.Update();
+    }
+
+    /// <summary>
+    /// The columns the first screen will show, and half a screen more, by
+    /// their widths: the grid can't say, because its columns hide while the
+    /// rows go in. Before them, so the data arrives with the rows.
+    /// </summary>
+    private List<int> FirstScreenColumns()
+    {
+        const DataGridViewElementStates visible = DataGridViewElementStates.Visible;
+        var columns = new List<int>();
+        int width = _grid.ClientSize.Width * 3 / 2;
+        int first = _grid.FirstDisplayedScrollingColumnIndex;
+        var column = first >= 0 ? _grid.Columns[first] : _grid.Columns.GetFirstColumn(visible);
+        for (int used = 0; column is not null && used < width;
+             column = _grid.Columns.GetNextColumn(column, visible, DataGridViewElementStates.None))
+        {
+            columns.Add(column.Index);
+            used += column.Width;
+        }
+        return columns;
     }
 
     private void AddColumns(IReadOnlyList<Field> fields, IReadOnlySet<string>? hidden)
@@ -483,9 +563,12 @@ protected override void OnFormClosed(FormClosedEventArgs e)
     private async void LoadTimer_Tick(object? sender, EventArgs e)
     {
         _loadTimer.Stop();
-        if (OnScreen is not { } cache) return;
-        var columns = ColumnsAroundView();
-        if (columns.Count == 0) return;
+        await LoadColumnsAsync(ColumnsAroundView());
+    }
+
+    private async Task LoadColumnsAsync(List<int> columns)
+    {
+        if (OnScreen is not { } cache || columns.Count == 0) return;
 
         try
         {
@@ -656,7 +739,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         return [.. columns];
     }
 
-    private void BtnColumns_Click(object? sender, EventArgs e)
+    private async void BtnColumns_Click(object? sender, EventArgs e)
     {
         if (_cache is not { } cache || _result is not null) return;
 
@@ -668,8 +751,8 @@ protected override void OnFormClosed(FormClosedEventArgs e)
         ClearGrid();
         _hiddenColumns.Clear();
         _hiddenColumns.UnionWith(names.Where(n => !shown.Contains(n)));
-        ShowFile();
-        UpdateInfo();
+        if (await ShowFileAsync())
+            UpdateInfo();
     }
 
     // the columns the grid shows, in file order; null when none is hidden (no Select)
@@ -754,8 +837,11 @@ protected override void OnFormClosed(FormClosedEventArgs e)
                 }
             }
 
-            ShowResult(result);
+            // script mode first: the rows take a while, and a header filter
+            // must not land on the result meanwhile
             EnterScriptMode();
+            if (!await ShowResultAsync(result))
+                return;
 
             var inherited = startingChain && baseFilters is { Count: > 0 }
                 ? $" — inheriting {baseFilters.Count} active filter(s)"
@@ -825,11 +911,14 @@ protected override void OnFormClosed(FormClosedEventArgs e)
             _btnColumns.Enabled = true;
             _chainBaseColumns = null;
             _chainBaseFilters = null;
-            ShowFile();
-            UpdateInfo();
 
-            // bring back the header filters that were active before the script
-            if (_activeFilters.Count > 0)
+            // the header filters that were active before the script come back,
+            // and they set the rows: all of them first would be wasted
+            bool filtered = _activeFilters.Count > 0;
+            if (!await ShowFileAsync(rows: !filtered))
+                return;
+            UpdateInfo();
+            if (filtered)
                 await ReapplyFiltersAsync();
         }
         catch (Exception ex)
@@ -939,13 +1028,12 @@ protected override void OnFormClosed(FormClosedEventArgs e)
             // end (IndexOutOfRange in a paint: red X, crash dialog).
             _grid.Rows.Clear();
             _filteredRows = rows;
-            int newCount = rows?.Length ?? _rowCount;
-            if (newCount > 0)
-                _grid.RowCount = newCount;
-            swGrid.Stop();
-
             UpdateHeaderIndicators();
             _btnClearFilters.Enabled = _activeFilters.Count > 0;
+            if (!await SetRowCountAsync(rows?.Length ?? _rowCount))
+                return;
+            swGrid.Stop();
+
             UpdateInfo();
             _lblInfo.Text += $"  [query {swQuery.ElapsedMilliseconds} ms | grid {swGrid.ElapsedMilliseconds} ms]";
         }
