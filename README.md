@@ -47,10 +47,9 @@ build needs glibc 2.39 or newer (Ubuntu 24.04, Debian 13, Fedora 40 and
 later), so it doesn't run on Debian 12, Raspberry Pi OS Bookworm or Ubuntu
 22.04 yet. Both requirements come from the Polars engine's native library.
 
-The files aren't code-signed yet, so on first run Windows SmartScreen warns
-about an unknown publisher: **More info → Run anyway**. Signing is on its way
-through the SignPath Foundation; see the [code signing policy](#code-signing-policy).
-Each release lists the SHA-256 of its files in `SHA256SUMS`.
+The files aren't code-signed, so on first run Windows SmartScreen warns about
+an unknown publisher: **More info → Run anyway**. Each release lists the
+SHA-256 of its files in `SHA256SUMS`.
 
 ## Why this exists
 
@@ -373,19 +372,12 @@ just don't expect an SLA. The desktop app is Windows-only (WinForms); the core
 and the command line run on Linux today and build for Windows too, and a
 cross-platform desktop front end is the next step being explored.
 
-## Code signing policy
+## Privacy
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/),
-certificate by [SignPath Foundation](https://signpath.org/). The application
-is under review, so the current releases are not signed yet.
-
-- Committers and reviewers: [raphaelgaeta](https://github.com/raphaelgaeta)
-- Approvers: [raphaelgaeta](https://github.com/raphaelgaeta)
-
-**Privacy:** this program will not transfer any information to other
-networked systems unless specifically requested by the user or the person
-installing or operating it. The installer's only download is the Microsoft
-Visual C++ runtime, from Microsoft, and only when it is missing
+Acrux doesn't send any information to other networked systems unless the
+person using it asks it to (a script in the C# terminal can, like any code).
+The installer's only download is the Microsoft Visual C++ runtime, from
+Microsoft, and only when it is missing
 ([Microsoft's privacy statement](https://privacy.microsoft.com/privacystatement)).
 
 ## License
