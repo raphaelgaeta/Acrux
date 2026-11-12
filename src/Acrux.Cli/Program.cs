@@ -312,7 +312,7 @@ static void PrintWindow(Func<LazyFrame> source, string column, DateTimeOffset si
     long total;
     using (var lf = source())
     using (var matching = lf.Filter(TimeFilter.Between(column, type, since, until)))
-    using (var count = matching.Select(Col(column).Count()).Collect())
+    using (var count = matching.Select(Col(column).Count()).Collect(Engine.Streaming))   // the same reason as NewestRows
     using (var countBatch = count.ToArrow())
         total = Convert.ToInt64(PolarsTableAdapter.GetCellValue(countBatch.Column(0), 0), CultureInfo.InvariantCulture);
 

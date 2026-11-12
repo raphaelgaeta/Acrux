@@ -691,7 +691,8 @@ o `Describe` lê a mensagem na cultura invariante.
   - `Slice(posição, 1)` por linha: **o DataFrame de uma linha prende o bloco
     decodificado inteiro** (~13 MB por linha com 700 colunas) enquanto vive;
   - o que funciona: as posições pela coluna de tempo
-    (`TimeFilter.NewestRows`, 0,1 s) e cada linha virando texto logo depois
+    (`TimeFilter.NewestRows`, 0,1 s, no motor de streaming desde
+    2026-11-12) e cada linha virando texto logo depois
     do `Slice`, com o DataFrame descartado (`PrintWindow` no CLI): 0,6 GB
     com 10 ou 100 linhas.
 
@@ -791,8 +792,18 @@ o `Describe` lê a mensagem na cultura invariante.
   (700col×5M, cache quente): `Auto`/`InMemory`/`Streaming` empatam em carga
   com projeção, máscara de filtro e groupby (diferenças = ruído de dezenas
   de ms); a única vitória consistente é `Streaming` ~2× em `Unique+Sort+
-  Limit` — por isso só `GetDistinctValuesAsync` usa `Collect(Engine.
-  Streaming)`. Não criar seletor de engine sem novo dado que o justifique.
+  Limit` — por isso o `GetDistinctValuesAsync` usa `Collect(Engine.
+  Streaming)`. **O dado novo veio do benchmark num arquivo alto** (10
+  colunas × 100M linhas, 2026-11-12): sobre poucas colunas e muitas linhas,
+  o motor em memória materializa cada expressão intermediária para todas
+  as linhas. As posições do `filter --last` (`NewestRows`) caíram de
+  5,5 GB e 2,8 s para 1,2 GB e 0,44 s com `Streaming`, e a contagem do
+  mesmo comando foi junto. O comando inteiro, de 3,0 s e 6,0 GB para 0,9 s
+  e 1,2 GB no "PC comum" do `bench/`; no arquivo largo, de 313 para 94 MB.
+  Agrupar também cairia (2,3 GB → 169 MB, por probe), mas o resultado do
+  terminal passa pelo `PlanOrder`, medido com o motor em memória: revalidar
+  a ordem antes de trocar ali. Escolher o motor por consulta, medindo; nada
+  de seletor para o usuário.
 - Strings continuam chegando como `StringViewArray` (não `StringArray`).
 - **Tipo de array sem `case` no `PolarsTableAdapter.GetCellValue` cai no
   `_ => array.ToString()`, e a célula mostra o *nome do tipo* do array.**
