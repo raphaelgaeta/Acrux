@@ -470,7 +470,8 @@ detecção de separador na 1ª linha, `decimalComma` quando `;`, `ScanCsv` →
 `%TEMP%\Acrux`, apagado na troca/fechamento) —
 o app opera **somente sobre parquet** daí em diante, preservando o re-scan
 barato → `ColumnCache.OpenAsync` (schema Arrow e número de linhas, só
-metadados) → grid virtual com **todas** as colunas → cada coluna é lida
+metadados) → grid virtual com **todas** as colunas, e as linhas em blocos
+(`GridRows`, ver Armadilhas) → cada coluna é lida
 quando chega à tela (ver "O cache de colunas", abaixo). O botão "Columns"
 (`ColumnSelectorForm`) esconde e mostra colunas: a escondida fica no grid com
 `Visible = false`, para o índice da coluna no grid ser sempre o do arquivo.
@@ -631,6 +632,7 @@ o `Describe` lê a mensagem na cultura invariante.
 | `src/Acrux.WinForms/GridPainting.cs` | O que o grid desenha sem mudar o dado: nulo, `###`, `↵` e o `▼` do filtro |
 | `src/Acrux.WinForms/Theme.cs` | Cores do app: a marca onde se lê, as do sistema no resto; modo claro e escuro |
 | `src/Acrux.WinForms/MainForm.cs` | Grid virtual sobre o cache de colunas, carga do arquivo, costura dos filtros, Ctrl+C |
+| `src/Acrux.WinForms/GridRows.cs` | As linhas do grid: com muitas, em blocos e com as colunas escondidas, sem congelar a janela |
 | `src/Acrux.WinForms/ColumnSelectorForm.cs` | O diálogo do botão "Columns": quais colunas o grid mostra |
 | `src/Acrux.WinForms/SheetSelectorForm.cs` | Diálogo de escolha da aba do xlsx ou da tabela do SQLite (2+) |
 | `src/Acrux.WinForms/FilterPopupForm.cs` | Popup de filtro aberto pelo cabeçalho da coluna |
@@ -973,6 +975,40 @@ o `Describe` lê a mensagem na cultura invariante.
 ### DataGridView (modo virtual)
 - **Diminuir `RowCount` remove linhas uma a uma** (minutos com milhões de
   linhas). Caminho rápido: `Rows.Clear()` (O(1)) e então setar o novo valor.
+- **Aumentar `RowCount` custa tempo por linha e por coluna** (código do
+  .NET 10; medido em 2026-11-12). Cada linha nova passa por
+  `AddCopiesPrivate` → `OnAddedRow_PostNotification` →
+  `AdjustExpandingColumns`, que percorre as colunas visíveis mesmo com
+  `AutoSizeColumnsMode.None`, e a coluna escondida ainda custa uma varredura
+  (`GetFirstColumn`). O arquivo de 5M × 700 deixou a janela branca por 47 s
+  num notebook de 2017 (i7-7500U), antes da primeira tela, e por 13 s no
+  laptop pelo Wine. O benchmark não viu, porque passa pelo Core, sem o grid.
+  Nenhuma propriedade mudou o custo: estilos de cabeçalho, linhas antes das
+  colunas (pior), grid escondido, `DoubleBuffered`, seleção. Por isso o
+  `GridRows`: a partir de 100 mil linhas, as colunas se escondem (metade do
+  custo) e as linhas entram em blocos de ~0,5 s, com a contagem na barra; a
+  primeira tela começa a carregar antes. No laptop, pelo `GridProbe`, de
+  13,4 s com a janela parada para 7,1 s com ela atendendo (uma mensagem
+  esperou no máximo 0,64 s). No app, pelo Wine, abrir levou 7,1 s, e a maior
+  espera foi de 1,4 s, uma vez, ao trocar as colunas pelo "Columns": fora dos
+  blocos, que não passam de 0,6 s. Vale para abrir, filtrar, limpar filtro,
+  "Columns", script e "Restore file". O custo continua proporcional às linhas: o remédio de vez
+  é uma grade que não tem uma linha por linha do arquivo (a do Avalonia).
+  `bench/GridProbe` mede de novo, com o próprio `GridRows.cs`.
+- **Entre um bloco e outro, `await Task.Delay(1)`, não `Task.Yield()`:** a
+  continuação do `Yield` é uma mensagem postada, que o Windows entrega
+  antes de clique e pintura, e a janela continuaria parada. E um `Timer` do
+  WinForms não mede se a janela atende: o `WM_TIMER` só sai com a fila
+  vazia, e entre os blocos ele nunca disparou. O `GridProbe` mede postando
+  uma mensagem a cada 10 ms. **A pintura também só sai com a fila vazia:**
+  no primeiro teste pelo Wine, a barra ficou em "Reading schema..." a
+  montagem inteira, com o texto trocando por baixo. O progresso se pinta na
+  hora, com `Update()`.
+- **Enquanto as linhas entram, os botões que trocariam o grid esperam**
+  ("Open file", "Columns", "Clear all filters", "Restore file" e o
+  terminal): o `MainForm` guarda o estado deles e o devolve no fim. O modo
+  script liga **antes** das linhas do resultado, para um filtro de
+  cabeçalho não cair sobre ele no meio.
 - `FillWeight` padrão é 100 com soma máxima 65535 → mais de ~655 colunas
   estoura. Toda coluna criada recebe `FillWeight = 1`.
 - Colunas do grid: `Name` e `HeaderText` são sempre o nome real da coluna

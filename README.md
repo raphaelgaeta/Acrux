@@ -159,6 +159,10 @@ nothing downstream can tell.
   ones you don't want to see. Height is the limit for now: each column on
   screen is held whole, so with 100 million rows the first screen needs
   10 to 12 GB ([benchmarks](docs/benchmarks.md#what-the-tall-files-first-screen-needs)).
+  Height costs time too: the Windows grid sets up every row before the
+  first screen, and a row costs more the more columns the file has. With
+  the 5-million-row, 700-column test file that takes several seconds, more
+  on an older PC, with the rows counted in the status bar meanwhile.
 - **Filter like Excel.** Click a header, get the distinct values (blanks
   included), check what you want. Filters compose across columns.
 - **The grid never bends the data to fit the screen.** A missing value shows
