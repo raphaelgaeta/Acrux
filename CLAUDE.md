@@ -413,8 +413,9 @@ verdade (8 GB, 2017) está prevista.
     não o número de colunas (no arquivo largo, todas de uma vez é o mais
     rápido), e para PCs com menos memória que as colunas, carregar faixas de
     linhas;
-  - no mesmo arquivo, `filter --last` usa 5,9 GB (o DuckDB, 141 MB) e o
-    agrupar pelo Core, 2,3 GB (o Polars 2.1 do Python, 340 MB).
+  - no mesmo arquivo, o agrupar pelo Core usa 2,3 GB (o Polars 2.1 do
+    Python, 330 MB). O `filter --last` usava 5,9 GB e caiu para 1,2 GB com
+    o motor de streaming (PR #20; o DuckDB, ~0,2 GB).
 - **`bench/results/` guarda os JSON de cada rodada,** com a máquina e as
   versões, e as tabelas do documento saem deles (`summary.py`,
   `screen_memory.py`). Mudou o Acrux? Rode de novo e compare.

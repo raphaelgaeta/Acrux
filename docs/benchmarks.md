@@ -5,7 +5,7 @@ Polars and DuckDB (the Python package and the command line). The same
 questions, on the same files and machine, with every answer checked against
 the others. It runs from [`bench/`](../bench), and anyone can repeat it.
 
-Measured on 2026-11-12, Acrux at commit `14b3a6a` (Polars.NET 1.0.1).
+Measured on 2026-11-12, Acrux as of `6e77333` (Polars.NET 1.0.1).
 
 ## The short version
 
@@ -27,7 +27,10 @@ Measured on 2026-11-12, Acrux at commit `14b3a6a` (Polars.NET 1.0.1).
   10 to 12 GB, where Polars and DuckDB hold the same columns in 7.3. Loading
   one column at a time brings it to 8 GB, still at the edge (below); a file
   that tall on a PC with less free memory needs the grid to load row ranges
-  instead. DuckDB is the best tool on the tall file overall.
+  instead. DuckDB is the best tool on the tall file overall. The benchmark
+  already fixed one thing there: the time filter moved to the streaming
+  engine (PR #20), and the 10 newest rows went from 3.0 s and 5.9 GB to
+  0.93 s and 1.2 GB.
 - **Raw speed is not the point.** Acrux runs on Polars, so it can't be faster
   than Polars in the hands of someone who knows it. What it adds is getting
   there without knowing the shortcuts, and a grid to scroll and filter.
@@ -69,7 +72,7 @@ planned as a check.
 
 | | version |
 |---|---|
-| Acrux | `14b3a6a`, Polars.NET 1.0.1 (Rust Polars 0.55.2), .NET 10 |
+| Acrux | `6e77333`, Polars.NET 1.0.1 (Rust Polars 0.55.2), .NET 10 |
 | pandas | 3.1.1, pyarrow 26.0.1 |
 | Polars | 2.1.0 (a newer release of the same engine) |
 | DuckDB | 2.0.0, Python and the command line |
@@ -109,29 +112,29 @@ Each cell is the median time and the peak memory.
 
 | | pandas | Polars | DuckDB | DuckDB CLI | Acrux |
 |---|---|---|---|---|---|
-| First 10 rows, all columns | 2.98 s · 818 MB | 0.75 s · 402 MB | 1.10 s · 605 MB | 0.91 s · 598 MB | 0.77 s · 41 MB |
-| ↳ the whole file first (`read_parquet`) | **out of memory** after 7.0 s | **out of memory** after 70.3 s |  |  |  |
-| A screenful in memory, ready to scroll | 1.06 s · 2.1 GB | 0.85 s · 1.0 GB | 0.94 s · 1.3 GB | — | 0.60 s · 1019 MB |
-| Count the rows | 0.02 s · 80 MB | 0.01 s · 38 MB | 0.04 s · 43 MB | 0.07 s · 30 MB | 0.07 s · 16 MB |
-| Column names and types | 0.02 s · 80 MB | 0.01 s · 37 MB | 0.07 s · 47 MB | 0.07 s · 33 MB | 0.07 s · 14 MB |
-| Count rows where a column equals a value | 0.07 s · 160 MB | 0.02 s · 49 MB | 0.05 s · 52 MB | 0.08 s · 41 MB | 0.12 s · 40 MB |
-| Distinct values of a column | 0.13 s · 335 MB | 0.04 s · 97 MB | 0.07 s · 54 MB | 0.08 s · 39 MB | 0.12 s · 75 MB |
-| Group and sum | 0.17 s · 423 MB | 0.07 s · 201 MB | 0.10 s · 128 MB | 0.12 s · 117 MB | 0.10 s · 147 MB |
-| The 10 newest rows, all columns | **out of memory** after 12.8 s | 18.51 s · 3.5 GB | 1.24 s · 678 MB | 1.18 s · 680 MB | 1.43 s · 312 MB |
+| First 10 rows, all columns | 2.98 s · 816 MB | 0.75 s · 401 MB | 0.96 s · 608 MB | 0.89 s · 595 MB | 0.78 s · 41 MB |
+| ↳ the whole file first (`read_parquet`) | **out of memory** after 7.5 s | **out of memory** after 68.0 s |  |  |  |
+| A screenful in memory, ready to scroll | 1.05 s · 2.1 GB | 0.86 s · 1.0 GB | 0.94 s · 1.3 GB | — | 0.61 s · 972 MB |
+| Count the rows | 0.02 s · 80 MB | 0.01 s · 38 MB | 0.04 s · 46 MB | 0.07 s · 32 MB | 0.07 s · 16 MB |
+| Column names and types | 0.02 s · 80 MB | 0.01 s · 37 MB | 0.06 s · 48 MB | 0.07 s · 33 MB | 0.07 s · 14 MB |
+| Count rows where a column equals a value | 0.07 s · 160 MB | 0.02 s · 50 MB | 0.05 s · 53 MB | 0.08 s · 41 MB | 0.13 s · 39 MB |
+| Distinct values of a column | 0.14 s · 318 MB | 0.04 s · 91 MB | 0.07 s · 53 MB | 0.08 s · 41 MB | 0.13 s · 75 MB |
+| Group and sum | 0.17 s · 431 MB | 0.07 s · 200 MB | 0.10 s · 126 MB | 0.12 s · 119 MB | 0.10 s · 148 MB |
+| The 10 newest rows, all columns | **out of memory** after 14.1 s | 18.52 s · 3.5 GB | 1.05 s · 692 MB | 1.07 s · 665 MB | 1.20 s · 100 MB |
 
 #### 10 columns × 100M rows (2.6 GB)
 
 | | pandas | Polars | DuckDB | DuckDB CLI | Acrux |
 |---|---|---|---|---|---|
-| First 10 rows, all columns | 0.73 s · 115 MB | 0.01 s · 40 MB | 0.10 s · 126 MB | 0.13 s · 107 MB | 0.10 s · 13 MB |
-| ↳ the whole file first (`read_parquet`) | **out of memory** after 5.5 s | 6.57 s · 7.2 GB |  |  |  |
-| A screenful in memory, ready to scroll | **out of memory** after 5.2 s | 6.29 s · 7.2 GB | 5.25 s · 7.3 GB | — | **out of memory** after 5.6 s |
-| Count the rows | 0.01 s · 66 MB | 0.00 s · 32 MB | 0.03 s · 32 MB | 0.05 s · 20 MB | 0.07 s · 10 MB |
-| Column names and types | 0.01 s · 66 MB | 0.00 s · 30 MB | 0.03 s · 33 MB | 0.05 s · 18 MB | 0.07 s · 8 MB |
-| Count rows where a column equals a value | 0.80 s · 270 MB | 0.18 s · 103 MB | 0.17 s · 54 MB | 0.20 s · 41 MB | 0.42 s · 134 MB |
-| Distinct values of a column | 2.17 s · 4.6 GB | 0.46 s · 184 MB | 0.18 s · 55 MB | 0.21 s · 41 MB | 0.72 s · 110 MB |
-| Group and sum | 4.72 s · 5.1 GB | 1.84 s · 340 MB | 2.08 s · 265 MB | 2.15 s · 249 MB | 2.46 s · 2.3 GB |
-| The 10 newest rows, all columns | 6.00 s · 3.7 GB | 5.13 s · 444 MB | 0.97 s · 141 MB | 0.98 s · 323 MB | 3.00 s · 5.9 GB |
+| First 10 rows, all columns | 0.72 s · 113 MB | 0.01 s · 40 MB | 0.10 s · 126 MB | 0.13 s · 107 MB | 0.11 s · 13 MB |
+| ↳ the whole file first (`read_parquet`) | **out of memory** after 5.7 s | 6.50 s · 7.2 GB |  |  |  |
+| A screenful in memory, ready to scroll | **out of memory** after 5.8 s | 6.36 s · 7.2 GB | 5.25 s · 7.4 GB | — | **out of memory** after 5.4 s |
+| Count the rows | 0.01 s · 66 MB | 0.00 s · 32 MB | 0.03 s · 33 MB | 0.05 s · 21 MB | 0.07 s · 10 MB |
+| Column names and types | 0.01 s · 66 MB | 0.00 s · 30 MB | 0.03 s · 33 MB | 0.05 s · 20 MB | 0.06 s · 8 MB |
+| Count rows where a column equals a value | 0.82 s · 285 MB | 0.19 s · 101 MB | 0.18 s · 55 MB | 0.21 s · 41 MB | 0.44 s · 133 MB |
+| Distinct values of a column | 3.37 s · 4.6 GB | 0.47 s · 185 MB | 0.19 s · 56 MB | 0.21 s · 43 MB | 0.73 s · 106 MB |
+| Group and sum | 7.00 s · 5.1 GB | 1.84 s · 330 MB | 2.07 s · 257 MB | 2.14 s · 254 MB | 2.46 s · 2.3 GB |
+| The 10 newest rows, all columns | 6.02 s · 3.7 GB | 5.13 s · 454 MB | 1.15 s · 214 MB | 0.99 s · 230 MB | 0.93 s · 1.2 GB |
 
 ### Whole laptop
 
@@ -139,29 +142,29 @@ Each cell is the median time and the peak memory.
 
 | | pandas | Polars | DuckDB | DuckDB CLI | Acrux |
 |---|---|---|---|---|---|
-| First 10 rows, all columns | 0.14 s · 988 MB | 0.04 s · 97 MB | 0.50 s · 1.3 GB | 0.43 s · 1.2 GB | 0.15 s · 55 MB |
-| ↳ the whole file first (`read_parquet`) | **out of memory** after 2.7 s | **out of memory** after 1.4 s |  |  |  |
-| A screenful in memory, ready to scroll | 0.33 s · 2.4 GB | 0.08 s · 1000 MB | 0.29 s · 1.5 GB | — | 0.18 s · 1.6 GB |
-| Count the rows | 0.02 s · 80 MB | 0.02 s · 47 MB | 0.05 s · 47 MB | 0.08 s · 33 MB | 0.09 s · 18 MB |
-| Column names and types | 0.02 s · 80 MB | 0.01 s · 37 MB | 0.07 s · 50 MB | 0.07 s · 34 MB | 0.07 s · 14 MB |
-| Count rows where a column equals a value | 0.05 s · 265 MB | 0.02 s · 75 MB | 0.05 s · 56 MB | 0.08 s · 44 MB | 0.16 s · 61 MB |
-| Distinct values of a column | 0.12 s · 424 MB | 0.03 s · 138 MB | 0.07 s · 71 MB | 0.08 s · 55 MB | 0.15 s · 165 MB |
-| Group and sum | 0.14 s · 557 MB | 0.03 s · 268 MB | 0.09 s · 178 MB | 0.10 s · 158 MB | 0.07 s · 215 MB |
-| The 10 newest rows, all columns | **out of memory** after 6.1 s | **out of memory** after 1.4 s | 0.57 s · 766 MB | 0.49 s · 754 MB | 0.58 s · 391 MB |
+| First 10 rows, all columns | 0.13 s · 986 MB | 0.04 s · 97 MB | 0.47 s · 1.3 GB | 0.43 s · 1.3 GB | 0.16 s · 55 MB |
+| ↳ the whole file first (`read_parquet`) | **out of memory** after 4.8 s | **out of memory** after 1.4 s |  |  |  |
+| A screenful in memory, ready to scroll | 0.33 s · 2.4 GB | 0.08 s · 1000 MB | 0.28 s · 1.5 GB | — | 0.18 s · 1.7 GB |
+| Count the rows | 0.02 s · 80 MB | 0.02 s · 47 MB | 0.05 s · 47 MB | 0.08 s · 34 MB | 0.13 s · 18 MB |
+| Column names and types | 0.02 s · 80 MB | 0.01 s · 37 MB | 0.07 s · 49 MB | 0.07 s · 34 MB | 0.07 s · 14 MB |
+| Count rows where a column equals a value | 0.05 s · 287 MB | 0.02 s · 75 MB | 0.05 s · 59 MB | 0.07 s · 46 MB | 0.15 s · 61 MB |
+| Distinct values of a column | 0.12 s · 399 MB | 0.02 s · 138 MB | 0.07 s · 69 MB | 0.09 s · 57 MB | 0.16 s · 171 MB |
+| Group and sum | 0.15 s · 560 MB | 0.03 s · 268 MB | 0.08 s · 176 MB | 0.09 s · 160 MB | 0.07 s · 211 MB |
+| The 10 newest rows, all columns | **out of memory** after 5.1 s | **out of memory** after 1.4 s | 0.57 s · 761 MB | 0.52 s · 747 MB | 0.45 s · 174 MB |
 
 #### 10 columns × 100M rows (2.6 GB)
 
 | | pandas | Polars | DuckDB | DuckDB CLI | Acrux |
 |---|---|---|---|---|---|
-| First 10 rows, all columns | 0.02 s · 118 MB | 0.01 s · 45 MB | 0.11 s · 275 MB | 0.09 s · 253 MB | 0.12 s · 14 MB |
-| ↳ the whole file first (`read_parquet`) | **out of memory** after 2.3 s | 2.31 s · 8.0 GB |  |  |  |
-| A screenful in memory, ready to scroll | **out of memory** after 2.9 s | 2.03 s · 8.0 GB | 1.41 s · 7.9 GB | — | **out of memory** after 1.4 s |
-| Count the rows | 0.01 s · 67 MB | 0.01 s · 40 MB | 0.03 s · 34 MB | 0.07 s · 20 MB | 0.10 s · 12 MB |
-| Column names and types | 0.01 s · 67 MB | 0.00 s · 31 MB | 0.04 s · 34 MB | 0.05 s · 20 MB | 0.07 s · 9 MB |
-| Count rows where a column equals a value | 0.27 s · 522 MB | 0.04 s · 89 MB | 0.05 s · 82 MB | 0.08 s · 65 MB | 0.19 s · 160 MB |
-| Distinct values of a column | 2.10 s · 4.8 GB | 0.10 s · 513 MB | 0.06 s · 89 MB | 0.08 s · 77 MB | 0.29 s · 383 MB |
-| Group and sum | 3.36 s · 4.8 GB | 0.21 s · 1.2 GB | 0.17 s · 616 MB | 0.21 s · 619 MB | 0.43 s · 2.4 GB |
-| The 10 newest rows, all columns | 1.71 s · 4.0 GB | 0.36 s · 1.3 GB | 0.26 s · 356 MB | 0.24 s · 330 MB | 2.76 s · 5.5 GB |
+| First 10 rows, all columns | 0.02 s · 118 MB | 0.02 s · 46 MB | 0.11 s · 275 MB | 0.08 s · 249 MB | 0.10 s · 14 MB |
+| ↳ the whole file first (`read_parquet`) | **out of memory** after 2.5 s | 2.14 s · 8.0 GB |  |  |  |
+| A screenful in memory, ready to scroll | **out of memory** after 2.4 s | 2.21 s · 8.0 GB | 1.42 s · 7.9 GB | — | **out of memory** after 1.8 s |
+| Count the rows | 0.01 s · 67 MB | 0.01 s · 40 MB | 0.03 s · 34 MB | 0.06 s · 21 MB | 0.08 s · 12 MB |
+| Column names and types | 0.01 s · 67 MB | 0.00 s · 31 MB | 0.03 s · 35 MB | 0.07 s · 20 MB | 0.07 s · 9 MB |
+| Count rows where a column equals a value | 0.28 s · 517 MB | 0.04 s · 89 MB | 0.05 s · 83 MB | 0.07 s · 67 MB | 0.18 s · 160 MB |
+| Distinct values of a column | 2.64 s · 4.8 GB | 0.10 s · 494 MB | 0.06 s · 91 MB | 0.08 s · 78 MB | 0.31 s · 397 MB |
+| Group and sum | 3.88 s · 4.8 GB | 0.21 s · 1.2 GB | 0.18 s · 636 MB | 0.19 s · 619 MB | 0.43 s · 2.4 GB |
+| The 10 newest rows, all columns | 1.77 s · 4.1 GB | 0.37 s · 1.1 GB | 0.28 s · 380 MB | 0.25 s · 347 MB | 0.47 s · 1.2 GB |
 
 ### Messy files
 
@@ -204,8 +207,8 @@ it finds all of that out, and writes the Parquet file it works from.
 
 | | pandas | Polars | DuckDB | Acrux |
 |---|---|---|---|---|
-| ordinary PC | 0.66 s · 449 MB | 0.37 s · 637 MB | 0.45 s · 484 MB | 1.91 s · 303 MB |
-| whole laptop | 0.67 s · 450 MB | 0.27 s · 651 MB | 0.32 s · 487 MB | 1.71 s · 498 MB |
+| ordinary PC | 0.68 s · 449 MB | 0.38 s · 637 MB | 0.45 s · 484 MB | 1.83 s · 306 MB |
+| whole laptop | 0.67 s · 450 MB | 0.28 s · 651 MB | 0.33 s · 488 MB | 1.72 s · 490 MB |
 
 ### What the tall file's first screen needs
 
@@ -252,15 +255,18 @@ single run per cap the first one replaced).
 
 ## Where Acrux loses
 
-- **Tall files.** Its first screen, the 10 newest rows (5.9 GB where DuckDB
-  takes 141 MB) and grouping (2.3 GB where Polars takes 340 MB, a newer
-  release of the same engine) all cost more memory than they should.
+- **Tall files.** Its first screen and grouping (2.3 GB where Polars takes
+  330 MB, a newer release of the same engine) cost more memory than they
+  should, and the 10 newest rows still take 1.2 GB where DuckDB takes
+  230 MB.
 - **Reading a CSV whose quirks you know.** pandas, Polars and DuckDB with the
-  right parameters read `vendas_br.csv` 3 to 7 times faster.
+  right parameters read `vendas_br.csv` 3 to 6 times faster.
 - **Quick questions in an open session.** A library that is loaded answers
   in hundredths of a second; `acrux` starts a process each time, and
   starting .NET is most of its 0.07 s.
-- **The 10 newest rows on the wide file:** DuckDB, slightly.
+- **The 10 newest rows, half the time.** DuckDB is ahead on the ordinary
+  PC's wide file by 0.13 s (with 7 times Acrux's memory) and on the whole
+  laptop's tall file by half; Acrux is ahead on the other two.
 
 ## Repeat it
 

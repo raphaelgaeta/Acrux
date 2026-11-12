@@ -275,8 +275,8 @@ memory and a SATA-speed disk, emulated on a laptop.
 | | pandas | Polars | DuckDB | Acrux |
 |---|---|---|---|---|
 | Excel's Portuguese CSV, no parameters | error | error | error | all 6 columns right |
-| First 10 rows of the 9 GB, 700-column file | out of memory¹ | out of memory¹ | 0.91 s · 598 MB | 0.77 s · 41 MB |
-| The 10 newest rows of that file | out of memory | 18.5 s · 3.5 GB | 1.18 s · 680 MB | 1.43 s · 312 MB |
+| First 10 rows of the 9 GB, 700-column file | out of memory¹ | out of memory¹ | 0.89 s · 595 MB | 0.78 s · 41 MB |
+| The 10 newest rows of that file | out of memory | 18.5 s · 3.5 GB | 1.07 s · 665 MB | 1.20 s · 100 MB |
 
 <sub>¹ With `read_parquet`, what people type first. Reading only the first
 rows, pandas takes 3.0 s and Polars 0.75 s. pandas and Polars are timed in an
