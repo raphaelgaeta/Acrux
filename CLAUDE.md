@@ -172,6 +172,23 @@ O `README.md` (em inglês, voltado ao público do repositório) resume features 
 arquitetura; este arquivo segue sendo a fonte de verdade técnica — ao mudar
 comportamento visível, atualizar os dois.
 
+**Os GIFs do README saem de execuções reais** (`docs/demo/`, desde
+2026-11-11). Os de terminal (`cli.gif`, `messy_csv.gif`) são desenhados pelo
+`terminal_gif.py` a partir de uma gravação (`cli.json`, `analyst.json`): o
+comando, a saída e o tempo são de verdade, e só a digitação é encenada. Os
+da janela são gravações do Windows re-temporizadas pelo `edit_gif.py`, que
+marca cada trecho acelerado. O `messy_csv.gif` põe o pandas ao lado do
+Acrux, num CSV como o Excel em português salva; desenho do dono. Ele só é
+justo se três coisas continuarem valendo:
+- a mesma regra de ritmo nos dois lados;
+- a legenda dizendo o que foi encurtado (os tracebacks);
+- o `docs/demo/README.md` dizendo onde o Acrux converte menos (datas com
+  todos os dias até 12).
+
+Mudou a saída do CLI ou a versão do pandas? Grave de novo e redesenhe; os
+comandos estão no `docs/demo/README.md`. O desenho é determinístico: a mesma
+gravação dá o mesmo GIF, byte a byte.
+
 ## Identidade visual
 
 Logo de Kat Ribeiro (design), propriedade do dono do projeto e **fora da MIT**

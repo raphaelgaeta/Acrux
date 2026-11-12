@@ -143,6 +143,11 @@ nothing downstream can tell.
   sheet when there's more than one. Excel stores every number as floating
   point, so integer columns arrive as doubles.
 
+<p align="center">
+  <img src="assets/messy_csv.gif" alt="Side by side: a pandas session that hits three errors and one silently wrong table on a CSV saved by Excel in Portuguese, and acrux reading the same file with the right types in its first command">
+</p>
+<p align="center"><sub>A CSV the way Excel saves it in Portuguese: Windows-1252, <code>;</code>, decimal commas, day/month dates. pandas reads it once you find the encoding, the separator, the decimal mark and <code>dayfirst</code>; Acrux works them out from the data. Real commands, output and run times, with the typing replayed (<a href="docs/demo">how it was recorded</a>).</sub></p>
+
 ## The desktop app (Windows)
 
 - **Open a file of any width, whole.** Every column is there from the start,
