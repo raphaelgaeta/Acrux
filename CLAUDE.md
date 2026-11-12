@@ -1002,8 +1002,11 @@ o `Describe` lê a mensagem na cultura invariante.
   vazia, e entre os blocos ele nunca disparou. O `GridProbe` mede postando
   uma mensagem a cada 10 ms. **A pintura também só sai com a fila vazia:**
   no primeiro teste pelo Wine, a barra ficou em "Reading schema..." a
-  montagem inteira, com o texto trocando por baixo. O progresso se pinta na
-  hora, com `Update()`.
+  montagem inteira, com o texto trocando por baixo; e na VM, pintando só o
+  texto, o rótulo de memória andava quando a contagem crescia e deixava o
+  texto velho para trás. A cada bloco, a barra inteira se pinta na hora
+  (`PaintTopBar`: o `Update()` do painel e o de cada filho, que são janelas
+  separadas).
 - **Enquanto as linhas entram, os botões que trocariam o grid esperam**
   ("Open file", "Columns", "Clear all filters", "Restore file" e o
   terminal): o `MainForm` guarda o estado deles e o devolve no fim. O modo

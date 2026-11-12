@@ -473,9 +473,7 @@ protected override void OnFormClosed(FormClosedEventArgs e)
             return await _rows.SetAsync(count, (done, total) =>
             {
                 _lblInfo.Text = $"Preparing the grid: {done:N0} of {total:N0} rows...";
-                // painted now: Windows paints only when the queue is empty,
-                // and between blocks it may never be
-                _lblInfo.Update();
+                PaintTopBar();
             });
         }
         finally
@@ -486,6 +484,21 @@ protected override void OnFormClosed(FormClosedEventArgs e)
                 _terminal.SetBusy(false);
             }
         }
+    }
+
+    /// <summary>
+    /// Paints the top bar now. Windows paints only when the queue is empty,
+    /// and between blocks it may never be: the count stood still, and when it
+    /// grew, the memory label moved and left its old text behind (seen on the
+    /// Windows 11 VM). The bar's background and each label are separate
+    /// windows, so each one is painted.
+    /// </summary>
+    private void PaintTopBar()
+    {
+        var bar = _lblInfo.Parent!;
+        bar.Update();
+        foreach (Control control in bar.Controls)
+            control.Update();
     }
 
     /// <summary>
