@@ -1,0 +1,278 @@
+{
+ "caps": [
+  {
+   "tool": "Acrux, all at once (today)",
+   "cap_gb": 8,
+   "status": "out of memory",
+   "wall_s": 5.584,
+   "op_s": null,
+   "peak_mb": 8165
+  },
+  {
+   "tool": "Acrux, all at once (today)",
+   "cap_gb": 10,
+   "status": "ok",
+   "wall_s": 7.234,
+   "op_s": 6.9734,
+   "peak_mb": 8444
+  },
+  {
+   "tool": "Acrux, one at a time",
+   "cap_gb": 8,
+   "status": "out of memory",
+   "wall_s": 7.667,
+   "op_s": null,
+   "peak_mb": 8162
+  },
+  {
+   "tool": "Acrux, one at a time",
+   "cap_gb": 10,
+   "status": "ok",
+   "wall_s": 7.442,
+   "op_s": 7.1763,
+   "peak_mb": 8159
+  },
+  {
+   "tool": "Polars",
+   "cap_gb": 8,
+   "status": "ok",
+   "wall_s": 6.87,
+   "op_s": 6.4581,
+   "peak_mb": 7374
+  },
+  {
+   "tool": "DuckDB",
+   "cap_gb": 8,
+   "status": "ok",
+   "wall_s": 5.746,
+   "op_s": 5.3755,
+   "peak_mb": 7522
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 8,
+   "status": "out of memory",
+   "wall_s": 5.588,
+   "op_s": null,
+   "peak_mb": 8170
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 10,
+   "status": "out of memory",
+   "wall_s": 6.866,
+   "op_s": null,
+   "peak_mb": 10214
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 12,
+   "status": "out of memory",
+   "wall_s": 7.732,
+   "op_s": null,
+   "peak_mb": 12239
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 14,
+   "status": "out of memory",
+   "wall_s": 11.943,
+   "op_s": null,
+   "peak_mb": 14300
+  }
+ ],
+ "batches": [
+  {
+   "config": "pc",
+   "file": "tall",
+   "k": 1,
+   "all": false,
+   "op_s": 7.335,
+   "peak_mb": 8249
+  },
+  {
+   "config": "pc",
+   "file": "tall",
+   "k": 2,
+   "all": false,
+   "op_s": 6.7337,
+   "peak_mb": 8508
+  },
+  {
+   "config": "pc",
+   "file": "tall",
+   "k": 3,
+   "all": false,
+   "op_s": 6.5937,
+   "peak_mb": 8977
+  },
+  {
+   "config": "pc",
+   "file": "tall",
+   "k": 4,
+   "all": false,
+   "op_s": 6.3404,
+   "peak_mb": 9521
+  },
+  {
+   "config": "pc",
+   "file": "tall",
+   "k": 6,
+   "all": false,
+   "op_s": 6.461,
+   "peak_mb": 9976
+  },
+  {
+   "config": "pc",
+   "file": "tall",
+   "k": 10,
+   "all": true,
+   "op_s": 5.9342,
+   "peak_mb": 11677
+  },
+  {
+   "config": "pc",
+   "file": "wide",
+   "k": 1,
+   "all": false,
+   "op_s": 0.6552,
+   "peak_mb": 880
+  },
+  {
+   "config": "pc",
+   "file": "wide",
+   "k": 2,
+   "all": false,
+   "op_s": 0.6051,
+   "peak_mb": 878
+  },
+  {
+   "config": "pc",
+   "file": "wide",
+   "k": 3,
+   "all": false,
+   "op_s": 0.5965,
+   "peak_mb": 905
+  },
+  {
+   "config": "pc",
+   "file": "wide",
+   "k": 4,
+   "all": false,
+   "op_s": 0.5825,
+   "peak_mb": 949
+  },
+  {
+   "config": "pc",
+   "file": "wide",
+   "k": 6,
+   "all": false,
+   "op_s": 0.6093,
+   "peak_mb": 986
+  },
+  {
+   "config": "pc",
+   "file": "wide",
+   "k": 23,
+   "all": true,
+   "op_s": 0.5981,
+   "peak_mb": 969
+  },
+  {
+   "config": "full",
+   "file": "tall",
+   "k": 1,
+   "all": false,
+   "op_s": 2.87025,
+   "peak_mb": 8081
+  },
+  {
+   "config": "full",
+   "file": "tall",
+   "k": 2,
+   "all": false,
+   "op_s": 2.3063000000000002,
+   "peak_mb": 8464
+  },
+  {
+   "config": "full",
+   "file": "tall",
+   "k": 3,
+   "all": false,
+   "op_s": 2.04475,
+   "peak_mb": 8505
+  },
+  {
+   "config": "full",
+   "file": "tall",
+   "k": 4,
+   "all": false,
+   "op_s": 1.7225000000000001,
+   "peak_mb": 9625
+  },
+  {
+   "config": "full",
+   "file": "tall",
+   "k": 6,
+   "all": false,
+   "op_s": 1.60095,
+   "peak_mb": 10035
+  },
+  {
+   "config": "full",
+   "file": "tall",
+   "k": 10,
+   "all": true,
+   "op_s": 1.3035,
+   "peak_mb": 12311
+  },
+  {
+   "config": "full",
+   "file": "wide",
+   "k": 1,
+   "all": false,
+   "op_s": 0.5067999999999999,
+   "peak_mb": 974
+  },
+  {
+   "config": "full",
+   "file": "wide",
+   "k": 2,
+   "all": false,
+   "op_s": 0.38055,
+   "peak_mb": 1002
+  },
+  {
+   "config": "full",
+   "file": "wide",
+   "k": 3,
+   "all": false,
+   "op_s": 0.31065,
+   "peak_mb": 1007
+  },
+  {
+   "config": "full",
+   "file": "wide",
+   "k": 4,
+   "all": false,
+   "op_s": 0.2797,
+   "peak_mb": 1025
+  },
+  {
+   "config": "full",
+   "file": "wide",
+   "k": 6,
+   "all": false,
+   "op_s": 0.25795,
+   "peak_mb": 1070
+  },
+  {
+   "config": "full",
+   "file": "wide",
+   "k": 23,
+   "all": true,
+   "op_s": 0.19575,
+   "peak_mb": 1795
+  }
+ ]
+}
