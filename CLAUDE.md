@@ -380,6 +380,45 @@ o hook roda `scripts/deploy-windows.sh` depois do CLI:
   `current` não muda.
 - O log é o mesmo `deploy.log` do CLI, com as linhas marcadas `windows:`.
 
+### Benchmark (`bench/`, desde 2026-11-12)
+
+O Acrux ao lado do pandas, do Polars e do DuckDB (pacote Python e CLI), nos
+mesmos arquivos e na mesma máquina, com toda resposta conferida contra as
+outras. O resultado e o método estão em `docs/benchmarks.md`; os comandos, em
+`bench/README.md`. Desenho do dono: o laptop limitado ao que um PC comum tem
+(4 threads com `taskset`, 8 GB sem swap, leitura a 500 MB/s por
+`IOReadBandwidthMax`, cache do arquivo descartado antes de cada execução),
+para não "roubar" com 32 threads e 31 GB. Uma conferência num notebook de
+verdade (8 GB, 2017) está prevista.
+- **Os arquivos são gerados com semente fixa** (`make_stress_parquet.py`,
+  `make_messy_files.py`), com o SHA-256 no `bench/README.md`: o original dos
+  GIFs não tem gerador. Ficam fora do repositório (9 GB).
+- **Cada ferramenta no seu melhor uso, mais o que se digita primeiro.**
+  Quando uma estoura, as variantes de especialista entram também (`top_k`,
+  streaming, laço por row group). Ler o CSV "certo" é com o formato da data
+  escrito: o `try_parse_dates` do Polars levou 26 dos 28 s.
+- **O CLI do DuckDB muda de comportamento com `AI_AGENT` no ambiente**
+  ("agent mode"), e um agente rodando o benchmark tem essa variável: o
+  `bench.py` a tira.
+- **O que o benchmark achou contra o Acrux** (detalhes em
+  `docs/benchmarks.md`):
+  - num arquivo alto (10 colunas × 100M linhas), a primeira tela do app
+    pede de 10 a 12 GB (3 rodadas por teto: 1 de 3 coube em 10 GB, 3 de 3
+    em 12). Os dados ocupam ~7,2 GB em qualquer ferramenta; o resto é a
+    memória de trabalho das colunas carregando ao mesmo tempo (cada uma
+    custa ~o próprio tamanho enquanto carrega). Uma de cada vez pede
+    ~8,0 GB: coube em 1 de 3 rodadas com 8 GB, ainda ~0,8 GB acima do
+    Polars e do DuckDB. Perto do limite, uma rodada só engana: meça 3 por
+    teto. A próxima mudança do `ColumnCache` é limitar os **bytes** em voo,
+    não o número de colunas (no arquivo largo, todas de uma vez é o mais
+    rápido), e para PCs com menos memória que as colunas, carregar faixas de
+    linhas;
+  - no mesmo arquivo, `filter --last` usa 5,9 GB (o DuckDB, 141 MB) e o
+    agrupar pelo Core, 2,3 GB (o Polars 2.1 do Python, 340 MB).
+- **`bench/results/` guarda os JSON de cada rodada,** com a máquina e as
+  versões, e as tabelas do documento saem deles (`summary.py`,
+  `screen_memory.py`). Mudou o Acrux? Rode de novo e compare.
+
 ## Arquitetura
 
 Fluxo: `OpenFileDialog` (parquet, CSV, xlsx ou SQLite) → **o formato é
