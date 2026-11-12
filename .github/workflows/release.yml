@@ -138,10 +138,8 @@ jobs:
           which most PCs already have; without it, opening a file fails with "Dll
           was not found".
 
-          Neither file is code-signed yet, so Windows SmartScreen warns about an
-          unknown publisher: **More info → Run anyway**. Signing is on its way
-          through the SignPath Foundation: see the [Code signing
-          policy](https://github.com/${{ github.repository }}#code-signing-policy).
+          Neither file is code-signed, so Windows SmartScreen warns about an
+          unknown publisher: **More info → Run anyway**.
 
           **Command line, Linux** — extract `acrux-cli-…-linux-x64.tar.gz` (Intel or
           AMD) or `acrux-cli-…-linux-arm64.tar.gz` (64-bit ARM) and put the

@@ -151,16 +151,24 @@ Em PR, o mesmo workflow só compila e testa, sem release. A versão vem da tag
 (`-p:Version=0.1.0`); fora de release vale `0.0.0-dev`
 (`Directory.Build.props`), e na CI de PR, `0.0.0-ci.N`. O `acrux version`
 mostra a versão e o commit (`0.1.0 (b0bdb9a)`); num deploy local, o arquivo
-`COMMIT` tem prioridade. **Sem assinatura ainda:** o Windows mostra o aviso do
-SmartScreen. O pedido de assinatura grátis da SignPath Foundation foi enviado
-em 2026-11-11, pela conta do dono (com 2FA). Os termos deles exigem a seção
-"Code signing policy" na página inicial (o README) e o termo na página de
-download (as notas do release, no `release.yml`): a frase de atribuição, os
-papéis do time e a privacidade. **Mudou o time ou o que o app transmite?
-Atualize a seção.** Pendências conhecidas do pedido: o ícone fora da MIT (os
-termos pedem licença aprovada pela OSI em todos os componentes) e um aviso no
-setup antes de mexer nas associações de arquivo. Store,
-winget e RPM ficam para quando houver usuários. As Actions estão nas versões
+`COMMIT` tem prioridade. **Sem assinatura:** o Windows mostra o aviso do
+SmartScreen. Os caminhos, conferidos em 2026-11-12:
+- **SignPath Foundation (grátis): recusada em 2026-11-12.** O programa pede um
+  projeto já conhecido (estrelas, contribuidores, artigos, discussões fora do
+  GitHub); dá para pedir de novo quando houver esses sinais. Os termos deles
+  também pedem licença aprovada pela OSI em todos os componentes, e o ícone
+  está fora da MIT;
+- **Azure Artifact Signing:** pessoa física só nos EUA e no Canadá (Microsoft
+  Learn), então não serve;
+- **Microsoft Store com MSIX:** a conta individual é grátis, e a Microsoft
+  re-assina o pacote: quem instala pela Store não vê o aviso. Os downloads do
+  GitHub continuariam sem assinatura;
+- **certificado OV:** US$ 150–300 por ano, leva o nome civil do dono em cada
+  arquivo e ainda mostra o aviso até ganhar reputação (desde 2024, o EV
+  também).
+
+**Mudou o que o app transmite? Atualize a seção "Privacy" do README.** Winget
+e RPM ficam para quando houver usuários. As Actions estão nas versões
 conferidas em 2026-11-08 (checkout v7, setup-dotnet v6, upload-artifact v7,
 download-artifact v8, todas em Node 24).
 
