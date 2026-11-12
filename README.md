@@ -157,7 +157,9 @@ nothing downstream can tell.
   recently seen columns go, so it gives memory back when other programs need
   it. The status bar says how much of the file is in memory. Copying a
   selection loads its columns first, and the **Columns** button hides the
-  ones you don't want to see.
+  ones you don't want to see. Height is the limit for now: each column on
+  screen is held whole, so with 100 million rows the first screen needs
+  10 to 12 GB ([benchmarks](docs/benchmarks.md#what-the-tall-files-first-screen-needs)).
 - **Filter like Excel.** Click a header, get the distinct values (blanks
   included), check what you want. Filters compose across columns.
 - **The grid never bends the data to fit the screen.** A missing value shows
@@ -269,6 +271,27 @@ Three rules, no exceptions:
 3. **Script steps compose one lazy plan.** Chained terminal commands aren't
    executed one by one; they're replayed as a single query, so the optimizer
    sees the whole pipeline.
+
+## How it compares
+
+Next to pandas, Polars and DuckDB on an ordinary PC: 4 threads, 8 GB of
+memory and a SATA-speed disk, emulated on a laptop.
+
+| | pandas | Polars | DuckDB | Acrux |
+|---|---|---|---|---|
+| Excel's Portuguese CSV, no parameters | error | error | error | all 6 columns right |
+| First 10 rows of the 9 GB, 700-column file | out of memory¹ | out of memory¹ | 0.89 s · 595 MB | 0.78 s · 41 MB |
+| The 10 newest rows of that file | out of memory | 18.5 s · 3.5 GB | 1.07 s · 665 MB | 1.20 s · 100 MB |
+
+<sub>¹ With `read_parquet`, what people type first. Reading only the first
+rows, pandas takes 3.0 s and Polars 0.75 s. pandas and Polars are timed in an
+open session; DuckDB and Acrux as whole commands.</sub>
+
+Acrux runs on Polars, so it isn't faster than Polars in expert hands: it gets
+there without the shortcuts, and it never read a messy column wrong without
+a word, where DuckDB did once. Its weak spot is height: a file with 100
+million rows doesn't fit the desktop app's first screen in 8 GB yet.
+[All the numbers, the method, and where Acrux loses](docs/benchmarks.md).
 
 ## Building
 

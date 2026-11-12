@@ -1,0 +1,302 @@
+{
+ "caps": [
+  {
+   "tool": "Acrux, all at once (today)",
+   "cap_gb": 8,
+   "run": 0,
+   "status": "out of memory",
+   "wall_s": 5.629,
+   "op_s": null,
+   "peak_mb": 8162
+  },
+  {
+   "tool": "Acrux, all at once (today)",
+   "cap_gb": 8,
+   "run": 1,
+   "status": "out of memory",
+   "wall_s": 5.449,
+   "op_s": null,
+   "peak_mb": 8165
+  },
+  {
+   "tool": "Acrux, all at once (today)",
+   "cap_gb": 8,
+   "run": 2,
+   "status": "out of memory",
+   "wall_s": 5.563,
+   "op_s": null,
+   "peak_mb": 8168
+  },
+  {
+   "tool": "Acrux, all at once (today)",
+   "cap_gb": 10,
+   "run": 0,
+   "status": "ok",
+   "wall_s": 8.97,
+   "op_s": 8.6861,
+   "peak_mb": 9520
+  },
+  {
+   "tool": "Acrux, all at once (today)",
+   "cap_gb": 10,
+   "run": 1,
+   "status": "out of memory",
+   "wall_s": 5.929,
+   "op_s": null,
+   "peak_mb": 10187
+  },
+  {
+   "tool": "Acrux, all at once (today)",
+   "cap_gb": 10,
+   "run": 2,
+   "status": "out of memory",
+   "wall_s": 5.736,
+   "op_s": null,
+   "peak_mb": 10212
+  },
+  {
+   "tool": "Acrux, all at once (today)",
+   "cap_gb": 12,
+   "run": 0,
+   "status": "ok",
+   "wall_s": 5.866,
+   "op_s": 5.5561,
+   "peak_mb": 10247
+  },
+  {
+   "tool": "Acrux, all at once (today)",
+   "cap_gb": 12,
+   "run": 1,
+   "status": "ok",
+   "wall_s": 5.716,
+   "op_s": 5.4505,
+   "peak_mb": 9794
+  },
+  {
+   "tool": "Acrux, all at once (today)",
+   "cap_gb": 12,
+   "run": 2,
+   "status": "ok",
+   "wall_s": 6.306,
+   "op_s": 5.9555,
+   "peak_mb": 10026
+  },
+  {
+   "tool": "Acrux, one at a time",
+   "cap_gb": 8,
+   "run": 0,
+   "status": "out of memory",
+   "wall_s": 7.722,
+   "op_s": null,
+   "peak_mb": 8156
+  },
+  {
+   "tool": "Acrux, one at a time",
+   "cap_gb": 8,
+   "run": 1,
+   "status": "ok",
+   "wall_s": 7.626,
+   "op_s": 7.3565,
+   "peak_mb": 8049
+  },
+  {
+   "tool": "Acrux, one at a time",
+   "cap_gb": 8,
+   "run": 2,
+   "status": "out of memory",
+   "wall_s": 7.59,
+   "op_s": null,
+   "peak_mb": 8164
+  },
+  {
+   "tool": "Acrux, one at a time",
+   "cap_gb": 10,
+   "run": 0,
+   "status": "ok",
+   "wall_s": 7.521,
+   "op_s": 7.2629,
+   "peak_mb": 8091
+  },
+  {
+   "tool": "Acrux, one at a time",
+   "cap_gb": 10,
+   "run": 1,
+   "status": "ok",
+   "wall_s": 7.432,
+   "op_s": 7.1699,
+   "peak_mb": 8141
+  },
+  {
+   "tool": "Acrux, one at a time",
+   "cap_gb": 10,
+   "run": 2,
+   "status": "ok",
+   "wall_s": 7.412,
+   "op_s": 7.1536,
+   "peak_mb": 8067
+  },
+  {
+   "tool": "Polars",
+   "cap_gb": 8,
+   "run": 0,
+   "status": "ok",
+   "wall_s": 6.889,
+   "op_s": 6.4948,
+   "peak_mb": 7376
+  },
+  {
+   "tool": "Polars",
+   "cap_gb": 8,
+   "run": 1,
+   "status": "ok",
+   "wall_s": 6.786,
+   "op_s": 6.4241,
+   "peak_mb": 7371
+  },
+  {
+   "tool": "Polars",
+   "cap_gb": 8,
+   "run": 2,
+   "status": "ok",
+   "wall_s": 6.655,
+   "op_s": 6.3022,
+   "peak_mb": 7372
+  },
+  {
+   "tool": "DuckDB",
+   "cap_gb": 8,
+   "run": 0,
+   "status": "ok",
+   "wall_s": 5.68,
+   "op_s": 5.3293,
+   "peak_mb": 7516
+  },
+  {
+   "tool": "DuckDB",
+   "cap_gb": 8,
+   "run": 1,
+   "status": "ok",
+   "wall_s": 5.574,
+   "op_s": 5.2373,
+   "peak_mb": 7512
+  },
+  {
+   "tool": "DuckDB",
+   "cap_gb": 8,
+   "run": 2,
+   "status": "ok",
+   "wall_s": 5.585,
+   "op_s": 5.2542,
+   "peak_mb": 7495
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 8,
+   "run": 0,
+   "status": "out of memory",
+   "wall_s": 5.377,
+   "op_s": null,
+   "peak_mb": 8172
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 8,
+   "run": 1,
+   "status": "out of memory",
+   "wall_s": 5.128,
+   "op_s": null,
+   "peak_mb": 8171
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 8,
+   "run": 2,
+   "status": "out of memory",
+   "wall_s": 5.096,
+   "op_s": null,
+   "peak_mb": 8154
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 10,
+   "run": 0,
+   "status": "out of memory",
+   "wall_s": 6.541,
+   "op_s": null,
+   "peak_mb": 10211
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 10,
+   "run": 1,
+   "status": "out of memory",
+   "wall_s": 6.496,
+   "op_s": null,
+   "peak_mb": 10214
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 10,
+   "run": 2,
+   "status": "out of memory",
+   "wall_s": 6.581,
+   "op_s": null,
+   "peak_mb": 10215
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 12,
+   "run": 0,
+   "status": "out of memory",
+   "wall_s": 7.831,
+   "op_s": null,
+   "peak_mb": 12255
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 12,
+   "run": 1,
+   "status": "out of memory",
+   "wall_s": 7.981,
+   "op_s": null,
+   "peak_mb": 12257
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 12,
+   "run": 2,
+   "status": "out of memory",
+   "wall_s": 7.9,
+   "op_s": null,
+   "peak_mb": 12250
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 14,
+   "run": 0,
+   "status": "out of memory",
+   "wall_s": 10.922,
+   "op_s": null,
+   "peak_mb": 14296
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 14,
+   "run": 1,
+   "status": "out of memory",
+   "wall_s": 11.079,
+   "op_s": null,
+   "peak_mb": 14293
+  },
+  {
+   "tool": "pandas",
+   "cap_gb": 14,
+   "run": 2,
+   "status": "out of memory",
+   "wall_s": 11.013,
+   "op_s": null,
+   "peak_mb": 14303
+  }
+ ],
+ "batches": []
+}

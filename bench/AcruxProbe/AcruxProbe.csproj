@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Not in Acrux.sln: a benchmark tool, built by bench/bench.py. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Acrux.Core\Acrux.Core.csproj" />
+  </ItemGroup>
+
+  <!-- The native Polars of the machine that builds it, as in Acrux.Cli.csproj. -->
+  <PropertyGroup>
+    <PolarsNativeRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</PolarsNativeRid>
+    <PolarsNativeArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant())</PolarsNativeArch>
+    <PolarsNativeRid Condition="'$(PolarsNativeRid)' == '' And $([MSBuild]::IsOSPlatform('Windows'))">win-$(PolarsNativeArch)</PolarsNativeRid>
+    <PolarsNativeRid Condition="'$(PolarsNativeRid)' == '' And $([MSBuild]::IsOSPlatform('Linux'))">linux-$(PolarsNativeArch)</PolarsNativeRid>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Polars.NET.Native.$(PolarsNativeRid)" Version="1.0.1" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

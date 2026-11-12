@@ -397,6 +397,46 @@ o hook roda `scripts/deploy-windows.sh` depois do CLI:
   `current` não muda.
 - O log é o mesmo `deploy.log` do CLI, com as linhas marcadas `windows:`.
 
+### Benchmark (`bench/`, desde 2026-11-12)
+
+O Acrux ao lado do pandas, do Polars e do DuckDB (pacote Python e CLI), nos
+mesmos arquivos e na mesma máquina, com toda resposta conferida contra as
+outras. O resultado e o método estão em `docs/benchmarks.md`; os comandos, em
+`bench/README.md`. Desenho do dono: o laptop limitado ao que um PC comum tem
+(4 threads com `taskset`, 8 GB sem swap, leitura a 500 MB/s por
+`IOReadBandwidthMax`, cache do arquivo descartado antes de cada execução),
+para não "roubar" com 32 threads e 31 GB. Uma conferência num notebook de
+verdade (8 GB, 2017) está prevista.
+- **Os arquivos são gerados com semente fixa** (`make_stress_parquet.py`,
+  `make_messy_files.py`), com o SHA-256 no `bench/README.md`: o original dos
+  GIFs não tem gerador. Ficam fora do repositório (9 GB).
+- **Cada ferramenta no seu melhor uso, mais o que se digita primeiro.**
+  Quando uma estoura, as variantes de especialista entram também (`top_k`,
+  streaming, laço por row group). Ler o CSV "certo" é com o formato da data
+  escrito: o `try_parse_dates` do Polars levou 26 dos 28 s.
+- **O CLI do DuckDB muda de comportamento com `AI_AGENT` no ambiente**
+  ("agent mode"), e um agente rodando o benchmark tem essa variável: o
+  `bench.py` a tira.
+- **O que o benchmark achou contra o Acrux** (detalhes em
+  `docs/benchmarks.md`):
+  - num arquivo alto (10 colunas × 100M linhas), a primeira tela do app
+    pede de 10 a 12 GB (3 rodadas por teto: 1 de 3 coube em 10 GB, 3 de 3
+    em 12). Os dados ocupam ~7,2 GB em qualquer ferramenta; o resto é a
+    memória de trabalho das colunas carregando ao mesmo tempo (cada uma
+    custa ~o próprio tamanho enquanto carrega). Uma de cada vez pede
+    ~8,0 GB: coube em 1 de 3 rodadas com 8 GB, ainda ~0,8 GB acima do
+    Polars e do DuckDB. Perto do limite, uma rodada só engana: meça 3 por
+    teto. A próxima mudança do `ColumnCache` é limitar os **bytes** em voo,
+    não o número de colunas (no arquivo largo, todas de uma vez é o mais
+    rápido), e para PCs com menos memória que as colunas, carregar faixas de
+    linhas;
+  - no mesmo arquivo, o agrupar pelo Core usa 2,3 GB (o Polars 2.1 do
+    Python, 330 MB). O `filter --last` usava 5,9 GB e caiu para 1,2 GB com
+    o motor de streaming (PR #20; o DuckDB, ~0,2 GB).
+- **`bench/results/` guarda os JSON de cada rodada,** com a máquina e as
+  versões, e as tabelas do documento saem deles (`summary.py`,
+  `screen_memory.py`). Mudou o Acrux? Rode de novo e compare.
+
 ## Arquitetura
 
 Fluxo: `OpenFileDialog` (parquet, CSV, xlsx ou SQLite) → **o formato é
@@ -708,7 +748,8 @@ o `Describe` lê a mensagem na cultura invariante.
   - `Slice(posição, 1)` por linha: **o DataFrame de uma linha prende o bloco
     decodificado inteiro** (~13 MB por linha com 700 colunas) enquanto vive;
   - o que funciona: as posições pela coluna de tempo
-    (`TimeFilter.NewestRows`, 0,1 s) e cada linha virando texto logo depois
+    (`TimeFilter.NewestRows`, 0,1 s, no motor de streaming desde
+    2026-11-12) e cada linha virando texto logo depois
     do `Slice`, com o DataFrame descartado (`PrintWindow` no CLI): 0,6 GB
     com 10 ou 100 linhas.
 
@@ -808,8 +849,18 @@ o `Describe` lê a mensagem na cultura invariante.
   (700col×5M, cache quente): `Auto`/`InMemory`/`Streaming` empatam em carga
   com projeção, máscara de filtro e groupby (diferenças = ruído de dezenas
   de ms); a única vitória consistente é `Streaming` ~2× em `Unique+Sort+
-  Limit` — por isso só `GetDistinctValuesAsync` usa `Collect(Engine.
-  Streaming)`. Não criar seletor de engine sem novo dado que o justifique.
+  Limit` — por isso o `GetDistinctValuesAsync` usa `Collect(Engine.
+  Streaming)`. **O dado novo veio do benchmark num arquivo alto** (10
+  colunas × 100M linhas, 2026-11-12): sobre poucas colunas e muitas linhas,
+  o motor em memória materializa cada expressão intermediária para todas
+  as linhas. As posições do `filter --last` (`NewestRows`) caíram de
+  5,5 GB e 2,8 s para 1,2 GB e 0,44 s com `Streaming`, e a contagem do
+  mesmo comando foi junto. O comando inteiro, de 3,0 s e 6,0 GB para 0,9 s
+  e 1,2 GB no "PC comum" do `bench/`; no arquivo largo, de 313 para 94 MB.
+  Agrupar também cairia (2,3 GB → 169 MB, por probe), mas o resultado do
+  terminal passa pelo `PlanOrder`, medido com o motor em memória: revalidar
+  a ordem antes de trocar ali. Escolher o motor por consulta, medindo; nada
+  de seletor para o usuário.
 - Strings continuam chegando como `StringViewArray` (não `StringArray`).
 - **Tipo de array sem `case` no `PolarsTableAdapter.GetCellValue` cai no
   `_ => array.ToString()`, e a célula mostra o *nome do tipo* do array.**

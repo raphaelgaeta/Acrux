@@ -83,5 +83,11 @@ Desktop.ini
 # The recordings the README's GIFs are drawn from (docs/demo/README.md)
 !docs/demo/*.json
 
+# The benchmark's results (bench/README.md)
+!bench/results/*.json
+
+# Python's bytecode caches (bench/)
+__pycache__/
+
 # Notes for the maintainer's own machine, loaded by Claude Code (CLAUDE.md is the public one)
 CLAUDE.local.md
