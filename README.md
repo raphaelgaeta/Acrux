@@ -294,6 +294,18 @@ Acrux runs on Polars, so it isn't faster than Polars in expert hands: it gets
 there without the shortcuts, and it never read a messy column wrong without
 a word, where DuckDB did once. Its weak spot is height: a file with 100
 million rows doesn't fit the desktop app's first screen in 8 GB yet.
+
+Checked on a real 2017 notebook (Core i7-7500U, 8 GB, SATA SSD, Windows 10
+with Defender on): `acrux head` showed the first rows of the 9 GB file in
+0.4 s with 55 MB (2.1 s the first time after a reboot), and the desktop
+app read its first screen's columns in 0.95 s (2.7 s right after the
+reboot). DuckDB took 0.8 s and 656 MB for the first rows, and was faster at
+the 10 newest rows, 1.2 s against 2.2 s. The notebook also showed what the
+benchmark misses, since it times the data and not the window: the desktop
+window stayed blank for 47 s while the Windows grid set up the 5 million
+rows. The grid now takes them in blocks, with the window answering and the
+rows counted (about 9 s in a Windows 11 virtual machine); the notebook
+hasn't been timed again.
 [All the numbers, the method, and where Acrux loses](docs/benchmarks.md).
 
 ## Building

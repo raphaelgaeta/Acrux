@@ -413,8 +413,19 @@ outras. O resultado e o método estão em `docs/benchmarks.md`; os comandos, em
 `bench/README.md`. Desenho do dono: o laptop limitado ao que um PC comum tem
 (4 threads com `taskset`, 8 GB sem swap, leitura a 500 MB/s por
 `IOReadBandwidthMax`, cache do arquivo descartado antes de cada execução),
-para não "roubar" com 32 threads e 31 GB. Uma conferência num notebook de
-verdade (8 GB, 2017) está prevista.
+para não "roubar" com 32 threads e 31 GB. **Conferido num notebook de
+verdade** em 2026-11-12 (i7-7500U, 8 GB, SATA, Windows 10, Defender ligado;
+`bench/windows/`): as primeiras linhas e a primeira tela confirmaram a
+emulação; as 10 mais recentes não (2,2 s contra 1,2 s do DuckDB, onde a
+emulação dava 0,13 s de diferença). A busca linha a linha é trabalho de
+CPU, e a emulação não limita a velocidade de cada núcleo. **A primeira tela
+do benchmark são os dados, lidos pelo Core, não a janela:** no notebook, a
+janela ficou 47 s branca enquanto o grid montava as linhas (ver "Aumentar
+`RowCount`", nas Armadilhas). Depois do PR #24, ~9 s na VM; o notebook não
+foi medido de novo, e o texto público diz isso. No Windows: o
+PowerShell 5.1 grava o JSON com BOM (`utf-8-sig`); o pico é o
+`PeakPagedMemorySize64` (o commit) amostrado; e uma rodada só é fria para
+quem lê o arquivo primeiro depois do boot.
 - **Os arquivos são gerados com semente fixa** (`make_stress_parquet.py`,
   `make_messy_files.py`), com o SHA-256 no `bench/README.md`: o original dos
   GIFs não tem gerador. Ficam fora do repositório (9 GB).

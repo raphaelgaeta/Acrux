@@ -21,7 +21,10 @@ Measured on 2026-11-12, Acrux as of `6e77333` (Polars.NET 1.0.1).
   On the 700-column, 9 GB file, with 8 GB of memory, the obvious
   `read_parquet` of pandas and Polars runs out of memory. `acrux head` shows
   the first rows in 0.8 s with 41 MB, where the others take 400 to 800 MB,
-  and the desktop app's first screen is the fastest of the four.
+  and the desktop app reads its first screen the fastest of the four. A real
+  2017 notebook agreed: 0.42 s and 55 MB, where DuckDB took 0.81 s and
+  656 MB. It also showed what these numbers leave out, the window: its grid
+  took 47 s to set up the 5 million rows ([below](#on-a-real-2017-notebook)).
 - **A tall file is Acrux's weak spot.** With 100 million rows, the desktop
   app holds every column of the screen whole: today its first screen needs
   10 to 12 GB, where Polars and DuckDB hold the same columns in 7.3. Loading
@@ -49,8 +52,9 @@ One laptop, two configurations:
 The laptop is an Intel i9-13900HX (32 threads, 31 GB, NVMe) on Fedora 44,
 Linux 7.2. The ordinary PC is emulated, and the emulation leaves out what a
 real one has: a slower CPU (these are 5.4 GHz cores), an antivirus reading
-the file and memory on one channel. A run on a real 2017 laptop with 8 GB is
-planned as a check.
+the file and memory on one channel. A real 2017 notebook with 8 GB checked
+it ([below](#on-a-real-2017-notebook)): it held up, except where the work is
+the CPU's.
 
 - **Every run is a process of its own,** under a systemd scope with the
   memory cap and no swap. A run killed at the cap is "out of memory".
@@ -253,6 +257,50 @@ The tables come from `bench/results/screen-memory-2026-11-12T0221Z.json`
 (the caps) and `screen-memory-2026-11-12T0216Z.json` (k at a time, whose
 single run per cap the first one replaced).
 
+### On a real 2017 notebook
+
+The emulation leaves out the CPU's speed, the antivirus and the memory
+channel, so the wide file's commands ran again on a real ordinary PC: a 2017
+notebook with an Intel Core i7-7500U (2 cores, 4 threads), 8 GB of memory on
+one channel (3.3 to 3.7 GB free), a SATA SSD, Windows 10 with Defender's
+real-time scan on, on AC power. [`bench/windows/`](../bench/windows) built
+the folder and measured: each command 4 times, round 1 three minutes after
+a reboot, the time of the whole command and the peak private memory (the
+commit). The desktop app's screen is its own time, like a library's: the
+columns read through its core, without the window.
+
+| | DuckDB CLI | Acrux | Acrux, first after the reboot |
+|---|---|---|---|
+| First 10 rows, all columns | 0.81 s · 656 MB | 0.42 s · 55 MB | 2.13 s · 54 MB |
+| The 10 newest rows, all columns | 1.18 s · 688 MB | 2.21 s · 119 MB | 3.05 s · 119 MB |
+| Count the rows | 0.18 s · 34 MB | 0.22 s · 34 MB | 0.29 s · 34 MB |
+| The desktop app's first screen, data only | — | 0.95 s · 998 MB | 2.68 s · 1025 MB |
+
+A round is cold only for what reads the file first after the reboot, and
+Acrux reads first (the desktop app's screen, then its commands). So DuckDB
+is compared on rounds 2 to 4, and round 1 is only Acrux's first open, when
+Defender also reads the file for the first time.
+
+- **The first rows and the first screen held up.** Acrux is the fastest with
+  the least memory, as in the emulation.
+- **The 10 newest rows did not.** The emulation had Acrux 0.13 s behind
+  DuckDB; the notebook, a second behind. Acrux reads the 10 rows one at a
+  time, and decoding a row of 700 columns is CPU work that the emulation's
+  5.4 GHz cores did twice as fast. Reading together the rows that share a
+  row group is the next thing to try there.
+- **The window did not either, and nothing above times it.** On the
+  notebook, the desktop app's window stayed blank for 47 s before its first
+  screen: the Windows grid sets up each of the 5 million rows, and a row
+  costs more the more columns there are. PR #24 halved that wait and made it
+  visible: the columns hide while the rows go in, in blocks of about half a
+  second, with the window answering, the rows counted in the status bar and
+  the first screen loading meanwhile. Opening the file took about 9 s in a Windows 11
+  virtual machine with 8 cores, on the laptop; the notebook hasn't been
+  timed again. The wait still grows with the rows.
+
+The table comes from `bench/results/laptop-2026-11-12T0327Z.json` through
+`bench/windows/summary.py`.
+
 ## Where Acrux loses
 
 - **Tall files.** Its first screen and grouping (2.3 GB where Polars takes
@@ -264,12 +312,19 @@ single run per cap the first one replaced).
 - **Quick questions in an open session.** A library that is loaded answers
   in hundredths of a second; `acrux` starts a process each time, and
   starting .NET is most of its 0.07 s.
-- **The 10 newest rows, half the time.** DuckDB is ahead on the ordinary
-  PC's wide file by 0.13 s (with 7 times Acrux's memory) and on the whole
+- **The 10 newest rows, on a slow CPU.** DuckDB is ahead on the real 2017
+  notebook by a second (1.2 s against 2.2 s, with 6 times Acrux's memory),
+  on the emulated ordinary PC's wide file by 0.13 s and on the whole
   laptop's tall file by half; Acrux is ahead on the other two.
+- **The desktop window on millions of rows.** The Windows grid sets up every
+  row before its first screen: about 9 s for the wide file in a Windows 11
+  virtual machine, and 47 s on the 2017 notebook before PR #24 (not timed
+  since). The window answers meanwhile, but the wait grows with the rows.
 
 ## Repeat it
 
-[`bench/README.md`](../bench/README.md) has the commands. The raw results,
-with every run, are in [`bench/results/`](../bench/results), and the tables
-above come from them through `bench/summary.py` and `bench/screen_memory.py`.
+[`bench/README.md`](../bench/README.md) has the commands, the Windows ones
+included. The raw results, with every run, are in
+[`bench/results/`](../bench/results), and the tables above come from them
+through `bench/summary.py`, `bench/screen_memory.py` and
+`bench/windows/summary.py`.
