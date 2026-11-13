@@ -185,7 +185,15 @@ comportamento visível, atualizar os dois.
 `terminal_gif.py` a partir de uma gravação (`cli.json`, `analyst.json`): o
 comando, a saída e o tempo são de verdade, e só a digitação é encenada. Os
 da janela são gravações do Windows re-temporizadas pelo `edit_gif.py`, que
-marca cada trecho acelerado. O `messy_csv.gif` põe o pandas ao lado do
+marca cada trecho acelerado; a espera do próprio app nunca é acelerada.
+Trecho cortado também leva selo (`edit_gif.py`, `a-b:cut`). O
+`open_grid.gif` do topo é a gravação do dono na VM (build `b8e1d23`,
+2026-11-12): abrir o 5M × 700, a contagem das linhas em tempo real e um
+filtro de cabeçalho. Os 16 s em que o painel de Widgets do Windows ficou
+aberto (manchetes de notícia) saíram com selo. **Gravação de tela para o
+README: sem Widgets, notificação ou outro app na área gravada**, e a ação
+no canto esquerdo da janela, que é o que cabe legível em 900 px.
+O `messy_csv.gif` põe o pandas ao lado do
 Acrux, num CSV como o Excel em português salva; desenho do dono. Ele só é
 justo se três coisas continuarem valendo:
 - a mesma regra de ritmo nos dois lados;
@@ -285,7 +293,7 @@ aparência no WinForms se perde na troca para o Avalonia.
   fonte) empurra o vizinho em vez de sobrepor, e botão escondido não deixa
   buraco.
 - **Aparência se confere na VM do Windows 11**, nos dois modos. Os GIFs do
-  README são anteriores ao tema.
+  README são anteriores ao tema, menos o `open_grid.gif` (modo claro).
 
 ## Porte multiplataforma (em andamento)
 
