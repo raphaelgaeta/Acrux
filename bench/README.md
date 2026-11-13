@@ -20,6 +20,14 @@ and numpy of `requirements.txt`, the SHA-256 of the 9 GB file was
 `28fef26a7ccff9c5037e57159eaf4a64b33e90e77153bad088c60e65755a218c` and that
 of the tall one `711e096a1403f70f0bf81683f5da8e0b841101dfc59aba0beae948ac7acb8e52`.
 
+On a Windows PC, with no Python and nothing installed:
+
+```
+bench/windows/make_folder.sh /tmp/out $D/stress_700cols_5Mrows.parquet   # ~900 MB, then copy it and the 9 GB file
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\AcruxBench\verify.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\AcruxBench\run.ps1   # right after a reboot
+```
+
 It needs Linux with systemd (user scopes, with the memory and io controllers
 delegated, as Fedora does), `taskset`, the .NET 10 SDK, the DuckDB command
 line of the version in `requirements.txt` (`duckdb-cli-linux-amd64.tar.gz` of
@@ -37,4 +45,5 @@ result belongs to a commit.
 | `bench.py` | runs everything under a memory cap, measures time and peak memory, and checks every answer against the others |
 | `summary.py` | the Markdown tables of docs/benchmarks.md, from a results JSON |
 | `screen_memory.py` | what the desktop app's first screen needs on the tall file: the memory cap it fits in, three runs per cap, and the time and peak loading k columns at a time |
-| `results/` | one JSON per run of `bench.py`, with the machine and the versions |
+| `windows/` | the check on a real Windows PC: `make_folder.sh` builds the folder (the app, the command line, the probe, DuckDB's command line, `SHA256SUMS`), `verify.ps1` checks the copy, `run.ps1` measures, `summary.py` makes the table |
+| `results/` | one JSON per run of `bench.py`, `screen_memory.py` or `windows/run.ps1`, with the machine and the versions |

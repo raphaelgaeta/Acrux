@@ -185,7 +185,15 @@ comportamento visível, atualizar os dois.
 `terminal_gif.py` a partir de uma gravação (`cli.json`, `analyst.json`): o
 comando, a saída e o tempo são de verdade, e só a digitação é encenada. Os
 da janela são gravações do Windows re-temporizadas pelo `edit_gif.py`, que
-marca cada trecho acelerado. O `messy_csv.gif` põe o pandas ao lado do
+marca cada trecho acelerado; a espera do próprio app nunca é acelerada.
+Trecho cortado também leva selo (`edit_gif.py`, `a-b:cut`). O
+`open_grid.gif` do topo é a gravação do dono na VM (build `b8e1d23`,
+2026-11-12): abrir o 5M × 700, a contagem das linhas em tempo real e um
+filtro de cabeçalho. Os 16 s em que o painel de Widgets do Windows ficou
+aberto (manchetes de notícia) saíram com selo. **Gravação de tela para o
+README: sem Widgets, notificação ou outro app na área gravada**, e a ação
+no canto esquerdo da janela, que é o que cabe legível em 900 px.
+O `messy_csv.gif` põe o pandas ao lado do
 Acrux, num CSV como o Excel em português salva; desenho do dono. Ele só é
 justo se três coisas continuarem valendo:
 - a mesma regra de ritmo nos dois lados;
@@ -285,7 +293,7 @@ aparência no WinForms se perde na troca para o Avalonia.
   fonte) empurra o vizinho em vez de sobrepor, e botão escondido não deixa
   buraco.
 - **Aparência se confere na VM do Windows 11**, nos dois modos. Os GIFs do
-  README são anteriores ao tema.
+  README são anteriores ao tema, menos o `open_grid.gif` (modo claro).
 
 ## Porte multiplataforma (em andamento)
 
@@ -413,8 +421,19 @@ outras. O resultado e o método estão em `docs/benchmarks.md`; os comandos, em
 `bench/README.md`. Desenho do dono: o laptop limitado ao que um PC comum tem
 (4 threads com `taskset`, 8 GB sem swap, leitura a 500 MB/s por
 `IOReadBandwidthMax`, cache do arquivo descartado antes de cada execução),
-para não "roubar" com 32 threads e 31 GB. Uma conferência num notebook de
-verdade (8 GB, 2017) está prevista.
+para não "roubar" com 32 threads e 31 GB. **Conferido num notebook de
+verdade** em 2026-11-12 (i7-7500U, 8 GB, SATA, Windows 10, Defender ligado;
+`bench/windows/`): as primeiras linhas e a primeira tela confirmaram a
+emulação; as 10 mais recentes não (2,2 s contra 1,2 s do DuckDB, onde a
+emulação dava 0,13 s de diferença). A busca linha a linha é trabalho de
+CPU, e a emulação não limita a velocidade de cada núcleo. **A primeira tela
+do benchmark são os dados, lidos pelo Core, não a janela:** no notebook, a
+janela ficou 47 s branca enquanto o grid montava as linhas (ver "Aumentar
+`RowCount`", nas Armadilhas). Depois do PR #24, ~9 s na VM; o notebook não
+foi medido de novo, e o texto público diz isso. No Windows: o
+PowerShell 5.1 grava o JSON com BOM (`utf-8-sig`); o pico é o
+`PeakPagedMemorySize64` (o commit) amostrado; e uma rodada só é fria para
+quem lê o arquivo primeiro depois do boot.
 - **Os arquivos são gerados com semente fixa** (`make_stress_parquet.py`,
   `make_messy_files.py`), com o SHA-256 no `bench/README.md`: o original dos
   GIFs não tem gerador. Ficam fora do repositório (9 GB).

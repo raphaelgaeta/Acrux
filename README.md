@@ -17,7 +17,7 @@ loads the data it isn't showing, and a command line for a quick look from any
 terminal, on Linux or Windows.
 
 <p align="center">
-  <img src="assets/open_grid.gif" width="49%" alt="The desktop app opening a 5-million-row parquet, picking columns and filtering a header">
+  <img src="assets/open_grid.gif" width="49%" alt="The desktop app opening the 5-million-row, 700-column parquet, counting the rows in the status bar in real time, then filtering a header down to 950 rows">
   <img src="assets/cli.gif" width="49%" alt="The acrux command line on the same parquet: row count, schema, a column, the first rows and a time filter">
 </p>
 <p align="center"><sub>The same 9 GB file, 700 columns × 5 million rows: the desktop app on Windows · the command line in a terminal (click either to enlarge)</sub></p>
@@ -161,8 +161,10 @@ nothing downstream can tell.
   10 to 12 GB ([benchmarks](docs/benchmarks.md#what-the-tall-files-first-screen-needs)).
   Height costs time too: the Windows grid sets up every row before the
   first screen, and a row costs more the more columns the file has. With
-  the 5-million-row, 700-column test file that takes several seconds, more
-  on an older PC, with the rows counted in the status bar meanwhile.
+  the 5-million-row, 700-column test file that takes about 9 s in a
+  Windows 11 virtual machine, and more on an older PC. The window answers
+  meanwhile, with the rows counted in the status bar, as in the animation
+  at the top.
 - **Filter like Excel.** Click a header, get the distinct values (blanks
   included), check what you want. Filters compose across columns.
 - **The grid never bends the data to fit the screen.** A missing value shows
@@ -294,6 +296,18 @@ Acrux runs on Polars, so it isn't faster than Polars in expert hands: it gets
 there without the shortcuts, and it never read a messy column wrong without
 a word, where DuckDB did once. Its weak spot is height: a file with 100
 million rows doesn't fit the desktop app's first screen in 8 GB yet.
+
+Checked on a real 2017 notebook (Core i7-7500U, 8 GB, SATA SSD, Windows 10
+with Defender on): `acrux head` showed the first rows of the 9 GB file in
+0.4 s with 55 MB (2.1 s the first time after a reboot), and the desktop
+app read its first screen's columns in 0.95 s (2.7 s right after the
+reboot). DuckDB took 0.8 s and 656 MB for the first rows, and was faster at
+the 10 newest rows, 1.2 s against 2.2 s. The notebook also showed what the
+benchmark misses, since it times the data and not the window: the desktop
+window stayed blank for 47 s while the Windows grid set up the 5 million
+rows. The grid now takes them in blocks, with the window answering and the
+rows counted (about 9 s in a Windows 11 virtual machine); the notebook
+hasn't been timed again.
 [All the numbers, the method, and where Acrux loses](docs/benchmarks.md).
 
 ## Building

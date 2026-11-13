@@ -2,7 +2,9 @@
 moving the mouse), never the app's own waiting, and marks every sped-up
 stretch with a small "N×" badge.
 Usage: python3 edit_gif.py <in.gif> <out.gif> <plan>
-plan: comma list of first-last:speed, by frame number, e.g. "0-6:1,7-26:1.5"."""
+plan: comma list of first-last:speed, by frame number, e.g. "0-6:1,7-26:1.5".
+first-last:cut drops those frames and marks the next second with "N s cut";
+hold:S keeps the last frame S seconds more, for reading before the loop."""
 import os, subprocess, sys, tempfile
 from PIL import Image, ImageDraw, ImageFont
 
@@ -22,26 +24,36 @@ except EOFError:
 font = ImageFont.truetype(subprocess.run(["fc-match", "-f", "%{file}", "DejaVu Sans:bold"],
                                          capture_output=True, text=True).stdout, 15)
 
-def badge(frame, speed):
+def badge(frame, text):
     f = frame.copy()
     d = ImageDraw.Draw(f, "RGBA")
-    text = f"{speed:g}×"
     w = d.textlength(text, font=font)
     x1, y1 = f.width - 12, f.height - 12
     d.rounded_rectangle((x1 - w - 16, y1 - 26, x1, y1), radius=6, fill=(30, 30, 30, 190))
     d.text((x1 - w - 8, y1 - 22), text, font=font, fill=(255, 255, 255, 255))
     return f
 
+CUT_MARK_MS = 1000
 out = []   # (frame, ms)
+cut_note, cut_left = None, 0.0
 for part in plan.split(","):
     rng, speed = part.split(":")
+    if rng == "hold":
+        frame, ms = out[-1]
+        out[-1] = (frame, ms + round(float(speed) * 1000))
+        continue
     first, last = map(int, rng.split("-"))
+    if speed == "cut":
+        cut_note, cut_left = f"{sum(delays[first:last + 1]) / 1000:.0f} s cut", CUT_MARK_MS
+        continue
     speed = float(speed)
     acc = 0.0
     for i in range(first, last + 1):
         acc += delays[i] / speed
         if acc >= MIN_MS or i == last:
-            out.append((badge(frames[i], speed) if speed != 1 else frames[i], round(acc)))
+            labels = ([cut_note] if cut_left > 0 else []) + ([f"{speed:g}×"] if speed != 1 else [])
+            out.append((badge(frames[i], " · ".join(labels)) if labels else frames[i], round(acc)))
+            cut_left -= acc
             acc = 0.0
 
 total = sum(ms for _, ms in out) / 1000
