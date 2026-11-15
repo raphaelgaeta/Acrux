@@ -359,8 +359,10 @@ passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
   1. esqueleto: janela, abrir arquivo (qualquer formato; xlsx e SQLite pela
      primeira aba ou tabela), grade, barra com a memória, tema do sistema,
      ícone, arquivo por argumento, limpeza de temporários e
-     `Environment.Exit(0)` (**feita**, branch `feat/avalonia-app`);
-  2. a escolha de aba ou tabela do xlsx e do SQLite;
+     `Environment.Exit(0)` (**feita**, PR #27);
+  2. a escolha de aba ou tabela do xlsx e do SQLite (`TableChoice`, como o
+     `SheetSelectorForm`: tabelas antes das views; "Cancel" não abre nada)
+     (**feita**, branch `feat/avalonia-tables`);
   3. o filtro do cabeçalho, "Clear all filters" e o seletor de colunas;
   4. o terminal C#;
   5. acabamento: o `Trim` da memória a cada 5 s, `MALLOC_ARENA_MAX` e
@@ -689,6 +691,7 @@ o `Describe` lê a mensagem na cultura invariante.
 | `src/Acrux.Core/TimeFilter.cs` | Filtro de tempo relativo: lê períodos no padrão do systemd, monta o predicado por tipo de coluna e acha as posições das N linhas mais recentes |
 | `src/Acrux.Core/Session.cs` | O arquivo aberto, sem tela: a cópia em parquet (apagada no fim) e o cache de colunas; os filtros e os scripts entram nas próximas fases do app no Avalonia |
 | `src/Acrux.Avalonia/MainWindow.cs` | A janela do app no Avalonia: abrir arquivo, a barra com a memória, a grade |
+| `src/Acrux.Avalonia/TableChoice.cs` | Qual aba do xlsx ou tabela do SQLite abrir, quando há mais de uma |
 | `src/Acrux.Avalonia/Grid/TableGrid.cs` | A grade desenhada: nada por linha, rolagem em linhas, teclas e seleção do `DataGridView`, Ctrl+C, colunas redimensionáveis |
 | `src/Acrux.Avalonia/Grid/Cells.cs` | O texto de cada célula pelas regras do `GridPainting` (`null`, `###`, `↵`) e o que o Ctrl+C copia |
 | `src/Acrux.Avalonia/Grid/Palette.cs` | As cores da grade no claro e no escuro, as do `Theme.cs` |

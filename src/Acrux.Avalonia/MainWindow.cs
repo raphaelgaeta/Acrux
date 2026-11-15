@@ -59,9 +59,9 @@ internal sealed class MainWindow : Window
     }
 
     /// <summary>
-    /// Opens a file, whatever its format (the content decides). An xlsx or an
-    /// SQLite file opens its first sheet or table for now; the choice comes
-    /// in the next phase.
+    /// Opens a file, whatever its format: the content decides, not the
+    /// extension. An xlsx with several sheets or an SQLite file with several
+    /// tables asks which one first; the conversion to parquet comes after.
     /// </summary>
     private async Task LoadAsync(string path)
     {
@@ -69,7 +69,29 @@ internal sealed class MainWindow : Window
         try
         {
             _info.Text = "Opening...";
-            var session = await Session.OpenAsync(path, _memory, progress: new Progress<string>(message => _info.Text = message));
+            var format = await Task.Run(() => DataFrameProvider.DetectFormat(path));
+            int table = 0;
+            if (format is SourceFormat.Excel or SourceFormat.Sqlite)
+            {
+                var names = await Task.Run(() => DataFrameProvider.GetTableNames(path));
+                if (names.Length > 1)
+                {
+                    table = await new TableChoice(names, format == SourceFormat.Excel ? "Select sheet" : "Select table").ChooseAsync(this);
+                    if (table < 0)
+                    {
+                        _info.Text = "Load canceled";
+                        return;
+                    }
+                }
+            }
+            _info.Text = format switch
+            {
+                SourceFormat.Csv => "Converting CSV to parquet...",
+                SourceFormat.Excel => "Converting Excel to parquet...",
+                SourceFormat.Sqlite => "Converting SQLite table to parquet...",
+                _ => "Reading schema...",
+            };
+            var session = await Session.OpenAsync(path, _memory, table, new Progress<string>(message => _info.Text = message));
             var old = _session;
             _session = session;
             var grid = new TableGrid(session.File);
