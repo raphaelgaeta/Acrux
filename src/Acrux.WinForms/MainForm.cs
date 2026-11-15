@@ -1020,7 +1020,9 @@ protected override void OnFormClosed(FormClosedEventArgs e)
             var swGrid = System.Diagnostics.Stopwatch.StartNew();
 
             // Shrinking RowCount removes rows one by one (minutes on millions
-            // of rows); Rows.Clear() is an O(1) reset and re-adding is bulk.
+            // of rows); Rows.Clear() is one pass with no per-row events
+            // (~40 ms for 5 million under Wine, see GridRows.AddRows) and
+            // re-adding is bulk.
             // Clear BEFORE swapping the indices: Rows.Clear() first leaves the
             // current cell (CurrentCell = null) and reads its value, so while
             // the old rows exist, _filteredRows must still be the old array.

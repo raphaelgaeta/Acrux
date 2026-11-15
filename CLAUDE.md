@@ -993,7 +993,9 @@ o `Describe` lê a mensagem na cultura invariante.
 
 ### DataGridView (modo virtual)
 - **Diminuir `RowCount` remove linhas uma a uma** (minutos com milhões de
-  linhas). Caminho rápido: `Rows.Clear()` (O(1)) e então setar o novo valor.
+  linhas). Caminho rápido: `Rows.Clear()` e então setar o novo valor. O
+  `Clear()` não é O(1): passa uma vez pelas linhas, sem evento por linha
+  (~40 ms com 5M pelo Wine), desde que elas dividam um objeto só (abaixo).
 - **Aumentar `RowCount` custa tempo por linha e por coluna** (código do
   .NET 10; medido em 2026-11-12). Cada linha nova passa por
   `AddCopiesPrivate` → `OnAddedRow_PostNotification` →
@@ -1014,6 +1016,21 @@ o `Describe` lê a mensagem na cultura invariante.
   "Columns", script e "Restore file". O custo continua proporcional às linhas: o remédio de vez
   é uma grade que não tem uma linha por linha do arquivo (a do Avalonia).
   `bench/GridProbe` mede de novo, com o próprio `GridRows.cs`.
+- **As linhas compartilhadas precisam ser um objeto só** (achado em
+  2026-11-15). No modo virtual, a lista de linhas repete um objeto
+  "compartilhado", e o `RowCount += n` clona um novo a cada chamada: os
+  blocos do `GridRows` deixavam ~15. O indexador `Rows[i]` (código do .NET
+  10) roda `SharedList.LastIndexOf(linha)` antes de descompartilhar uma
+  linha, de trás para frente até o bloco dela: ~5M comparações por linha do
+  primeiro bloco. O `Rows.Clear()` pega assim cada linha exibida
+  (`OnClearingRows`), e o filtro de 5M para 950 linhas mostrou `grid 1745 ms`
+  na VM; clique e seleção passam pelo mesmo indexador. Por isso os blocos
+  depois do primeiro entram por `Rows.AddCopies(última linha, n)`, que repete
+  o objeto da linha de origem, e o custo de montar é o mesmo (os dois
+  terminam no `AddCopiesPrivate`). Pelo `GridProbe`, no Wine, depois da
+  montagem em blocos: selecionar 300 linhas de 1,1–2,9 s para 0,31–0,43 s
+  (com um `RowCount` só, 0,22–0,27 s), e o `Rows.Clear()` de 135 ms para
+  40–49 ms.
 - **Entre um bloco e outro, `await Task.Delay(1)`, não `Task.Yield()`:** a
   continuação do `Yield` é uma mensagem postada, que o Windows entrega
   antes de clique e pintura, e a janela continuaria parada. E um `Timer` do
