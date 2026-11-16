@@ -362,13 +362,20 @@ passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
      `Environment.Exit(0)` (**feita**, PR #27);
   2. a escolha de aba ou tabela do xlsx e do SQLite (`TableChoice`, como o
      `SheetSelectorForm`: tabelas antes das views; "Cancel" não abre nada)
-     (**feita**, branch `feat/avalonia-tables`);
-  3. o filtro do cabeçalho, "Clear all filters" e o seletor de colunas;
+     (**feita**, PR #28);
+  3. o filtro do cabeçalho, "Clear all filters" e o seletor de colunas
+     (**feita**, branch `feat/avalonia-filters`): os filtros, as linhas e as
+     colunas escondidas na `Session`; a grade só troca a lista de linhas, e
+     a coluna escondida fica no seu índice, sem largura;
   4. o terminal C#;
   5. acabamento: o `Trim` da memória a cada 5 s, `MALLOC_ARENA_MAX` e
      `malloc_trim` no Linux (ver "O heap do Windows devolve a memória"),
      mensagens de erro, soltar um arquivo na janela;
   6. entrega: `win-x64` e `linux-x64` na CI, o instalador, os GIFs.
+- **No Avalonia, o texto de uma `CheckBox` (ou de um botão) perde o primeiro
+  `_`:** um `string` como conteúdo é lido como tecla de atalho, e
+  `ITEM_000003` aparecia `ITEM000003` (achado por imagem na fase 3; o popup
+  do spike também tinha). Nome de coluna e valor vão num `TextBlock`.
 - **Lacunas conhecidas:** a grade desenhada não fala com leitor de tela (falta
   o `AutomationPeer`), o alto contraste não tira as cores da marca, e o Ctrl+C
   recusa mais de 1 milhão de células, uma trava provisória até o dono decidir
@@ -689,8 +696,10 @@ o `Describe` lê a mensagem na cultura invariante.
 | `src/Acrux.Core/TextDates.cs` | Datas guardadas como texto (CSV, SQLite) viram data só quando não há ambiguidade |
 | `src/Acrux.Core/PolarsErrors.cs` | Erros do Polars para gente: a mensagem sem o plano que ele anexa (CLI e app) |
 | `src/Acrux.Core/TimeFilter.cs` | Filtro de tempo relativo: lê períodos no padrão do systemd, monta o predicado por tipo de coluna e acha as posições das N linhas mais recentes |
-| `src/Acrux.Core/Session.cs` | O arquivo aberto, sem tela: a cópia em parquet (apagada no fim) e o cache de colunas; os filtros e os scripts entram nas próximas fases do app no Avalonia |
+| `src/Acrux.Core/Session.cs` | O arquivo aberto, sem tela: a cópia em parquet (apagada no fim), o cache de colunas, os filtros com as linhas que mantêm e as colunas escondidas; os scripts entram na fase 4 do app no Avalonia |
 | `src/Acrux.Avalonia/MainWindow.cs` | A janela do app no Avalonia: abrir arquivo, a barra com a memória, a grade |
+| `src/Acrux.Avalonia/FilterPopup.cs` | O filtro do cabeçalho: os valores da coluna, a busca, "(Blanks)", o aviso de lista cortada |
+| `src/Acrux.Avalonia/ColumnChoice.cs` | O diálogo do botão "Columns": quais colunas a grade mostra |
 | `src/Acrux.Avalonia/TableChoice.cs` | Qual aba do xlsx ou tabela do SQLite abrir, quando há mais de uma |
 | `src/Acrux.Avalonia/Grid/TableGrid.cs` | A grade desenhada: nada por linha, rolagem em linhas, teclas e seleção do `DataGridView`, Ctrl+C, colunas redimensionáveis |
 | `src/Acrux.Avalonia/Grid/Cells.cs` | O texto de cada célula pelas regras do `GridPainting` (`null`, `###`, `↵`) e o que o Ctrl+C copia |

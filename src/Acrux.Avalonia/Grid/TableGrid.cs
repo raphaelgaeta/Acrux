@@ -34,6 +34,7 @@ public sealed class TableGrid : Grid
     private readonly ColumnCache _cache;
     private readonly double[] _width;  // each column's width, which the user can drag or fit
     private readonly double[] _left;   // x of each column's left edge; one more for the right end
+    private readonly bool[] _hidden;   // "Columns": no width, skipped by keys, clicks and copies
     private readonly CellSurface _surface;
     private readonly ScrollBar _vertical = new() { Orientation = Orientation.Vertical };
     private readonly ScrollBar _horizontal = new() { Orientation = Orientation.Horizontal };
@@ -49,7 +50,8 @@ public sealed class TableGrid : Grid
         int count = cache.Fields.Count;
         _width = Enumerable.Range(0, count).Select(Cells.Width).ToArray();
         _left = new double[count + 1];
-        for (int c = 0; c < count; c++)
+        _hidden = new bool[count];
+        for (int c = 0; c < count; c++)   // not Relayout: the surface it repaints doesn't exist yet
             _left[c + 1] = _left[c] + _width[c];
 
         ColumnDefinitions = new ColumnDefinitions("*,Auto");
@@ -168,7 +170,7 @@ public sealed class TableGrid : Grid
         int first = Math.Max(0, found < 0 ? ~found - 1 : found);
         var columns = new List<int>();
         for (int c = first; c < ColumnCount && _left[c] < to; c++)
-            if (_left[c + 1] > from) columns.Add(c);
+            if (!_hidden[c] && _left[c + 1] > from) columns.Add(c);
         return columns;
     }
 
@@ -184,7 +186,7 @@ public sealed class TableGrid : Grid
     public void Select(int row, int column, bool extend = false)
     {
         if (RowCount == 0) return;
-        Current = (Math.Clamp(row, 0, RowCount - 1), Math.Clamp(column, 0, ColumnCount - 1));
+        Current = (Math.Clamp(row, 0, RowCount - 1), NearestShown(column, column >= Current.Column ? +1 : -1));
         if (!extend) Anchor = Current;
         BringIntoView(Current);
         _surface.InvalidateVisual();
@@ -193,7 +195,8 @@ public sealed class TableGrid : Grid
     public void SelectAll()
     {
         Anchor = (0, 0);
-        Current = (Math.Max(0, RowCount - 1), ColumnCount - 1);
+        Anchor = (0, NearestShown(0, +1));
+        Current = (Math.Max(0, RowCount - 1), NearestShown(ColumnCount - 1, -1));
         _surface.InvalidateVisual();
     }
 
@@ -211,7 +214,7 @@ public sealed class TableGrid : Grid
             Status?.Invoke($"Not copied: {cells:N0} cells selected, a copy takes up to {CopyLimit:N0}.");
             return false;
         }
-        var columns = Enumerable.Range(s.Left, s.Right - s.Left + 1).ToList();
+        var columns = Enumerable.Range(s.Left, s.Right - s.Left + 1).Where(c => !_hidden[c]).ToList();
         if (!_cache.Fits(columns))
         {
             Status?.Invoke($"Not copied: the {columns.Count} columns don't fit in memory together.");
@@ -271,9 +274,7 @@ public sealed class TableGrid : Grid
     private (int Row, int Column) CellAt(Point point)
     {
         int row = FirstRow + (int)Math.Floor((point.Y - Cells.HeaderHeight) / Cells.RowHeight);
-        int i = Array.BinarySearch(_left, OffsetX + point.X);
-        int column = i < 0 ? ~i - 1 : i;
-        return (Math.Clamp(row, 0, Math.Max(0, RowCount - 1)), Math.Clamp(column, 0, ColumnCount - 1));
+        return (Math.Clamp(row, 0, Math.Max(0, RowCount - 1)), ColumnAtX(OffsetX + point.X));
     }
 
     private void Wheel(object? sender, PointerWheelEventArgs e)
@@ -354,20 +355,64 @@ public sealed class TableGrid : Grid
     {
         if (point.Y < 0 || point.Y >= Cells.HeaderHeight) return -1;
         double x = OffsetX + point.X;
-        int found = Array.BinarySearch(_left, x);
-        int column = found < 0 ? ~found - 1 : found;
+        int column = ColumnAtX(x);
         for (int c = Math.Max(0, column - 1); c <= Math.Min(ColumnCount - 1, column); c++)
-            if (Math.Abs(_left[c + 1] - x) <= BorderGrip) return c;
+            if (!_hidden[c] && Math.Abs(_left[c + 1] - x) <= BorderGrip) return c;
         return -1;
     }
 
     public void SetColumnWidth(int column, double width)
     {
         _width[column] = Math.Max(MinColumnWidth, width);
-        for (int c = column; c < ColumnCount; c++)
-            _left[c + 1] = _left[c] + _width[c];
+        Relayout(column);
+    }
+
+    /// <summary>
+    /// Hides these columns and shows the rest. A hidden column keeps its index
+    /// (a column's index is the file's) and takes no room.
+    /// </summary>
+    public void SetHidden(IReadOnlySet<int> hidden)
+    {
+        for (int c = 0; c < ColumnCount; c++)
+            _hidden[c] = hidden.Contains(c);
+        Anchor = Current = (Current.Row, NearestShown(Current.Column, +1));
+        Relayout(0);
+        _ = EnsureVisibleAsync();
+    }
+
+    public bool IsHidden(int column) => _hidden[column];
+
+    // the left edges from this column on, a hidden column taking no room
+    private void Relayout(int from)
+    {
+        for (int c = from; c < ColumnCount; c++)
+            _left[c + 1] = _left[c] + (_hidden[c] ? 0 : _width[c]);
         UpdateScrollBars();
         _surface.InvalidateVisual();
+    }
+
+    /// <summary>The column itself if shown; else the next shown one that way, or the other way.</summary>
+    private int NearestShown(int column, int step)
+    {
+        column = Math.Clamp(column, 0, ColumnCount - 1);
+        for (int c = column; c >= 0 && c < ColumnCount; c += step)
+            if (!_hidden[c]) return c;
+        for (int c = column; c >= 0 && c < ColumnCount; c -= step)
+            if (!_hidden[c]) return c;
+        return column;   // all hidden: "Columns" never allows it
+    }
+
+    // the shown column whose span holds x: the last left edge at or before x
+    // (hidden columns share their edge with the next one, so take the last)
+    private int ColumnAtX(double x)
+    {
+        int low = 0, high = ColumnCount;   // the first edge past x, in _left[1..]
+        while (low < high)
+        {
+            int mid = (low + high) / 2;
+            if (_left[mid + 1] > x) high = mid; else low = mid + 1;
+        }
+        return NearestShown(Math.Min(low, ColumnCount - 1), +1);
     }
 
     /// <summary>
@@ -411,16 +456,17 @@ public sealed class TableGrid : Grid
     {
         bool ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control), shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         var (row, column) = Current;
-        int page = VisibleRowCount, lastRow = RowCount - 1, lastColumn = ColumnCount - 1;
+        int page = VisibleRowCount, lastRow = RowCount - 1;
+        int firstColumn = NearestShown(0, +1), lastColumn = NearestShown(ColumnCount - 1, -1);
         (int, int)? to = e.Key switch
         {
             Key.Up => ctrl ? (0, column) : (row - 1, column),
             Key.Down => ctrl ? (lastRow, column) : (row + 1, column),
-            Key.Left => ctrl ? (row, 0) : (row, column - 1),
-            Key.Right => ctrl ? (row, lastColumn) : (row, column + 1),
+            Key.Left => ctrl ? (row, firstColumn) : (row, Math.Max(firstColumn, column - 1)),
+            Key.Right => ctrl ? (row, lastColumn) : (row, Math.Min(lastColumn, column + 1)),
             Key.PageUp => (row - page, column),
             Key.PageDown => (row + page, column),
-            Key.Home => ctrl ? (0, 0) : (row, 0),
+            Key.Home => ctrl ? (0, firstColumn) : (row, firstColumn),
             Key.End => ctrl ? (lastRow, lastColumn) : (row, lastColumn),
             _ => null,
         };
