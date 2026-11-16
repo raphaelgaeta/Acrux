@@ -101,7 +101,8 @@ internal sealed class TerminalPanel : Grid
     }
 
     // the echo and the errors take the palette of the moment (light or dark) when written
-    private Palette Colors => Palette.For(ActualThemeVariant);
+    // the brand's, not the high contrast's: the terminal's box is Fluent's, which has none
+    private Palette Colors => Palette.Chrome(ActualThemeVariant);
     public void AppendCode(string code) => Append($"> {code.Replace("\n", "\n  ")}\n", Colors.Muted);
     public void AppendResult(string text) => Append(text + "\n\n", null);
     public void AppendError(string text) => Append(text + "\n\n", Colors.Error);

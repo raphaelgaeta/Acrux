@@ -20,6 +20,7 @@ internal sealed class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        HighContrast.Start(this);   // before the window: its first frame already in the system's colors
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             desktop.MainWindow = new MainWindow(FileToOpen);
         base.OnFrameworkInitializationCompleted();
