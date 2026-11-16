@@ -52,7 +52,7 @@ internal sealed class MainWindow : Window
         Title = "Acrux";
         Width = 1280;
         Height = 800;
-        Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://Acrux.Avalonia/Assets/acrux.ico")));
+        Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://Acrux/Assets/acrux.ico")));
 
         var bar = new StackPanel
         {

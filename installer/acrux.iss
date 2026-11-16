@@ -1,7 +1,7 @@
 ; Windows installer for the desktop app (Inno Setup 6.7). Built by the release
 ; workflow (.github/workflows/release.yml), which passes:
 ;   /DAppVersion=0.1.0  /DNumericVersion=0.1.0  /DLabel=v0.1.0
-;   /DPublishDir=<a self-contained, NOT single-file, publish of Acrux.WinForms>
+;   /DPublishDir=<a self-contained, NOT single-file, publish of src/Acrux.Avalonia>
 ; A folder install starts faster than the single-file exe and leaves nothing
 ; extracted under %TEMP%\.net.
 ;
@@ -37,7 +37,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ; Windows 10 and later carry the Universal C runtime (api-ms-win-crt-*)
 MinVersion=10.0
 WizardStyle=modern
-SetupIconFile=..\src\Acrux.WinForms\acrux.ico
+SetupIconFile=..\src\Acrux.Avalonia\Assets\acrux.ico
 UninstallDisplayIcon={app}\Acrux.exe
 Compression=lzma2
 SolidCompression=yes
@@ -49,7 +49,8 @@ ChangesAssociations=yes
 Name: desktopicon; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
+; the publish brings SkiaSharp's native debug symbols (~105 MB of .pdb): users don't need them
+Source: "{#PublishDir}\*"; DestDir: "{app}"; Excludes: "*.pdb"; Flags: ignoreversion recursesubdirs
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"
 Source: "..\assets\brand\NOTICE.md"; DestDir: "{app}"; DestName: "NOTICE-logo.md"
 

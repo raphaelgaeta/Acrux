@@ -33,7 +33,7 @@ internal sealed class ColumnChoice : Window
         MinHeight = 400;
         ShowInTaskbar = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://Acrux.Avalonia/Assets/acrux.ico")));
+        Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://Acrux/Assets/acrux.ico")));
         _all = [.. columns.Select(c => new Item(c, !hidden.Contains(c)))];
         foreach (var item in _all)
             item.PropertyChanged += (_, _) => UpdateCount();

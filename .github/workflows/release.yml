@@ -1,4 +1,5 @@
-# Builds the Windows app (installer and zip) and the Linux command line. On a
+# Builds the desktop app (Windows installer and zip, Linux package) and the
+# Linux command line. On a
 # pull request it only checks that they build (and that the smoke test
 # passes); on a "v*" tag it also creates a DRAFT release with the files and
 # their SHA-256 sums — the maintainer reviews it and clicks Publish.
@@ -66,10 +67,41 @@ jobs:
           cp LICENSE out/acrux-cli/
           out/acrux-cli/acrux version
           tar -czf acrux-cli-${{ needs.version.outputs.label }}-${{ matrix.rid }}.tar.gz -C out acrux-cli
+      # x64 only: the desktop app on 64-bit ARM is untested, and Polars' arm64
+      # native needs glibc 2.39, which leaves most ARM desktops out
+      - name: "Desktop app: a folder with install.sh (self-contained)"
+        if: matrix.rid == 'linux-x64'
+        run: |
+          dotnet publish src/Acrux.Avalonia/Acrux.Avalonia.csproj -c Release -r linux-x64 \
+            --self-contained true -p:Version=${{ needs.version.outputs.version }} -o out/acrux
+          find out/acrux -name '*.pdb' -delete
+          mkdir -p out/acrux/share
+          cp installer/linux/install.sh installer/linux/uninstall.sh out/acrux/
+          cp installer/linux/acrux-parquet.xml out/acrux/share/
+          cp assets/brand/acrux-icon.svg out/acrux/share/acrux.svg
+          cp LICENSE out/acrux/
+          cp assets/brand/NOTICE.md out/acrux/NOTICE-logo.md
+          tar -czf Acrux-${{ needs.version.outputs.label }}-linux-x64.tar.gz -C out acrux
+      - name: "Desktop app: install and uninstall in a throwaway home"
+        if: matrix.rid == 'linux-x64'
+        run: |
+          sudo apt-get install -y --no-install-recommends desktop-file-utils shared-mime-info xdg-utils libglib2.0-bin > /dev/null
+          export XDG_DATA_HOME=$RUNNER_TEMP/data XDG_CONFIG_HOME=$RUNNER_TEMP/config
+          mkdir -p $RUNNER_TEMP/x && tar -xzf Acrux-*-linux-x64.tar.gz -C $RUNNER_TEMP/x
+          $RUNNER_TEMP/x/acrux/install.sh
+          desktop-file-validate $XDG_DATA_HOME/applications/acrux.desktop
+          test -x $XDG_DATA_HOME/acrux/Acrux
+          cp tests/smoke/fixtures/tipos.parquet $RUNNER_TEMP/t.parquet
+          gio info -a standard::content-type $RUNNER_TEMP/t.parquet | grep -q vnd.apache.parquet \
+            || { echo "the parquet type is not registered"; exit 1; }
+          $XDG_DATA_HOME/acrux/uninstall.sh
+          test ! -e $XDG_DATA_HOME/acrux && test ! -e $XDG_DATA_HOME/applications/acrux.desktop
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.rid }}
-          path: acrux-cli-*.tar.gz
+          path: |
+            acrux-cli-*.tar.gz
+            Acrux-*-linux-x64.tar.gz
           retention-days: 7
 
   windows:
@@ -83,7 +115,7 @@ jobs:
       - name: Publish the desktop app (single file, self-contained)
         shell: pwsh
         run: |
-          dotnet publish src/Acrux.WinForms/Acrux.WinForms.csproj -c Release -r win-x64 `
+          dotnet publish src/Acrux.Avalonia/Acrux.Avalonia.csproj -c Release -r win-x64 `
             --self-contained true -p:PublishSingleFile=true `
             -p:Version=${{ needs.version.outputs.version }} -o out
           New-Item -ItemType Directory -Force pkg | Out-Null
@@ -93,7 +125,7 @@ jobs:
       - name: "Installer (Inno Setup: a folder publish, plus the VC++ runtime if missing)"
         shell: pwsh
         run: |
-          dotnet publish src/Acrux.WinForms/Acrux.WinForms.csproj -c Release -r win-x64 `
+          dotnet publish src/Acrux.Avalonia/Acrux.Avalonia.csproj -c Release -r win-x64 `
             --self-contained true -p:Version=${{ needs.version.outputs.version }} -o out-setup
           choco install innosetup --version 6.7.1 -y --no-progress --allow-downgrade | Out-Null
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
@@ -125,7 +157,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha256sum Acrux-*-setup.exe Acrux-*.zip acrux-cli-*.tar.gz > SHA256SUMS
+          sha256sum Acrux-*-setup.exe Acrux-*.zip Acrux-*.tar.gz acrux-cli-*.tar.gz > SHA256SUMS
           cat > notes.md <<'EOF'
           **Windows app** — run `Acrux-…-setup.exe`: it installs Acrux for your user,
           without admin rights. If the Microsoft Visual C++ runtime that Acrux needs
@@ -141,6 +173,14 @@ jobs:
           Neither file is code-signed, so Windows SmartScreen warns about an
           unknown publisher: **More info → Run anyway**.
 
+          **Linux app** — extract `Acrux-…-linux-x64.tar.gz` and run
+          `acrux/install.sh`: it installs Acrux for your user (no root) in
+          `~/.local/share/acrux`, with a menu entry and "Open with" for parquet,
+          CSV, Excel and SQLite files; `uninstall.sh`, next to it, removes it. No
+          .NET needed. Parquet opens in Acrux on a double click unless another app
+          already claims it (LibreOffice Calc does since 26.2: the script says how
+          to switch). It needs a CPU with AVX2, like the command line below.
+
           **Command line, Linux** — extract `acrux-cli-…-linux-x64.tar.gz` (Intel or
           AMD) or `acrux-cli-…-linux-arm64.tar.gz` (64-bit ARM) and put the
           `acrux-cli` folder on your `PATH` (the `acrux` link inside starts it); no
@@ -154,4 +194,4 @@ jobs:
           EOF
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
             --title "Acrux $GITHUB_REF_NAME" --notes-file notes.md --generate-notes \
-            Acrux-*-setup.exe Acrux-*.zip acrux-cli-*.tar.gz SHA256SUMS
+            Acrux-*-setup.exe Acrux-*.zip Acrux-*.tar.gz acrux-cli-*.tar.gz SHA256SUMS

@@ -23,7 +23,7 @@ internal sealed class TableChoice : Window
         CanResize = false;
         ShowInTaskbar = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://Acrux.Avalonia/Assets/acrux.ico")));
+        Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://Acrux/Assets/acrux.ico")));
 
         _list.ItemsSource = names;
         _list.SelectedIndex = 0;
