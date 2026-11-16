@@ -56,6 +56,7 @@ public static class Cells
         return value switch
         {
             DBNull => ("null", Kind.Null),
+            DateTime day when IsDate(cache, column) => (day.ToString("d", CultureInfo.CurrentCulture), Kind.Text),
             sbyte or byte or short or ushort or int or uint or long or ulong or Half or float or double or decimal
                 => (((IFormattable)value).ToString(null, CultureInfo.CurrentCulture), Kind.Number),
             string text when text.AsSpan().IndexOfAny('\r', '\n') >= 0 => (text.ReplaceLineEndings(" ↵ "), Kind.Text),
@@ -63,6 +64,13 @@ public static class Cells
             _ => (value.ToString() ?? "", Kind.Text),
         };
     }
+
+    /// <summary>
+    /// A date column (Polars' <c>date</c>): it arrives as a DateTime at midnight,
+    /// and its "12:00:00 AM" on every row was noise, so only the day is shown and
+    /// copied, in the system's short format (11/23/2017, 23/11/2017), as Excel.
+    /// </summary>
+    private static bool IsDate(ColumnCache cache, int column) => cache.Fields[column].DataType is Date32Type or Date64Type;
 
     /// <summary>A cell as Ctrl+C copies it: the data, so a null is empty and line breaks stay.</summary>
     public static string CopyText(ColumnCache cache, int column, int row)
@@ -72,6 +80,7 @@ public static class Cells
         return value switch
         {
             DBNull => "",
+            DateTime day when IsDate(cache, column) => day.ToString("d", CultureInfo.CurrentCulture),
             IFormattable formattable => formattable.ToString(null, CultureInfo.CurrentCulture),
             _ => value.ToString() ?? "",
         };

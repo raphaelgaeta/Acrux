@@ -282,6 +282,9 @@ internal sealed class MainWindow : Window
             .Where(c => session.Filters.ContainsKey(session.File.Fields[c].Name)));
         _clearFilters.IsEnabled = session.Filters.Count > 0;
         _info.Text = $"{Info(session)}  [query {query.ElapsedMilliseconds:N0} ms | grid {swap.ElapsedMilliseconds:N0} ms]";
+        grid.Announce(session.Filters.Count > 0
+            ? $"Filtered: {grid.RowCount:N0} of {session.File.RowCount:N0} rows"
+            : $"No filter: all {grid.RowCount:N0} rows");
     }
 
     /// <summary>"Columns": which columns the grid shows. The filters stay, even on a hidden column.</summary>

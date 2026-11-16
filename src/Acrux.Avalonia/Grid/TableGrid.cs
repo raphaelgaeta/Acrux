@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text;
 using Avalonia;
+using Avalonia.Automation;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -51,6 +53,9 @@ public sealed class TableGrid : Grid
     private int _hoverButton = -1;         // the header whose button is under the pointer
     private readonly CellSurface _surface;
     private readonly ValueBar _valueBar = new();
+    // what a screen reader says: the cell you move to (cutting off the last one), and the rest in turn
+    private readonly Announcer _moves = new(interrupt: true), _news = new(interrupt: false);
+    private bool _spokeLoading;   // the current cell was announced as loading: its value follows when it comes
     private readonly ScrollBar _vertical = new() { Orientation = Orientation.Vertical };
     private readonly ScrollBar _horizontal = new() { Orientation = Orientation.Horizontal };
     // the columns load once the scrolling stops, as in the WinForms app: a
@@ -84,6 +89,12 @@ public sealed class TableGrid : Grid
         RowDefinitions = new RowDefinitions("Auto,*,Auto");
         SetColumnSpan(_valueBar, 2);
         Children.Add(_valueBar);
+        foreach (var announcer in new[] { _moves, _news })
+        {
+            announcer.HorizontalAlignment = HorizontalAlignment.Left;
+            announcer.VerticalAlignment = VerticalAlignment.Top;
+            Children.Add(announcer);
+        }
         _surface = new CellSurface(this) { ClipToBounds = true, Focusable = true };
         _surface.ActualThemeVariantChanged += (_, _) => _surface.InvalidateVisual();   // light or dark, live
         SetRow(_surface, 1);
@@ -121,7 +132,11 @@ public sealed class TableGrid : Grid
         cache.ColumnLoaded += (_, column, error) =>
         {
             _surface.InvalidateVisual();
-            if (column == Current.Column) UpdateValueBar();
+            if (column == Current.Column)
+            {
+                UpdateValueBar();
+                if (_spokeLoading) _news.Say(CellSpeech());   // "loading" was said: now the value
+            }
             if (error is null) QueueFit(column);
         };
         _loadTimer.Tick += (_, _) =>
@@ -182,6 +197,26 @@ public sealed class TableGrid : Grid
     }
 
     private int _openFilter = -1;
+
+    /// <summary>What the grid is, for a screen reader: its size, and whether a filter cut it.</summary>
+    public string Summary
+    {
+        get
+        {
+            int columns = Enumerable.Range(0, ColumnCount).Count(c => !_hidden[c]);
+            return $"{RowCount:N0} rows × {columns:N0} columns" + (_rows is null ? "" : $", filtered from {_cache.RowCount:N0} rows");
+        }
+    }
+
+    /// <summary>Says something to a screen reader, after what it is saying (a filter's result, for one).</summary>
+    public void Announce(string text) => _news.Say(text);
+
+    /// <summary>A line for the status bar that a screen reader hears too.</summary>
+    private void Report(string message)
+    {
+        Status?.Invoke(message);
+        _news.Say(message);
+    }
 
     /// <summary>The rows shown: all of the file's, or a filter's.</summary>
     public int RowCount => _rows?.Length ?? _cache.RowCount;
@@ -275,6 +310,9 @@ public sealed class TableGrid : Grid
         BringIntoView(Current);
         UpdateValueBar();
         _surface.InvalidateVisual();
+        long cells = SelectedCells;
+        var s = Selection;
+        _moves.Say(CellSpeech() + (cells > 1 ? $", {s.Bottom - s.Top + 1:N0} rows × {s.Right - s.Left + 1:N0} columns selected" : ""));
     }
 
     public void SelectAll()
@@ -283,6 +321,7 @@ public sealed class TableGrid : Grid
         Current = (Math.Max(0, RowCount - 1), NearestShown(ColumnCount - 1, -1));
         UpdateValueBar();
         _surface.InvalidateVisual();
+        _moves.Say($"All {SelectedCells:N0} cells selected");
     }
 
     /// <summary>
@@ -296,13 +335,13 @@ public sealed class TableGrid : Grid
         long cells = SelectedCells;
         if (cells > CopyLimit)
         {
-            Status?.Invoke($"Not copied: {cells:N0} cells selected, a copy takes up to {CopyLimit:N0}.");
+            Report($"Not copied: {cells:N0} cells selected, a copy takes up to {CopyLimit:N0}.");
             return false;
         }
         var columns = Enumerable.Range(s.Left, s.Right - s.Left + 1).Where(c => !_hidden[c]).ToList();
         if (!_cache.Fits(columns))
         {
-            Status?.Invoke($"Not copied: the {columns.Count} columns don't fit in memory together.");
+            Report($"Not copied: the {columns.Count} columns don't fit in memory together.");
             return false;
         }
         await _cache.EnsureAsync(columns);
@@ -323,8 +362,28 @@ public sealed class TableGrid : Grid
         if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
             return false;
         await clipboard.SetTextAsync(text.ToString());
-        Status?.Invoke($"Copied {cells:N0} cells ({text.Length / 1e6:0.0} MB of text).");
+        Report($"Copied {cells:N0} cells ({text.Length / 1e6:0.0} MB of text).");
         return true;
+    }
+
+    /// <summary>
+    /// The current cell's value whole, the data and not the drawing (the
+    /// number behind a "###"); <c>Note</c> marks what isn't data: a null, an
+    /// empty text, a column loading or failed.
+    /// </summary>
+    private (string Value, bool Note, Cells.Kind Kind) CurrentValue()
+    {
+        var (row, column) = Current;
+        int fileRow = FileRow(row);
+        var (text, kind) = Cells.Display(_cache, column, fileRow);
+        return kind switch
+        {
+            Cells.Kind.Loading => ("loading…", true, kind),
+            Cells.Kind.Error => (PolarsErrors.Describe(_cache.Failure(column)!), true, kind),
+            Cells.Kind.Null => ("null", true, kind),
+            _ when text.Length == 0 => ("empty text", true, kind),
+            _ => (Cells.CopyText(_cache, column, fileRow), false, kind),
+        };
     }
 
     /// <summary>The current cell in the value bar, whole.</summary>
@@ -336,18 +395,23 @@ public sealed class TableGrid : Grid
             return;
         }
         var (row, column) = Current;
-        int fileRow = FileRow(row);
-        string place = $"row {fileRow + 1:N0} · {_cache.TypeNames[column]}";
-        var (text, kind) = Cells.Display(_cache, column, fileRow);
-        (string value, bool note) = kind switch
-        {
-            Cells.Kind.Loading => ("loading…", true),
-            Cells.Kind.Error => (PolarsErrors.Describe(_cache.Failure(column)!), true),
-            Cells.Kind.Null => ("null", true),
-            _ when text.Length == 0 => ("empty text", true),
-            _ => (Cells.CopyText(_cache, column, fileRow), false),
-        };
-        _valueBar.Show(_cache.Fields[column].Name, place, value, note);
+        var (value, note, _) = CurrentValue();
+        _valueBar.Show(_cache.Fields[column].Name, $"row {FileRow(row) + 1:N0} · {_cache.TypeNames[column]}", value, note);
+    }
+
+    /// <summary>
+    /// The current cell for a screen reader: column, row, value. A long text
+    /// stops at 200 characters, with how many were left out: a 12,000-character
+    /// cell read whole would hold the reader for minutes.
+    /// </summary>
+    private string CellSpeech()
+    {
+        if (RowCount == 0 || ColumnCount == 0) return "No rows";
+        var (row, column) = Current;
+        var (value, _, kind) = CurrentValue();
+        _spokeLoading = kind == Cells.Kind.Loading;
+        if (value.Length > 200) value = $"{value[..200]}… and {value.Length - 200:N0} more characters";
+        return $"{_cache.Fields[column].Name}, row {FileRow(row) + 1:N0}: {value}";
     }
 
     private void BringIntoView((int Row, int Column) cell)
@@ -415,12 +479,7 @@ public sealed class TableGrid : Grid
         if (point.Y < Cells.HeaderHeight)
         {
             if (point.X >= _frameWidth)   // the corner above the row numbers does nothing
-            {
-                int header = CellAt(point).Column;
-                // in the grid's coordinates: the cells sit under the value bar
-                HeaderClicked?.Invoke(header, new Rect(ScreenX(header), 0, _width[header], Cells.HeaderHeight)
-                    .Translate(_surface.Bounds.Position));
-            }
+                OpenFilter(CellAt(point).Column);
             e.Handled = true;
             return;
         }
@@ -432,6 +491,10 @@ public sealed class TableGrid : Grid
         e.Pointer.Capture(_surface);
         e.Handled = true;
     }
+
+    // a header's click, or Alt+Down: the header's rectangle in the grid's coordinates (the cells sit under the value bar)
+    private void OpenFilter(int column) =>
+        HeaderClicked?.Invoke(column, new Rect(ScreenX(column), 0, _width[column], Cells.HeaderHeight).Translate(_surface.Bounds.Position));
 
     private void Moved(object? sender, PointerEventArgs e)
     {
@@ -658,6 +721,13 @@ public sealed class TableGrid : Grid
     private async void KeyPressed(object? sender, KeyEventArgs e)
     {
         bool ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control), shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        if (e.Key == Key.Down && e.KeyModifiers.HasFlag(KeyModifiers.Alt))   // the column's filter, as Excel's Alt+Down
+        {
+            e.Handled = true;
+            BringIntoView(Current);
+            OpenFilter(Current.Column);
+            return;
+        }
         var (row, column) = Current;
         int page = VisibleRowCount, lastRow = RowCount - 1;
         int firstColumn = NearestShown(0, +1), lastColumn = NearestShown(ColumnCount - 1, -1);
@@ -692,6 +762,21 @@ public sealed class TableGrid : Grid
 
     private sealed class CellSurface(TableGrid owner) : Control
     {
+        protected override AutomationPeer OnCreateAutomationPeer() => new SurfacePeer(this, owner);
+
+        /// <summary>
+        /// The grid to a screen reader: a data grid named by its size. Its
+        /// cells have no elements of their own (nothing is kept per row), so
+        /// they speak through the announcer as the current cell moves.
+        /// </summary>
+        private sealed class SurfacePeer(CellSurface surface, TableGrid grid) : ControlAutomationPeer(surface)
+        {
+            protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.DataGrid;
+            protected override string? GetNameCore() => grid.Summary;
+            protected override string? GetHelpTextCore() =>
+                "Arrow keys move between cells, Shift extends the selection, Alt+Down opens the column's filter, Ctrl+C copies.";
+        }
+
         private const double NameTop = 4, NameHeight = 22, TypeTop = 26, TypeHeight = 17;   // the header's two lines
 
         public override void Render(DrawingContext context)

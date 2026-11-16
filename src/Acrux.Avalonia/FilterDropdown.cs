@@ -44,6 +44,7 @@ internal sealed class FilterDropdown : Border
     public FilterDropdown(string column, ColumnFilter? current)
     {
         _current = current;
+        Avalonia.Automation.AutomationProperties.SetName(this, $"Filter: {column}");   // what a screen reader says as it opens
         Focusable = true;   // while the values are read, Esc needs something with focus to reach
         BorderThickness = new Thickness(1);
         _status.Text = $"Reading the values of \"{column}\"...";

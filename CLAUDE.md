@@ -384,6 +384,11 @@ passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
   - **algarismos de mesma largura** (`tnum`): o Segoe UI e a Noto Sans já os
     têm; a Adwaita Sans, fonte padrão do GNOME, não (medido);
   - **sem listras:** a faixa da linha atual faz o papel delas;
+  - **datas sem a meia-noite:** uma coluna `date` chegava como `DateTime` e
+    mostrava `11/23/2017 12:00:00 AM` em toda linha. Agora a grade, a barra
+    de valor e o Ctrl+C levam só o dia, no formato curto do sistema
+    (`11/23/2017`, `23/11/2017`), como o Excel. Vinha do WinForms, que ficou
+    como estava;
   - **o filtro é um dropdown** (desenho aprovado em 2026-11-15): um botão em
     cada cabeçalho, sempre visível, como as setas do AutoFiltro do Excel (num
     arquivo de 700 colunas, quem abre pela primeira vez descobre o filtro sem
@@ -468,10 +473,41 @@ passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
     põe sobre eles (o eco e os erros do terminal, o fundo do dropdown) usa a
     paleta da marca (`Palette.Chrome`): na do sistema, podia cair sobre um
     fundo que ele não escolheu.
-- **Lacunas conhecidas:** a grade desenhada não fala com leitor de tela (falta
-  o `AutomationPeer`), o tema Fluent não segue o alto contraste (acima), e o
-  Ctrl+C recusa mais de 1 milhão de células, uma trava provisória até o dono
-  decidir a regra.
+- **Leitor de tela** (`Grid/Announcer.cs`, desenho aprovado em 2026-11-15).
+  O Avalonia 12 não tem padrão de tabela para leitor de tela (dos dez
+  *providers* de automação, nenhum é de grade), e a grade não tem um elemento
+  por célula. Por isso ela fala por uma *live region*, a ideia do `aria-live`:
+  um elemento invisível cujo nome o leitor diz quando muda, onde quer que esteja
+  o foco. No Windows o Avalonia transforma essa mudança no `LiveRegionChanged`
+  da UI Automation (Narrator, NVDA); no Linux, manda a mudança de nome pelo
+  AT-SPI (Orca).
+  - **o foco na grade** diz "data grid" e o tamanho ("5,000,000 rows × 700
+    columns", mais "filtered from …" com filtro), e a ajuda, as teclas;
+  - **cada movimento** diz a célula, interrompendo a anterior: coluna, linha
+    e o valor inteiro (o número por trás do `###`, "null", "empty text",
+    "loading…", que vira o valor quando a coluna chega). Texto longo para em
+    200 caracteres, dizendo quantos faltaram. Com mais de uma célula, também
+    o tamanho da seleção;
+  - **depois do que está sendo dito:** a cópia (a mesma linha da barra de
+    status) e o resultado do filtro ("Filtered: 950 of 5,000,000 rows");
+  - **Alt+↓** abre o filtro da coluna atual, como no Excel; o dropdown se
+    chama "Filter: coluna";
+  - a mesma frase duas vezes é dita duas vezes: um espaço de largura zero
+    alterna no fim, porque um nome que não muda não gera evento.
+
+  **Sem leitor de tela, nada disso custa:** sem um cliente de acessibilidade
+  ouvindo, o AT-SPI não manda os eventos (conferido com `dbus-monitor` no
+  barramento de acessibilidade). Por isso também não dá para conferir os
+  anúncios sem o Orca ou o Narrator: o teste é do dono. **Com o Narrator, na
+  VM, funcionou** (dono, 2026-11-16); o Orca não foi testado. Na VM, ligue o
+  Narrator pelas Configurações: o Ctrl+Win+Enter fica com o Sway. Numa das 15 rodadas
+  desse teste pelo harness, o processo caiu com uma exceção não tratada
+  (SIGABRT), cuja mensagem se perdeu; não se repetiu em 14 rodadas. Falar
+  passou a não poder derrubar o app (`try` no `Say`).
+- **Lacunas conhecidas:** a grade fala pelo anunciador, sem a navegação de
+  tabela do leitor de tela; o tema Fluent não segue o alto contraste (acima);
+  e o Ctrl+C recusa mais de 1 milhão de células, uma trava provisória até o
+  dono decidir a regra.
 
 ### Testar o app de janela no Linux (Wine)
 
@@ -798,6 +834,7 @@ o `Describe` lê a mensagem na cultura invariante.
 | `src/Acrux.Avalonia/ColumnChoice.cs` | O diálogo do botão "Columns": quais colunas a grade mostra |
 | `src/Acrux.Avalonia/TableChoice.cs` | Qual aba do xlsx ou tabela do SQLite abrir, quando há mais de uma |
 | `src/Acrux.Avalonia/Grid/TableGrid.cs` | A grade desenhada: nada por linha, rolagem em linhas, teclas do `DataGridView`, seleção calma, números de linha, faixa da célula atual, largura pelo conteúdo, Ctrl+C |
+| `src/Acrux.Avalonia/Grid/Announcer.cs` | O que o leitor de tela diz da grade: a célula atual, a seleção, a cópia, o filtro |
 | `src/Acrux.Avalonia/Grid/ValueBar.cs` | A célula atual inteira acima da grade, como a barra de fórmulas: coluna, linha, tipo e valor |
 | `src/Acrux.Avalonia/Grid/Cells.cs` | O texto de cada célula pelas regras do `GridPainting` (`null`, `###`, `↵`), os tamanhos, o alinhamento dos decimais e o que o Ctrl+C copia |
 | `src/Acrux.Avalonia/Grid/Palette.cs` | As cores da grade no claro e no escuro, as do `Theme.cs`, e no alto contraste, as do sistema |
