@@ -3,25 +3,119 @@ namespace Acrux;
 /// <summary>
 /// An open file, with no screen: the file as parquet (converted once, to a
 /// temporary file, when it was CSV, xlsx or SQLite), its column cache, the
-/// header filters with the rows they keep, and the hidden columns. The
-/// desktop app on Avalonia and a terminal UI drive the same session; like the
-/// column cache, it is called from one thread, the UI's (a synchronization
-/// context). The script chain joins it in the app's next phase (desenho
-/// aprovado em 2026-11-15).
+/// header filters with the rows they keep, the hidden columns, and the C#
+/// terminal's chain of steps with its result. The desktop app on Avalonia and
+/// a terminal UI drive the same session; like the column cache, it is called
+/// from one thread, the UI's (a synchronization context). Desenho aprovado
+/// em 2026-11-15.
 /// </summary>
 public sealed class Session : IDisposable
 {
     private readonly bool _ownsParquet;
     private readonly Dictionary<string, ColumnFilter> _filters = [];
     private CancellationTokenSource? _filtering;
+    private readonly List<string> _chain = [];
+    private string[]? _chainBaseColumns;
+    private Dictionary<string, ColumnFilter>? _chainBaseFilters;
+    private CancellationTokenSource? _scripting;
 
-    private Session(string sourcePath, string parquetPath, bool ownsParquet, ColumnCache file)
+    private Session(string sourcePath, string parquetPath, bool ownsParquet, ColumnCache file, MemoryBudget memory)
     {
         SourcePath = sourcePath;
         ParquetPath = parquetPath;
         _ownsParquet = ownsParquet;
         File = file;
+        Memory = memory;
     }
+
+    /// <summary>The cap the file's columns and a script's result share.</summary>
+    public MemoryBudget Memory { get; }
+
+    /// <summary>The terminal's steps so far, each one's <c>df</c> being the step before's result.</summary>
+    public IReadOnlyList<string> Chain => _chain;
+
+    /// <summary>The chain's result, column by column; null while the screen shows the file.</summary>
+    public ColumnCache? Result { get; private set; }
+
+    /// <summary>How many header filters the chain took in as its base, at its first step.</summary>
+    public int InheritedFilters => _chainBaseFilters?.Count ?? 0;
+
+    /// <summary>
+    /// Runs the chain again from the file, with <paramref name="step"/> at the
+    /// end when there is one (the replay of ScriptHost). The first step's
+    /// <c>df</c> is the file as shown, its visible columns and its header
+    /// filters, and that base stays frozen for the later steps: the replay
+    /// runs it every time, so it must not drift. A step that fails stays out
+    /// of the chain. A newer run cancels this one: null when it took over.
+    /// Throws the compiler's error (CompilationErrorException) or Polars'.
+    /// </summary>
+    public async Task<ColumnCache?> RunAsync(string? step, bool rowCap)
+    {
+        _scripting?.Cancel();
+        var cts = _scripting = new CancellationTokenSource();
+        var steps = new List<string>(_chain);
+        if (step is not null) steps.Add(step);
+        bool starting = _chain.Count == 0;
+        var baseColumns = starting ? VisibleColumnNames() : _chainBaseColumns;
+        var baseFilters = starting ? new Dictionary<string, ColumnFilter>(_filters) : _chainBaseFilters;
+
+        ColumnCache result;
+        try
+        {
+            var plan = await ScriptHost.BuildChainAsync(steps, ParquetPath, baseColumns, baseFilters, rowCap, cts.Token);
+            // counts the rows; the columns are computed as the screen reaches them
+            result = await ColumnCache.FromPlanAsync(plan, Memory, File.RowCount);
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+        if (cts.IsCancellationRequested)
+        {
+            result.Dispose();
+            return null;
+        }
+        if (step is not null)
+        {
+            _chain.Add(step);
+            if (starting)
+            {
+                _chainBaseColumns = baseColumns;
+                _chainBaseFilters = baseFilters;
+            }
+        }
+        File.Unpin();   // the file's columns yield memory to the result first
+        Result?.Dispose();
+        Result = result;
+        return result;
+    }
+
+    /// <summary>
+    /// Drops the last step. The caller runs the chain again (<see cref="RunAsync"/>
+    /// with no step), or restores the file when the chain is empty.
+    /// </summary>
+    public void UndoStep()
+    {
+        if (_chain.Count > 0) _chain.RemoveAt(_chain.Count - 1);
+    }
+
+    /// <summary>
+    /// Back to the file: the chain and its result go. The file's cache stayed
+    /// alive under the result, so what is still in memory shows at once.
+    /// </summary>
+    public void Restore()
+    {
+        _scripting?.Cancel();
+        _chain.Clear();
+        _chainBaseColumns = null;
+        _chainBaseFilters = null;
+        Result?.Dispose();
+        Result = null;
+    }
+
+    // the columns shown, in file order; null when none is hidden (no Select)
+    private string[]? VisibleColumnNames() =>
+        HiddenColumns.Count == 0 ? null : [.. File.Fields.Select(f => f.Name).Where(n => !HiddenColumns.Contains(n))];
 
     /// <summary>The file the user chose.</summary>
     public string SourcePath { get; }
@@ -105,7 +199,7 @@ public sealed class Session : IDisposable
         {
             progress?.Report("Reading schema...");
             var file = await ColumnCache.OpenAsync(parquet, memory);
-            return new Session(path, parquet, isTemp, file);
+            return new Session(path, parquet, isTemp, file, memory);
         }
         catch
         {
@@ -118,6 +212,7 @@ public sealed class Session : IDisposable
     public void Dispose()
     {
         _filtering?.Cancel();
+        Restore();
         File.Dispose();
         if (_ownsParquet) TryDelete(ParquetPath);
     }

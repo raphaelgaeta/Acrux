@@ -7,7 +7,10 @@ using Avalonia.Platform.Storage;
 
 namespace Acrux;
 
-/// <summary>The app's window: the bar on top, the file's grid below.</summary>
+/// <summary>
+/// The app's window: the bar on top, the grid below (the file's, or a
+/// script's result), and the C# terminal under it when open.
+/// </summary>
 internal sealed class MainWindow : Window
 {
     // DataFrameProvider.OpenDialogFilter's extensions, and the installer's
@@ -20,9 +23,15 @@ internal sealed class MainWindow : Window
     private readonly Button _clearFilters = new() { Content = "Clear all filters", IsEnabled = false, Margin = new Thickness(6, 4, 0, 4) };
     private readonly TextBlock _info = new() { Text = "No data loaded", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0) };
     private readonly TextBlock _memoryInfo = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0), Opacity = 0.7 };
+    private readonly Button _terminalButton = new() { Content = "C# terminal", IsEnabled = false, Margin = new Thickness(6, 4, 0, 4) };
+    private readonly Button _restore = new() { Content = "Restore file", IsVisible = false, Margin = new Thickness(6, 4, 0, 4) };
     private readonly ContentControl _gridHost = new();
+    private readonly TerminalPanel _terminal = new();
+    private readonly GridSplitter _splitter = new() { ResizeDirection = GridResizeDirection.Rows, Height = 5, IsVisible = false };
+    private readonly Grid _body = new() { RowDefinitions = new RowDefinitions("*,Auto,0") };
     private Session? _session;
-    private TableGrid? _grid;
+    private TableGrid? _grid;        // the file's: kept under a script's result, scroll and filters included
+    private TableGrid? _resultGrid;  // a script's result, while one is shown
 
     public MainWindow(string? file)
     {
@@ -31,12 +40,26 @@ internal sealed class MainWindow : Window
         Height = 800;
         Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://Acrux.Avalonia/Assets/acrux.ico")));
 
-        var bar = new StackPanel { Orientation = Orientation.Horizontal, Children = { _open, _columns, _clearFilters, _info, _memoryInfo } };
+        var bar = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Children = { _open, _columns, _clearFilters, _terminalButton, _restore, _info, _memoryInfo },
+        };
+        Grid.SetRow(_splitter, 1);
+        Grid.SetRow(_terminal, 2);
+        _body.Children.Add(_gridHost);
+        _body.Children.Add(_splitter);
+        _body.Children.Add(_terminal);
         var root = new DockPanel();
         DockPanel.SetDock(bar, Dock.Top);
         root.Children.Add(bar);
-        root.Children.Add(_gridHost);
+        root.Children.Add(_body);
         Content = root;
+
+        _terminalButton.Click += (_, _) => ToggleTerminal();
+        _terminal.ExecuteRequested += async (code, rowCap) => await RunChainAsync(code, rowCap);
+        _terminal.UndoRequested += async () => await UndoStepAsync();
+        _restore.Click += (_, _) => RestoreFile();
 
         _open.Click += async (_, _) => await ChooseFileAsync();
         _columns.Click += async (_, _) => await ChooseColumnsAsync();
@@ -110,9 +133,12 @@ internal sealed class MainWindow : Window
             session.File.ColumnLoaded += (_, _, _) => UpdateMemory(session);
             _gridHost.Content = grid;
             _grid = grid;
+            _resultGrid = null;
             _columns.IsEnabled = true;
             _clearFilters.IsEnabled = false;
-            old?.Dispose();   // the old grid is off screen: its columns and its copy can go
+            _terminalButton.IsEnabled = true;
+            _restore.IsVisible = false;
+            old?.Dispose();   // the old grids are off screen: their columns, a script's result and a copy can go
 
             Title = $"{Path.GetFileName(path)} — Acrux";
             _info.Text = Info(session);
@@ -205,11 +231,116 @@ internal sealed class MainWindow : Window
         grid.FocusGrid();
     }
 
+    private void ToggleTerminal()
+    {
+        bool open = !_splitter.IsVisible;
+        _splitter.IsVisible = open;
+        _body.RowDefinitions[2].Height = open ? new GridLength(300) : new GridLength(0);
+        if (open) _terminal.FocusInput();
+        else (_resultGrid ?? _grid)?.FocusGrid();
+    }
+
+    private static string ScriptInfo(Session session, ColumnCache result) =>
+        $"[script, step {session.Chain.Count}] {result.RowCount:N0} rows × {result.Fields.Count:N0} columns";
+
+    /// <summary>
+    /// The terminal's chain again, from the file, with <paramref name="step"/>
+    /// at the end (the replay, in Session.RunAsync); the result shows in a
+    /// grid of its own, the file's waiting underneath.
+    /// </summary>
+    private async Task RunChainAsync(string? step, bool rowCap)
+    {
+        if (_session is not { } session)
+        {
+            _terminal.AppendError("Open a file before running scripts.");
+            return;
+        }
+        _terminal.SetBusy(true);
+        if (step is not null) _terminal.AppendCode(step);
+        _info.Text = "Running script...";
+        var clock = Stopwatch.StartNew();
+        try
+        {
+            bool starting = session.Chain.Count == 0;
+            var result = await session.RunAsync(step, rowCap);
+            if (result is null || session != _session) return;   // a newer run or another file took over
+            if (step is not null) _terminal.ClearInput();
+            ShowResult(session, result);
+            string inherited = starting && session.InheritedFilters > 0
+                ? $" — inheriting {session.InheritedFilters} active filter(s)" : "";
+            string capped = rowCap && result.RowCount == ScriptHost.RowCap
+                ? $" — result capped at {ScriptHost.RowCap:N0} rows" : "";
+            _terminal.AppendResult($"step {session.Chain.Count}: {result.RowCount:N0} rows × {result.Fields.Count:N0} columns "
+                + $"in {clock.ElapsedMilliseconds:N0} ms{inherited}{capped}");
+        }
+        catch (Microsoft.CodeAnalysis.Scripting.CompilationErrorException ex)
+        {
+            _terminal.AppendError(ScriptHost.Describe(ex));
+            _info.Text = session.Result is { } shown ? ScriptInfo(session, shown) : Info(session);
+        }
+        catch (Exception ex)
+        {
+            _terminal.AppendError(PolarsErrors.Describe(ex));
+            _info.Text = session.Result is { } shown ? ScriptInfo(session, shown) : Info(session);
+        }
+        finally
+        {
+            _terminal.SetBusy(false);
+            _terminal.FocusInput();
+        }
+    }
+
+    /// <summary>
+    /// A script's result on screen. The header filters are off until "Restore
+    /// file", as in the WinForms app: the grid no longer mirrors the file.
+    /// </summary>
+    private void ShowResult(Session session, ColumnCache result)
+    {
+        var grid = new TableGrid(result);
+        grid.Status += message => _info.Text = $"{ScriptInfo(session, result)}   ·   {message}";
+        grid.HeaderClicked += (_, _) => _info.Text = "Header filters are disabled in script mode — use \"Restore file\"";
+        result.ColumnLoaded += (_, _, _) => UpdateMemory(session);
+        _gridHost.Content = grid;
+        _resultGrid = grid;
+        _restore.IsVisible = true;
+        _columns.IsEnabled = false;
+        _clearFilters.IsEnabled = false;
+        _info.Text = ScriptInfo(session, result);
+        UpdateMemory(session);
+    }
+
+    private async Task UndoStepAsync()
+    {
+        if (_session is not { } session || session.Chain.Count == 0) return;
+        session.UndoStep();
+        _terminal.AppendResult($"undo: back to step {session.Chain.Count}");
+        if (session.Chain.Count == 0)
+            RestoreFile();
+        else
+            await RunChainAsync(null, _terminal.Limit);
+    }
+
+    /// <summary>Back to the file, as it was: its grid kept its scroll, filters and hidden columns.</summary>
+    private void RestoreFile()
+    {
+        if (_session is not { } session || _grid is not { } grid) return;
+        session.Restore();
+        _gridHost.Content = grid;
+        _resultGrid = null;
+        _restore.IsVisible = false;
+        _columns.IsEnabled = true;
+        _clearFilters.IsEnabled = session.Filters.Count > 0;
+        _ = grid.EnsureVisibleAsync();   // the columns that yielded memory to the result come back
+        _info.Text = Info(session);
+        UpdateMemory(session);
+        grid.FocusGrid();
+    }
+
     /// <summary>How much of the file is in memory, against the cap: honest about the cost, as the WinForms app.</summary>
     private void UpdateMemory(Session session)
     {
         if (session != _session) return;
-        var file = session.File;
+        var file = session.Result ?? session.File;   // what the screen shows
         string loading = file.LoadingCount > 0 ? $" · loading {file.LoadingCount:N0}" : "";
         _memoryInfo.Text = $"{file.LoadedCount:N0} of {file.Fields.Count:N0} columns in memory "
             + $"({FormatBytes(_memory.HeldBytes)} of {FormatBytes(_memory.Limit)}){loading}";

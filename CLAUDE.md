@@ -364,10 +364,14 @@ passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
      `SheetSelectorForm`: tabelas antes das views; "Cancel" não abre nada)
      (**feita**, PR #28);
   3. o filtro do cabeçalho, "Clear all filters" e o seletor de colunas
-     (**feita**, branch `feat/avalonia-filters`): os filtros, as linhas e as
-     colunas escondidas na `Session`; a grade só troca a lista de linhas, e
-     a coluna escondida fica no seu índice, sem largura;
-  4. o terminal C#;
+     (**feita**, PR #29): os filtros, as linhas e as colunas escondidas na
+     `Session`; a grade só troca a lista de linhas, e a coluna escondida fica
+     no seu índice, sem largura;
+  4. o terminal C# (**feita**, branch `feat/avalonia-terminal`): a cadeia, a
+     base congelada no 1º passo, o resultado e "Undo step"/"Restore file" na
+     `Session`; o resultado numa grade própria, a do arquivo esperando por
+     baixo com rolagem, filtros e colunas; os filtros de cabeçalho desligados
+     no modo script, como no WinForms;
   5. acabamento: o `Trim` da memória a cada 5 s, `MALLOC_ARENA_MAX` e
      `malloc_trim` no Linux (ver "O heap do Windows devolve a memória"),
      mensagens de erro, soltar um arquivo na janela;
@@ -696,7 +700,8 @@ o `Describe` lê a mensagem na cultura invariante.
 | `src/Acrux.Core/TextDates.cs` | Datas guardadas como texto (CSV, SQLite) viram data só quando não há ambiguidade |
 | `src/Acrux.Core/PolarsErrors.cs` | Erros do Polars para gente: a mensagem sem o plano que ele anexa (CLI e app) |
 | `src/Acrux.Core/TimeFilter.cs` | Filtro de tempo relativo: lê períodos no padrão do systemd, monta o predicado por tipo de coluna e acha as posições das N linhas mais recentes |
-| `src/Acrux.Core/Session.cs` | O arquivo aberto, sem tela: a cópia em parquet (apagada no fim), o cache de colunas, os filtros com as linhas que mantêm e as colunas escondidas; os scripts entram na fase 4 do app no Avalonia |
+| `src/Acrux.Core/Session.cs` | O arquivo aberto, sem tela: a cópia em parquet (apagada no fim), o cache de colunas, os filtros com as linhas que mantêm, as colunas escondidas e a cadeia do terminal com o resultado |
+| `src/Acrux.Avalonia/TerminalPanel.cs` | O terminal C#: o histórico, o código, Ctrl+Enter (ouvido no tunnel: a caixa de várias linhas trata o Enter), o limite de 1M linhas e "Undo step" |
 | `src/Acrux.Avalonia/MainWindow.cs` | A janela do app no Avalonia: abrir arquivo, a barra com a memória, a grade |
 | `src/Acrux.Avalonia/FilterPopup.cs` | O filtro do cabeçalho: os valores da coluna, a busca, "(Blanks)", o aviso de lista cortada |
 | `src/Acrux.Avalonia/ColumnChoice.cs` | O diálogo do botão "Columns": quais colunas a grade mostra |
