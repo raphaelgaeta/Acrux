@@ -399,7 +399,9 @@ passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
     desligados.
 
   Todo texto mantém 4,5:1 sobre as tintas, o cinza incluído (4,5 a 4,7:1 na
-  seleção); o contorno, 4:1 ou mais. Os decimais (`Decimal32Type` a
+  seleção); o contorno, 4:1 ou mais. **No Windows, o Avalonia já desenha o
+  texto com suavização por subpixel**, como o ClearType do Excel: as franjas
+  coloridas aparecem numa foto da VM. Não há o que ajustar na nitidez. Os decimais (`Decimal32Type` a
   `Decimal256Type`) também vão à direita, como no WinForms: o porte os tinha
   deixado à esquerda. O tempo de desenho da janela não mudou (13 ms antes e
   depois, no arquivo de 700 colunas, pelo harness).
@@ -430,10 +432,46 @@ passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
   `_`:** um `string` como conteúdo é lido como tecla de atalho, e
   `ITEM_000003` aparecia `ITEM000003` (achado por imagem na fase 3; o popup
   do spike também tinha). Nome de coluna e valor vão num `TextBlock`.
+- **Alto contraste** (`HighContrast.cs`, paleta aprovada em 2026-11-15 na
+  página "Paletas da grade"): a marca sai da grade e entra o esquema do
+  usuário, como no WinForms.
+  - **Windows:** o Avalonia diz quando o tema de contraste está ligado
+    (`ContrastPreference`, pelo `GetHighContrast` do Win32), e as cores vêm do
+    `GetSysColor`, como o `SystemColors` do WinForms: uma cor que o usuário
+    editou também vale. Os padrões dos quatro temas (Aquatic, Desert, Dusk,
+    Night sky) foram lidos dos `.theme` da VM.
+  - **Linux:** não há cores do sistema para ler, então a paleta é fixa, sem
+    matiz: preto no branco ou branco no preto, pelo `color-scheme`, e a
+    seleção inverte. Quem diz se está ligado é a chave `contrast` do portal
+    (`org.freedesktop.appearance`), que o Avalonia 12 não lê (lê só
+    `color-scheme` e `accent-color`). O app a lê pelo D-Bus, com o
+    `Tmds.DBus.Protocol` que o próprio Avalonia usa (mesma versão), e a lê de
+    novo a cada `SettingChanged`. Neste laptop o portal é o gtk e responde
+    `contrast = 0`.
+  - **Muda com o app aberto:** no Windows, a grade passou do Aquatic para as
+    cores da marca na hora, ao escolher "Nenhum" (teste do dono na VM,
+    2026-11-15; o Avalonia avisa pelo `ColorValuesChanged`). No WinForms,
+    trocar o tema pede reabrir. No Linux, a troca ao vivo não foi testada:
+    ligar o contraste mexe na configuração do desktop, que é da Yukidama.
+  - **O atalho Alt esquerdo + Shift esquerdo + Print Screen não chega à VM:**
+    o Linux fica com o Print Screen. Na VM, use Configurações > Acessibilidade
+    > Temas de contraste.
+  - **As escolhas da página:** nulo na cor do texto, em itálico (a Microsoft
+    reserva o GrayText para o que está desabilitado); linhas em GrayText;
+    nenhuma cor misturada, porque nenhum tema de contraste tem (sem faixa da
+    célula atual e sem cabeçalho aceso, só a borda); cabeçalho, números de
+    linha e barra de valor nas cores de botão, porque o cabeçalho é clicável.
+    A seleção é o Highlight com o texto dele, sem o contorno; a célula atual
+    fica limpa, com borda de 2 px na cor do texto.
+  - **O tema Fluent não tem alto contraste:** botões, diálogos, o terminal e
+    o dropdown do filtro ficam com as cores dele. Por isso o texto que o app
+    põe sobre eles (o eco e os erros do terminal, o fundo do dropdown) usa a
+    paleta da marca (`Palette.Chrome`): na do sistema, podia cair sobre um
+    fundo que ele não escolheu.
 - **Lacunas conhecidas:** a grade desenhada não fala com leitor de tela (falta
-  o `AutomationPeer`), o alto contraste não tira as cores da marca, e o Ctrl+C
-  recusa mais de 1 milhão de células, uma trava provisória até o dono decidir
-  a regra.
+  o `AutomationPeer`), o tema Fluent não segue o alto contraste (acima), e o
+  Ctrl+C recusa mais de 1 milhão de células, uma trava provisória até o dono
+  decidir a regra.
 
 ### Testar o app de janela no Linux (Wine)
 
@@ -752,6 +790,7 @@ o `Describe` lê a mensagem na cultura invariante.
 | `src/Acrux.Core/TimeFilter.cs` | Filtro de tempo relativo: lê períodos no padrão do systemd, monta o predicado por tipo de coluna e acha as posições das N linhas mais recentes |
 | `src/Acrux.Core/Session.cs` | O arquivo aberto, sem tela: a cópia em parquet (apagada no fim), o cache de colunas, os filtros com as linhas que mantêm, as colunas escondidas e a cadeia do terminal com o resultado |
 | `src/Acrux.Core/NativeHeap.cs` | O heap C do Linux: as arenas do glibc limitadas e o `malloc_trim`, que devolve ao sistema a memória que o Polars liberou |
+| `src/Acrux.Avalonia/HighContrast.cs` | O alto contraste do sistema: o tema e as cores no Windows, a chave `contrast` do portal no Linux |
 | `src/Acrux.Avalonia/ErrorDialog.cs` | O erro que interrompe o pedido, numa janela, com a mensagem selecionável |
 | `src/Acrux.Avalonia/TerminalPanel.cs` | O terminal C#: o histórico, o código, Ctrl+Enter (ouvido no tunnel: a caixa de várias linhas trata o Enter), o limite de 1M linhas e "Undo step" |
 | `src/Acrux.Avalonia/MainWindow.cs` | A janela do app no Avalonia: abrir arquivo, a barra com a memória, a grade |
@@ -761,7 +800,7 @@ o `Describe` lê a mensagem na cultura invariante.
 | `src/Acrux.Avalonia/Grid/TableGrid.cs` | A grade desenhada: nada por linha, rolagem em linhas, teclas do `DataGridView`, seleção calma, números de linha, faixa da célula atual, largura pelo conteúdo, Ctrl+C |
 | `src/Acrux.Avalonia/Grid/ValueBar.cs` | A célula atual inteira acima da grade, como a barra de fórmulas: coluna, linha, tipo e valor |
 | `src/Acrux.Avalonia/Grid/Cells.cs` | O texto de cada célula pelas regras do `GridPainting` (`null`, `###`, `↵`), os tamanhos, o alinhamento dos decimais e o que o Ctrl+C copia |
-| `src/Acrux.Avalonia/Grid/Palette.cs` | As cores da grade no claro e no escuro, as do `Theme.cs` |
+| `src/Acrux.Avalonia/Grid/Palette.cs` | As cores da grade no claro e no escuro, as do `Theme.cs`, e no alto contraste, as do sistema |
 | `src/Acrux.WinForms/Program.cs` | Entrada do app: limpeza de temporários órfãos, o arquivo recebido como argumento (duplo clique, "Abrir com") e `Environment.Exit(0)` |
 | `src/Acrux.WinForms/AppIcon.cs` | Ícone das janelas, lido do `.ico` embutido |
 | `src/Acrux.WinForms/GridPainting.cs` | O que o grid desenha sem mudar o dado: nulo, `###`, `↵` e o `▼` do filtro |

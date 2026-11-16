@@ -47,8 +47,8 @@ internal sealed class ValueBar : Border
                 },
             },
         };
-        ActualThemeVariantChanged += (_, _) => Paint();
-        Paint();
+        ActualThemeVariantChanged += (_, _) => Repaint();
+        Repaint();
     }
 
     /// <summary>
@@ -62,17 +62,19 @@ internal sealed class ValueBar : Border
         _place.Text = place;
         _value.Text = value;
         _note = note;
-        Paint();
+        Repaint();
     }
 
-    private void Paint()
+    /// <summary>The colors again: light or dark, high contrast on or off.</summary>
+    public void Repaint()
     {
         var palette = Palette.For(ActualThemeVariant);
         Background = palette.Header;
         BorderBrush = palette.LineBrush;
         _where.BorderBrush = palette.LineBrush;
-        _place.Foreground = palette.Muted;
-        _value.Foreground = _note ? palette.Muted : palette.Text;
+        _column.Foreground = palette.HeaderText;
+        _place.Foreground = palette.HeaderMuted;
+        _value.Foreground = _note ? palette.HeaderMuted : palette.HeaderText;
         _value.FontStyle = _note ? FontStyle.Italic : FontStyle.Normal;
     }
 }

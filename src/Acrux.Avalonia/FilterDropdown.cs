@@ -124,7 +124,7 @@ internal sealed class FilterDropdown : Border
 
     private void Paint()
     {
-        var palette = Palette.For(ActualThemeVariant);
+        var palette = Palette.Chrome(ActualThemeVariant);   // its controls are Fluent's, which has no high contrast
         Background = palette.Background;
         BorderBrush = palette.LineBrush;
     }

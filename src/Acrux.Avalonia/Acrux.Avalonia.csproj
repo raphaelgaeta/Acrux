@@ -20,6 +20,9 @@
     <PackageReference Include="Avalonia" Version="12.1.6" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.6" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.6" />
+    <!-- the D-Bus client Avalonia itself uses on Linux (Avalonia.FreeDesktop): the
+         same version, for the portal's "contrast" key that Avalonia doesn't read -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.94.1" />
   </ItemGroup>
 
   <ItemGroup>

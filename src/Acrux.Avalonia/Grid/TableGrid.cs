@@ -132,11 +132,25 @@ public sealed class TableGrid : Grid
         UpdateValueBar();
     }
 
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        HighContrast.Changed += Repaint;
+    }
+
     // off screen (another file took its place), the grid asks for nothing more
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
         _loadTimer.Stop();
+        HighContrast.Changed -= Repaint;   // a static event would keep a closed file's grid alive
+    }
+
+    // high contrast went on or off: the colors come from Palette.For on the next frame
+    private void Repaint()
+    {
+        _surface.InvalidateVisual();
+        _valueBar.Repaint();
     }
 
     /// <summary>A line for the status bar: what a copy did, or why it didn't.</summary>
@@ -695,15 +709,15 @@ public sealed class TableGrid : Grid
             double right = Math.Min(size.Width, owner.ScreenX(owner.ColumnCount));   // where the last column ends
 
             // the current row's band, under everything on it
-            if (any && current.Row >= firstRow && current.Row < firstRow + rows)
-                context.FillRectangle(palette.Focus, new Rect(frame, top + (current.Row - firstRow) * height, Math.Max(0, right - frame), height));
+            if (palette.Focus is { } focus && any && current.Row >= firstRow && current.Row < firstRow + rows)
+                context.FillRectangle(focus, new Rect(frame, top + (current.Row - firstRow) * height, Math.Max(0, right - frame), height));
 
             foreach (int column in owner.VisibleColumns())
             {
                 double x = owner.ScreenX(column), width = owner.ColumnWidth(column);
                 bool selectedColumn = any && column >= s.Left && column <= s.Right;
-                if (any && column == current.Column)   // the current column's band
-                    context.FillRectangle(palette.Focus, new Rect(x, top, width, rows * height));
+                if (palette.Focus is { } band && any && column == current.Column)   // the current column's band
+                    context.FillRectangle(band, new Rect(x, top, width, rows * height));
                 owner.ReadColumn(column, firstRow, rows);
                 bool numeric = Cells.IsNumeric(cache, column);
                 for (int r = 0; r < rows; r++)
@@ -711,12 +725,13 @@ public sealed class TableGrid : Grid
                     int row = firstRow + r;
                     double y = top + r * height;
                     bool isCurrent = row == current.Row && column == current.Column;
+                    bool selected = !isCurrent && selectedColumn && row >= s.Top && row <= s.Bottom;
                     if (isCurrent)   // the cell you're on stays clear, as in Excel
                         context.FillRectangle(palette.Background, new Rect(x, y, width, height));
-                    else if (selectedColumn && row >= s.Top && row <= s.Bottom)
+                    else if (selected)
                         context.FillRectangle(palette.Selection, new Rect(x, y, width, height));
                     var (text, kind) = owner._cells[r];
-                    DrawCell(context, palette, text, kind, x, y, width, numeric, owner._shifts[r]);
+                    DrawCell(context, palette, text, kind, x, y, width, numeric, owner._shifts[r], selected);
                 }
                 DrawHeader(context, palette, column, x, width, filtered: owner._filtered.Contains(column), lit: selectedColumn,
                     pressed: column == owner._hoverButton || column == owner._openFilter);
@@ -732,7 +747,7 @@ public sealed class TableGrid : Grid
                 double y = top + r * height;
                 if (lit) context.FillRectangle(palette.HeaderLit, new Rect(0, y, frame, height));
                 var number = Cells.Format((owner.FileRow(row) + 1).ToString("N0", CultureInfo.CurrentCulture),
-                    lit ? Cells.Bold : Cells.Face, lit ? palette.Text : palette.Muted, Cells.FontSize - 1, tabular: true);
+                    lit ? Cells.Bold : Cells.Face, lit ? palette.HeaderText : palette.HeaderMuted, Cells.FontSize - 1, tabular: true);
                 Place(context, number, 0, y, frame, height, right: true);
             }
             context.DrawLine(palette.Line, new Point(frame - 0.5, 0), new Point(frame - 0.5, size.Height));
@@ -754,7 +769,13 @@ public sealed class TableGrid : Grid
             if (x2 > frame) context.DrawLine(palette.SelectionEdge, new Point(Math.Max(x1, frame), top - 1), new Point(x2, top - 1));
             if (y2 > top) context.DrawLine(palette.SelectionEdge, new Point(frame - 1, Math.Max(y1, top)), new Point(frame - 1, y2));
             using (context.PushClip(new Rect(frame, top, Math.Max(0, size.Width - frame), Math.Max(0, size.Height - top))))
-                context.DrawRectangle(null, palette.SelectionEdge, new Rect(x1 + 1, y1 + 1, Math.Max(0, x2 - x1 - 2), Math.Max(0, y2 - y1 - 2)));
+            {
+                if (palette.Outline is { } outline)
+                    context.DrawRectangle(null, outline, new Rect(x1 + 1, y1 + 1, Math.Max(0, x2 - x1 - 2), Math.Max(0, y2 - y1 - 2)));
+                if (palette.CurrentEdge is { } edge && current.Row >= firstRow && current.Row < firstRow + rows)
+                    context.DrawRectangle(null, edge, new Rect(owner.ScreenX(current.Column) + 1, top + (current.Row - firstRow) * height + 1,
+                        Math.Max(0, owner.ColumnWidth(current.Column) - 2), height - 2));
+            }
         }
 
         /// <summary>
@@ -768,10 +789,10 @@ public sealed class TableGrid : Grid
         {
             var cache = owner.Cache;
             context.FillRectangle(filtered ? palette.AccentBack : lit ? palette.HeaderLit : palette.Header, new Rect(x, 0, width, Cells.HeaderHeight));
-            var ink = filtered ? palette.AccentText : palette.Text;
+            var ink = filtered ? palette.AccentText : palette.HeaderText;
             double room = width - (owner._filterButtons ? Cells.ButtonRoom - Cells.Padding : 0);
             Place(context, Fit(Cells.Format(cache.Fields[column].Name, Cells.Bold, ink), room), x, NameTop, room, NameHeight, right: false);
-            Place(context, Fit(Cells.Format(cache.TypeNames[column], Cells.Face, filtered ? ink : palette.Muted, Cells.TypeSize), room),
+            Place(context, Fit(Cells.Format(cache.TypeNames[column], Cells.Face, filtered ? ink : palette.HeaderMuted, Cells.TypeSize), room),
                 x, TypeTop, room, TypeHeight, right: false);
             if (!owner._filterButtons) return;
 
@@ -779,7 +800,7 @@ public sealed class TableGrid : Grid
             using (context.PushClip(new Rect(x, 0, Math.Max(0, width - 1), Cells.HeaderHeight)))
             {
                 if (pressed)   // under the pointer, or its dropdown open
-                    context.DrawRectangle(filtered ? null : palette.Selection, filtered ? new Pen(ink, 1) : null, button.Deflate(0.5), 3, 3);
+                    context.DrawRectangle(filtered ? null : palette.PressedFill, filtered ? new Pen(ink, 1) : palette.PressedEdge, button.Deflate(0.5), 3, 3);
                 var center = button.Center;
                 var shape = new StreamGeometry();
                 using (var path = shape.Open())
@@ -805,7 +826,7 @@ public sealed class TableGrid : Grid
                 if (filtered)
                     context.DrawGeometry(ink, null, shape);
                 else
-                    context.DrawGeometry(null, new Pen(pressed ? palette.Text : palette.Muted, 1.5, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round), shape);
+                    context.DrawGeometry(null, new Pen(pressed ? palette.HeaderText : palette.HeaderMuted, 1.5, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round), shape);
             }
         }
 
@@ -813,10 +834,11 @@ public sealed class TableGrid : Grid
         /// A cell by the app's GridPainting rules: null, "…" and "error" in
         /// muted (or red) italics; a number that doesn't fit becomes "###",
         /// since cut-off digits read as another number; a text that doesn't
-        /// fit ends in "…". A selected cell keeps its text's color.
+        /// fit ends in "…". A selected cell keeps its text's color, but in high
+        /// contrast, where the selection is the system's Highlight and has a text color of its own.
         /// </summary>
         private static void DrawCell(DrawingContext context, Palette palette, string text, Cells.Kind kind,
-            double x, double y, double width, bool right, double shift)
+            double x, double y, double width, bool right, double shift, bool selected)
         {
             var brush = kind switch
             {
@@ -824,6 +846,7 @@ public sealed class TableGrid : Grid
                 Cells.Kind.Error => palette.Error,
                 _ => palette.Text,
             };
+            if (selected && palette.SelectionText is { } selectionText) brush = selectionText;
             double room = width - 2 * Cells.Padding - 1 - shift;
             var formatted = Cells.Format(text, kind, brush);
             if (formatted.Width > room && formatted.Width <= room + shift)
