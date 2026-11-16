@@ -437,8 +437,9 @@ GitHub, fora da `master`, com o levantamento e os números do spike.
   `Decimal256Type`) também vão à direita, como no WinForms: o porte os tinha
   deixado à esquerda. O tempo de desenho da janela não mudou (13 ms antes e
   depois, no arquivo de 700 colunas, pelo harness).
-- **Fases**, cada uma com PR, medição no Linux e teste na VM (#27 a #32
-  mesclados em 2026-11-16):
+- **Fases**, cada uma com PR, medição no Linux e teste na VM (#27 a #33,
+  mesclados em 2026-11-16; o #32 trouxe a leitura da grade, o alto contraste
+  e o leitor de tela, e o #33, a troca, que saiu no release v0.3.0):
   1. esqueleto: janela, abrir arquivo (qualquer formato; xlsx e SQLite pela
      primeira aba ou tabela), grade, barra com a memória, tema do sistema,
      ícone, arquivo por argumento, limpeza de temporários e
@@ -455,12 +456,12 @@ GitHub, fora da `master`, com o levantamento e os números do spike.
      `Session`; o resultado numa grade própria, a do arquivo esperando por
      baixo com rolagem, filtros e colunas; os filtros de cabeçalho desligados
      no modo script, como no WinForms;
-  5. acabamento (**feita**, branch `feat/avalonia-finish`): o `Trim` da
+  5. acabamento (**feita**, PR #31): o `Trim` da
      memória a cada 5 s; no Linux, as arenas do glibc limitadas a 4 no início
      do `Main` (`NativeHeap.LimitArenas`, o `mallopt` do `MALLOC_ARENA_MAX`) e
      o `malloc_trim(0)` no mesmo ciclo de 5 s; as mensagens de erro numa
      janela, como o `MessageBox`; soltar um arquivo na janela;
-  6. entrega (branch `feat/avalonia-switch`): o `win-x64` e o `linux-x64`
+  6. entrega (**feita**, PR #33): o `win-x64` e o `linux-x64`
      na CI, o instalador apontando para o app, o pacote do Linux (ver "O
      pacote do Linux", em Release) e o WinForms fora. Faltam os GIFs
      regravados com o app novo.
