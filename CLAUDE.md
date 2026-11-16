@@ -12,6 +12,7 @@ ParquetGridViewer e o projeto, PolarsGridViewer).
 ```
 dotnet build                              # solução inteira (Acrux.sln), da raiz
 dotnet run --project src/Acrux.WinForms
+dotnet run --project src/Acrux.Avalonia -- arquivo.parquet         # o app no Avalonia, em construção (Windows e Linux)
 dotnet run --project src/Acrux.Cli -- head arquivo.parquet -n 10   # CLI, roda no Linux
 ```
 
@@ -49,12 +50,13 @@ Erros saem em uma linha com código 1, sem o plano que o Polars anexa
 sai com código 2. `acrux version` diz qual commit está
 instalado (ver "Deploy de teste do CLI" abaixo).
 
-Três projetos sob `src/`, agregados pelo `Acrux.sln` da raiz: `Acrux.Core`
+Quatro projetos sob `src/`, agregados pelo `Acrux.sln` da raiz: `Acrux.Core`
 (net10.0, sem UI — `ColumnCache`, `DataFrameProvider`, `FilterEngine`,
-`MemoryBudget`, `PlanOrder`, `PolarsTableAdapter`, `ScriptHost`, `SystemMemory`,
-`TextDates`, `TimeFilter`), `Acrux.WinForms` (net10.0-windows,
-WinForms, `AssemblyName` mantido como `Acrux`) e `Acrux.Cli` (net10.0,
-console); os dois últimos referenciam o Core. `dotnet build` na raiz basta, mas
+`MemoryBudget`, `PlanOrder`, `PolarsTableAdapter`, `ScriptHost`, `Session`,
+`SystemMemory`, `TextDates`, `TimeFilter`), `Acrux.WinForms` (net10.0-windows,
+WinForms, `AssemblyName` mantido como `Acrux`), `Acrux.Avalonia` (net10.0,
+o app de janela no Avalonia, em construção; ver "Porte multiplataforma") e
+`Acrux.Cli` (net10.0, console); os três últimos referenciam o Core. `dotnet build` na raiz basta, mas
 **`dotnet run` e `dotnet publish` exigem apontar o projeto**: na raiz o `run`
 não acha projeto ("Couldn't find a project to run") e o `publish` falha com
 **NETSDK1099**, porque tenta aplicar single-file também no Acrux.Core, que é
@@ -301,7 +303,7 @@ Onde estamos:
 
 - `Acrux.Core` já é net10.0 puro, sem dependência de WinForms; só o
   `Acrux.WinForms` é net10.0-windows.
-- Os três projetos **compilam** no Linux (`EnableWindowsTargeting`).
+- Os quatro projetos **compilam** no Linux (`EnableWindowsTargeting`).
 - **O Core roda no Linux** pelo `Acrux.Cli` (net10.0), validado em degraus
   em 2026-11-07:
   1. o nativo carrega (`schema`, `columns`): **ok**;
@@ -310,7 +312,9 @@ Onde estamos:
      tipos que o adaptador não conhecia, já corrigidos (ver Armadilhas);
   3. CSV cp1252 e vírgula decimal, xlsx, SQLite, temporários em
      `/tmp/Acrux`: **ok**;
-  4. o terminal C# (`ScriptHost`/Roslyn) no Linux: **pendente**.
+  4. o terminal C# (`ScriptHost`/Roslyn) no Linux: **ok** (2026-11-15, no
+     spike do Avalonia: a cadeia, o resultado coluna por coluna e a dica do
+     `ScriptHost.Describe`).
 - O `Acrux.Cli` escolhe o nativo do Polars **pelo RID do publish**
   (`dotnet publish -r linux-arm64` leva o `Polars.NET.Native.linux-arm64`)
   e, sem RID, **pela máquina que compila**, pelo sistema e pela arquitetura
@@ -326,10 +330,47 @@ Onde estamos:
   sobre um parquet de 1M × 21 de 0,5 a 1,6 s, até 74 MB. Ver a armadilha da
   glibc, abaixo.
 
-Próximos passos:
+- **O spike do Avalonia** (branch `spike/avalonia-grid`, `spike/AvaloniaGrid`,
+  2026-11-15) mediu duas grades sobre o `ColumnCache`, no laptop e na VM. O
+  `DataGrid` aberto do Avalonia percorre a lista duas vezes e cria um objeto
+  para cada uma das 5M linhas (a armadilha do `DataGridView` de novo): 5,6 s
+  para abrir na VM, 5,9 s para selecionar 300 linhas. A grade desenhada não
+  guarda nada por linha: abriu em 1,0 s na VM (o WinForms, ~9 s), filtrou
+  para 950 linhas com 8 ms de grade (1.745 ms) e selecionou 300 linhas em
+  9 ms. O levantamento de alternativas (Uno, Photino + AG Grid, Dear ImGui,
+  Terminal.Gui, GTK4, MAUI) e os números estão no README do spike.
 
-1. Degrau 4: um comando `query` no CLI que rode script pelo `ScriptHost`.
-2. Com isso fechado, spike de grid virtualizada no Avalonia.
+**O app no Avalonia** (desenho aprovado em 2026-11-15): `src/Acrux.Avalonia`,
+ao lado do WinForms até fazer tudo o que ele faz. O WinForms fica congelado,
+só com correções; na troca, o instalador aponta para o Avalonia, o executável
+passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
+- **A lógica sem tela fica no Core** (`Session`): o arquivo aberto, a cópia
+  convertida (apagada no `Dispose`) e, nas próximas fases, os filtros e a
+  cadeia de scripts. O Avalonia e uma futura interface de terminal (Terminal.Gui
+  ou Consolonia) usam a mesma sessão, chamada da thread da interface, como o
+  `ColumnCache`.
+- **A grade é a desenhada do spike** (`Grid/TableGrid.cs`): pinta só as
+  células da tela; a barra vertical conta linhas, não pixels (o Skia desenha
+  em float de 32 bits, que perde pixels inteiros acima de ~16 milhões); as
+  teclas e a seleção do `DataGridView`; as regras do `GridPainting`
+  (`Grid/Cells.cs`); as cores do `Theme.cs` (`Grid/Palette.cs`); as colunas
+  carregam 100 ms depois que a rolagem para, como no WinForms.
+- **Fases**, cada uma com PR, medição no Linux e teste na VM:
+  1. esqueleto: janela, abrir arquivo (qualquer formato; xlsx e SQLite pela
+     primeira aba ou tabela), grade, barra com a memória, tema do sistema,
+     ícone, arquivo por argumento, limpeza de temporários e
+     `Environment.Exit(0)` (**feita**, branch `feat/avalonia-app`);
+  2. a escolha de aba ou tabela do xlsx e do SQLite;
+  3. o filtro do cabeçalho, "Clear all filters" e o seletor de colunas;
+  4. o terminal C#;
+  5. acabamento: o `Trim` da memória a cada 5 s, `MALLOC_ARENA_MAX` e
+     `malloc_trim` no Linux (ver "O heap do Windows devolve a memória"),
+     mensagens de erro, soltar um arquivo na janela;
+  6. entrega: `win-x64` e `linux-x64` na CI, o instalador, os GIFs.
+- **Lacunas conhecidas:** a grade desenhada não fala com leitor de tela (falta
+  o `AutomationPeer`), o alto contraste não tira as cores da marca, e o Ctrl+C
+  recusa mais de 1 milhão de células, uma trava provisória até o dono decidir
+  a regra.
 
 ### Testar o app de janela no Linux (Wine)
 
@@ -646,6 +687,11 @@ o `Describe` lê a mensagem na cultura invariante.
 | `src/Acrux.Core/TextDates.cs` | Datas guardadas como texto (CSV, SQLite) viram data só quando não há ambiguidade |
 | `src/Acrux.Core/PolarsErrors.cs` | Erros do Polars para gente: a mensagem sem o plano que ele anexa (CLI e app) |
 | `src/Acrux.Core/TimeFilter.cs` | Filtro de tempo relativo: lê períodos no padrão do systemd, monta o predicado por tipo de coluna e acha as posições das N linhas mais recentes |
+| `src/Acrux.Core/Session.cs` | O arquivo aberto, sem tela: a cópia em parquet (apagada no fim) e o cache de colunas; os filtros e os scripts entram nas próximas fases do app no Avalonia |
+| `src/Acrux.Avalonia/MainWindow.cs` | A janela do app no Avalonia: abrir arquivo, a barra com a memória, a grade |
+| `src/Acrux.Avalonia/Grid/TableGrid.cs` | A grade desenhada: nada por linha, rolagem em linhas, teclas e seleção do `DataGridView`, Ctrl+C, colunas redimensionáveis |
+| `src/Acrux.Avalonia/Grid/Cells.cs` | O texto de cada célula pelas regras do `GridPainting` (`null`, `###`, `↵`) e o que o Ctrl+C copia |
+| `src/Acrux.Avalonia/Grid/Palette.cs` | As cores da grade no claro e no escuro, as do `Theme.cs` |
 | `src/Acrux.WinForms/Program.cs` | Entrada do app: limpeza de temporários órfãos, o arquivo recebido como argumento (duplo clique, "Abrir com") e `Environment.Exit(0)` |
 | `src/Acrux.WinForms/AppIcon.cs` | Ícone das janelas, lido do `.ico` embutido |
 | `src/Acrux.WinForms/GridPainting.cs` | O que o grid desenha sem mudar o dado: nulo, `###`, `↵` e o `▼` do filtro |

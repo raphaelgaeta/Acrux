@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The desktop app on Avalonia, for Windows and Linux (desenho aprovado em
+       2026-11-15). It lives beside the WinForms app until it does everything
+       that one does; then the installer points here and the WinForms app goes. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Acrux</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>../Acrux.WinForms/acrux.ico</ApplicationIcon>
+    <!-- the desktop GC tuning of the WinForms app (CLAUDE.md) -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <GarbageCollectionAdaptationMode>1</GarbageCollectionAdaptationMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Acrux.Core/Acrux.Core.csproj" />
+    <PackageReference Include="Avalonia" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- the windows' icon: the WinForms app's file, until that app goes -->
+    <AvaloniaResource Include="../Acrux.WinForms/acrux.ico" Link="Assets/acrux.ico" />
+  </ItemGroup>
+
+  <!-- Polars' native library, as the CLI picks it: the publish RID, or the
+       build machine's. Polars.NET has no win-arm64 package. -->
+  <PropertyGroup>
+    <PolarsNativeRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</PolarsNativeRid>
+    <PolarsNativeArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant())</PolarsNativeArch>
+    <PolarsNativeRid Condition="'$(PolarsNativeRid)' == '' And $([MSBuild]::IsOSPlatform('Windows'))">win-$(PolarsNativeArch)</PolarsNativeRid>
+    <PolarsNativeRid Condition="'$(PolarsNativeRid)' == '' And $([MSBuild]::IsOSPlatform('Linux'))">linux-$(PolarsNativeArch)</PolarsNativeRid>
+    <PolarsNativeRid Condition="'$(PolarsNativeRid)' == '' And $([MSBuild]::IsOSPlatform('OSX'))">osx-$(PolarsNativeArch)</PolarsNativeRid>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Polars.NET.Native.$(PolarsNativeRid)" Version="1.0.1" />
+  </ItemGroup>
+</Project>
