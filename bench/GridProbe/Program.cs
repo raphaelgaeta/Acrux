@@ -83,6 +83,13 @@ DataGridView MakeGrid()
     return grid;
 }
 
+static double Ms(Action action)
+{
+    var clock = Stopwatch.StartNew();
+    action();
+    return clock.Elapsed.TotalMilliseconds;
+}
+
 async Task Run(string scenario)
 {
     var grid = MakeGrid();
@@ -98,10 +105,20 @@ async Task Run(string scenario)
     grid.Refresh();
     clock.Stop();
     await Task.Delay(50);   // the messages posted during the paint arrive
+
+    // what the rows cost afterwards: each of these asks the grid for rows by
+    // index (Rows[i]), which unshares them, as a click, a selection and a
+    // filter do in the app
+    int column = Math.Min(5, columns - 1), last = Math.Min(rows, 400);
+    double click = Ms(() => grid.CurrentCell = grid[column, Math.Min(20, rows - 1)]);
+    double select = Ms(() => { for (int r = last - Math.Min(300, last); r < last; r++) grid[column, r].Selected = true; });
+    double clear = Ms(() => grid.Rows.Clear());
+
     string how = scenario == "before" ? "one RowCount" : $"{blocks} blocks of ~{blockTarget.TotalMilliseconds:0} ms";
     File.AppendAllText(log,
         $"{DateTime.Now:s} {scenario,-6} {rows,11:N0} rows × {columns,4} columns: {clock.Elapsed.TotalSeconds,6:0.00} s, "
-        + $"a message waited up to {longestWait / 1000,6:0.00} s ({how}){Environment.NewLine}");
+        + $"a message waited up to {longestWait / 1000,6:0.00} s ({how}); then a click {click,5:0.0} ms, "
+        + $"selecting 300 rows {select,6:0} ms, Rows.Clear() {clear,5:0} ms{Environment.NewLine}");
     form.Controls.Remove(grid);
     grid.Dispose();
 }

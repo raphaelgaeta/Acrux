@@ -22,8 +22,8 @@ the times compare). Each run appends two lines to `gridprobe.log`, next to
 the executable:
 
 ```
-before   5.000.000 rows ×  700 columns:  13,45 s, a message waited up to  13,45 s (one RowCount)
-after    5.000.000 rows ×  700 columns:   7,10 s, a message waited up to   0,64 s (15 blocks of ~500 ms)
+before   5.000.000 rows ×  700 columns:  13,17 s, a message waited up to  13,16 s (one RowCount); then a click   3,4 ms, selecting 300 rows    268 ms, Rows.Clear()    57 ms
+after    5.000.000 rows ×  700 columns:   7,09 s, a message waited up to   0,55 s (15 blocks of ~500 ms); then a click   4,3 ms, selecting 300 rows    312 ms, Rows.Clear()    49 ms
 ```
 
 "A message waited" is how long the window took to answer: a thread posts a
@@ -31,7 +31,15 @@ message every 10 ms and times its wait, as a click would wait. A WinForms
 timer can't measure this, since Windows only hands out `WM_TIMER` when the
 queue is empty.
 
-Measured on 2026-11-12 under Wine on a laptop (i9, Fedora): the line above.
+The click, the selection and the `Rows.Clear()` after each setup ask the
+grid for rows by index, which a filter and a selection do in the app. They
+caught the first version of `GridRows`, whose blocks each had their own
+shared row: 300 rows took 1.1 to 2.9 s to select, and `Rows.Clear()` 135 ms
+(1.7 s on the Windows 11 VM). Now the blocks share one row object.
+
+Measured on 2026-11-15 under Wine on a laptop (i9, Fedora): the lines above,
+the last of three runs (selecting 300 rows took 220–268 ms before and
+312–432 ms after).
 Block size against total time, from the earlier probe: 0.1 s blocks cost
 ~40% over a single `RowCount` with the columns hidden, 0.25 s ~30%, 0.5 s
 ~4%.

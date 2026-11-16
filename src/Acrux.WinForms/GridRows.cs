@@ -21,6 +21,9 @@ namespace Acrux;
 /// with the window answering between them. The grid must be empty
 /// (<c>Rows.Clear()</c>): shrinking <c>RowCount</c> removes rows one by one.
 /// </para>
+/// <para>
+/// Every block shares the first block's row object (<see cref="AddRows"/>).
+/// </para>
 /// </summary>
 internal sealed class GridRows(DataGridView grid)
 {
@@ -100,7 +103,7 @@ internal sealed class GridRows(DataGridView grid)
         while (true)
         {
             long start = Stopwatch.GetTimestamp();
-            grid.RowCount = (int)Math.Min(count, (long)grid.RowCount + block);
+            AddRows((int)Math.Min(count - (long)grid.RowCount, block));
             double took = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
             // at most 4× bigger at a time: a block that ran too fast to time
             // doesn't turn the rest into one long freeze
@@ -118,6 +121,25 @@ internal sealed class GridRows(DataGridView grid)
 
         ShowHidden();
         return true;
+    }
+
+    /// <summary>
+    /// Adds rows that share one row object with the rows already there.
+    /// <c>RowCount += n</c> clones a new shared row per call, and the grid's
+    /// row indexer (<c>Rows[i]</c>) runs <c>SharedList.LastIndexOf(row)</c>
+    /// before unsharing a row: from the end of the list back to that row's
+    /// block, ~5 million comparisons for a row of the first block. Every
+    /// <c>Rows.Clear()</c> asks for each displayed row that way (1.7 s on the
+    /// Windows 11 VM), and so do a click and a selection: 300 rows took 1 to
+    /// 3 s under Wine, 0.25 s with one row object. The last row is still
+    /// shared: its columns are hidden, so nothing could have selected it.
+    /// </summary>
+    private void AddRows(int n)
+    {
+        if (grid.RowCount == 0)
+            grid.RowCount = n;
+        else
+            grid.Rows.AddCopies(grid.RowCount - 1, n);
     }
 
     private void ShowHidden()
