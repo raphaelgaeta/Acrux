@@ -151,6 +151,15 @@ Pelo GitHub Actions (`.github/workflows/release.yml`, desenho aprovado em
     precisa de assinatura. Por ora, só o "Abrir com".
 - **`AppId` fixo** no `.iss`: o Windows reconhece a instalação por ele.
   Nunca mude.
+- **Atualizar por cima limpa a versão anterior** (`[InstallDelete]`,
+  2026-11-16): o Inno só sobrescreve, e uma DLL que a versão nova não traz
+  ficaria na pasta. Antes de copiar, o setup apaga as DLLs da raiz e as 13
+  pastas de recursos do .NET (`cs` a `zh-Hant`). Os dois `.exe` e os `.json`
+  têm o mesmo nome em toda versão, e o `unins000.*` é o desinstalador.
+  Medido comparando os dois publishes no laptop: o 0.3.0 por cima do 0.2.1
+  deixaria 85 DLLs do WinForms (42 MB), todas nesses lugares. Não foi
+  testado na VM (decisão do dono): a instalação do v0.3.0 lá foi numa pasta
+  nova. Mudou o que o publish põe fora da raiz? Mude a lista.
 - O `.iss` só compila no Windows (na CI). Para testar, baixe o artefato
   `windows` do PR com `gh run download`. O primeiro, de 70 MB, funcionou na
   VM limpa do Windows 11, onde o zip falhava por falta do runtime (teste do

@@ -54,6 +54,27 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Excludes: "*.pdb"; Flags: ignorever
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"
 Source: "..\assets\brand\NOTICE.md"; DestDir: "{app}"; DestName: "NOTICE-logo.md"
 
+[InstallDelete]
+; Setup only overwrites, so a DLL the new version no longer ships would stay in
+; {app} (0.3.0 over 0.2.1 would leave 85 DLLs of the WinForms app, 42 MB).
+; Clear what the previous publish put there first: its DLLs and the .NET
+; resource folders. The two .exe and the .json files have the same names in
+; every version, and unins000.* is the uninstaller.
+Type: files; Name: "{app}\*.dll"
+Type: filesandordirs; Name: "{app}\cs"
+Type: filesandordirs; Name: "{app}\de"
+Type: filesandordirs; Name: "{app}\es"
+Type: filesandordirs; Name: "{app}\fr"
+Type: filesandordirs; Name: "{app}\it"
+Type: filesandordirs; Name: "{app}\ja"
+Type: filesandordirs; Name: "{app}\ko"
+Type: filesandordirs; Name: "{app}\pl"
+Type: filesandordirs; Name: "{app}\pt-BR"
+Type: filesandordirs; Name: "{app}\ru"
+Type: filesandordirs; Name: "{app}\tr"
+Type: filesandordirs; Name: "{app}\zh-Hans"
+Type: filesandordirs; Name: "{app}\zh-Hant"
+
 [Icons]
 Name: "{autoprograms}\Acrux"; Filename: "{app}\Acrux.exe"
 Name: "{autodesktop}\Acrux"; Filename: "{app}\Acrux.exe"; Tasks: desktopicon
