@@ -13,7 +13,7 @@ repo=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 duckdb=$(sed -n 's/^duckdb==//p' "$repo/bench/requirements.txt")
 rm -rf "$out"
 mkdir -p "$out/data" "$out/duckdb"
-for p in "src/Acrux.WinForms/Acrux.WinForms.csproj app" "src/Acrux.Cli/Acrux.Cli.csproj cli" "bench/AcruxProbe/AcruxProbe.csproj probe"; do
+for p in "src/Acrux.Avalonia/Acrux.Avalonia.csproj app" "src/Acrux.Cli/Acrux.Cli.csproj cli" "bench/AcruxProbe/AcruxProbe.csproj probe"; do
     set -- $p
     dotnet publish "$repo/$1" -c Release -r win-x64 --self-contained -p:PublishSingleFile=false \
         -p:Version=0.0.0-bench -o "$out/$2" -v q -nologo

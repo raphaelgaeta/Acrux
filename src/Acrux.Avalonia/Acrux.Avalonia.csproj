@@ -1,15 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The desktop app on Avalonia, for Windows and Linux (desenho aprovado em
-       2026-11-15). It lives beside the WinForms app until it does everything
-       that one does; then the installer points here and the WinForms app goes. -->
+  <!-- The desktop app, on Avalonia, for Windows and Linux (desenho aprovado em
+       2026-11-15). It took the WinForms app's place on 2026-11-16: the same
+       executable name, the installer and the release point here. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Acrux</AssemblyName>
     <RootNamespace>Acrux</RootNamespace>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ApplicationIcon>../Acrux.WinForms/acrux.ico</ApplicationIcon>
-    <!-- the desktop GC tuning of the WinForms app (CLAUDE.md) -->
+    <ApplicationIcon>Assets/acrux.ico</ApplicationIcon>
+    <!-- single file (the release's zip): the native libraries go inside, and the
+         C# terminal needs everything extracted to disk, since Roslyn resolves
+         references through Assembly.Location, empty in a pure single file
+         (dotnet/roslyn#50719). Never trim: Roslyn scripting needs the metadata. -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <!-- desktop GC tuning: workstation, concurrent, DATAS (CLAUDE.md) -->
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <GarbageCollectionAdaptationMode>1</GarbageCollectionAdaptationMode>
@@ -26,8 +33,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- the windows' icon: the WinForms app's file, until that app goes -->
-    <AvaloniaResource Include="../Acrux.WinForms/acrux.ico" Link="Assets/acrux.ico" />
+    <!-- the windows' icon; ApplicationIcon only marks the .exe -->
+    <AvaloniaResource Include="Assets/acrux.ico" />
   </ItemGroup>
 
   <!-- Polars' native library, as the CLI picks it: the publish RID, or the

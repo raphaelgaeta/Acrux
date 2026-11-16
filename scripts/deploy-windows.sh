@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Test deploy of the Windows app on this machine, following the CLI's
-# (scripts/deploy-cli.sh). Publishes Acrux.WinForms for win-x64 the way a
+# (scripts/deploy-cli.sh). Publishes the app (src/Acrux.Avalonia) for win-x64 the way a
 # release does (self-contained, single file) into $ACRUX_WINDOWS_HOME/<commit>
 # (default ~/.local/share/acrux-windows), with "current" and "previous" like
 # the CLI's, then hands "current" to this clone's delivery command, if any.
@@ -36,19 +36,19 @@ deployed=$(readlink "$root/current" 2>/dev/null || true)
 # tests) keeps the build in place: no 300 MB rebuild and nothing new to deliver.
 sources() {
     git -C "$repo" rev-parse "$1:Directory.Build.props" "$1:src/Acrux.Core" \
-        "$1:src/Acrux.WinForms" 2>/dev/null || echo "unknown $1"
+        "$1:src/Acrux.Avalonia" 2>/dev/null || echo "unknown $1"
 }
 
 build() {
     log "building $rev: $(git -C "$repo" log -1 --format=%s "$rev")"
     work=$(mktemp -d)
     trap 'rm -rf "$work"' EXIT
-    git -C "$repo" archive "$rev" Directory.Build.props src/Acrux.Core src/Acrux.WinForms | tar -x -C "$work"
+    git -C "$repo" archive "$rev" Directory.Build.props src/Acrux.Core src/Acrux.Avalonia | tar -x -C "$work"
 
     rm -rf "${root:?}/$rev"
     # 9>&-: dotnet's build servers outlive the build and would hold the lock
     # (see scripts/deploy-cli.sh)
-    if ! dotnet publish "$work/src/Acrux.WinForms/Acrux.WinForms.csproj" -c Release -r win-x64 \
+    if ! dotnet publish "$work/src/Acrux.Avalonia/Acrux.Avalonia.csproj" -c Release -r win-x64 \
             --self-contained true -p:PublishSingleFile=true -o "$root/$rev" -nologo -v q 9>&-; then
         rm -rf "${root:?}/$rev"
         log "build failed: $rev not deployed, current stays ${deployed:-none}"
