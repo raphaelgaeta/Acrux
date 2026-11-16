@@ -7,6 +7,8 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // first of all: glibc makes an arena when a thread first allocates
+        NativeHeap.LimitArenas();
         // leftovers from previous runs killed before their cleanup
         DataFrameProvider.CleanStaleTempFiles();
         // A file opened from the file manager arrives as the first argument. A
