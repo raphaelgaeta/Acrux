@@ -355,6 +355,54 @@ passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
   teclas e a seleção do `DataGridView`; as regras do `GridPainting`
   (`Grid/Cells.cs`); as cores do `Theme.cs` (`Grid/Palette.cs`); as colunas
   carregam 100 ms depois que a rolagem para, como no WinForms.
+- **A leitura da grade** (desenho aprovado em 2026-11-15, depois de comparar
+  com o Excel, numa página com cada proposta ligada e desligada). A grade
+  copiava as linhas do Excel, mas não o conforto: a seleção era o bloco cheio
+  do Windows clássico, sem número de linha, com texto de 13 px e todas as
+  colunas com 120 px. Agora:
+  - **seleção calma:** tinta clara da cor da marca sob o intervalo, o texto
+    mantém a cor, contorno de 2 px na outra cor da marca, e a célula atual
+    fica sem preenchimento;
+  - **moldura:** os números de linha à esquerda (a linha do arquivo, de 1 em
+    diante; com filtro, pulam como no Excel), e os cabeçalhos e números da
+    seleção acesos, com a borda da cor do contorno;
+  - **faixa** na linha e na coluna atuais (o "Focus Cell" do Excel 365);
+  - **texto de 15 px** (o 11 pt do Excel), linhas de 26 px, cabeçalho de
+    46 px com o **tipo do Polars sob o nome** (`ColumnCache.TypeNames`, o
+    mesmo texto do `acrux schema`);
+  - **barra de valor** (`Grid/ValueBar.cs`): a célula atual inteira, como a
+    barra de fórmulas, com altura fixa de duas linhas, porque uma barra que
+    crescesse com o valor moveria as linhas sob o ponteiro;
+  - **largura pelo conteúdo:** o cabeçalho dá a largura inicial; quando a
+    coluna carrega, ela se ajusta às linhas da tela, uma vez, com teto de
+    320 px, e só cresce. As colunas que chegam juntas se ajustam juntas, e a
+    coluna mais à esquerda da tela fica parada. Largura que o usuário escolheu
+    não muda mais;
+  - **decimais alinhados** nas linhas da tela, sem acrescentar zeros. Se uma
+    tela com mais casas empurraria um número para fora de uma coluna que cabe
+    nele, ele fica sem alinhar: o `###` é só para o que não cabe;
+  - **algarismos de mesma largura** (`tnum`): o Segoe UI e a Noto Sans já os
+    têm; a Adwaita Sans, fonte padrão do GNOME, não (medido);
+  - **sem listras:** a faixa da linha atual faz o papel delas;
+  - **o filtro é um dropdown** (desenho aprovado em 2026-11-15): um botão em
+    cada cabeçalho, sempre visível, como as setas do AutoFiltro do Excel (num
+    arquivo de 700 colunas, quem abre pela primeira vez descobre o filtro sem
+    procurar). Sem filtro, um ▾ cinza; com filtro, um funil sobre a cor de
+    destaque: a forma muda, não só a cor. O botão fica 4 px antes da borda,
+    que é a alça de redimensionar. Clicar no nome também abre o filtro, até
+    a ordenação precisar desse clique. O filtro (`FilterDropdown`) abre na
+    hora, preso ao cabeçalho (um `Popup` da janela), lendo os valores, e se
+    preenche quando eles chegam; Esc ou um clique fora fecha sem aplicar, e
+    Enter ou OK aplica. O clique fora passa adiante: no botão de outra coluna,
+    fecha um e abre o outro; no botão da mesma coluna, só fecha. O resultado
+    de um script fica sem botão, porque ali os filtros de cabeçalho estão
+    desligados.
+
+  Todo texto mantém 4,5:1 sobre as tintas, o cinza incluído (4,5 a 4,7:1 na
+  seleção); o contorno, 4:1 ou mais. Os decimais (`Decimal32Type` a
+  `Decimal256Type`) também vão à direita, como no WinForms: o porte os tinha
+  deixado à esquerda. O tempo de desenho da janela não mudou (13 ms antes e
+  depois, no arquivo de 700 colunas, pelo harness).
 - **Fases**, cada uma com PR, medição no Linux e teste na VM:
   1. esqueleto: janela, abrir arquivo (qualquer formato; xlsx e SQLite pela
      primeira aba ou tabela), grade, barra com a memória, tema do sistema,
@@ -707,11 +755,12 @@ o `Describe` lê a mensagem na cultura invariante.
 | `src/Acrux.Avalonia/ErrorDialog.cs` | O erro que interrompe o pedido, numa janela, com a mensagem selecionável |
 | `src/Acrux.Avalonia/TerminalPanel.cs` | O terminal C#: o histórico, o código, Ctrl+Enter (ouvido no tunnel: a caixa de várias linhas trata o Enter), o limite de 1M linhas e "Undo step" |
 | `src/Acrux.Avalonia/MainWindow.cs` | A janela do app no Avalonia: abrir arquivo, a barra com a memória, a grade |
-| `src/Acrux.Avalonia/FilterPopup.cs` | O filtro do cabeçalho: os valores da coluna, a busca, "(Blanks)", o aviso de lista cortada |
+| `src/Acrux.Avalonia/FilterDropdown.cs` | O filtro do cabeçalho, como dropdown: os valores da coluna, a busca, "(Blanks)", o aviso de lista cortada |
 | `src/Acrux.Avalonia/ColumnChoice.cs` | O diálogo do botão "Columns": quais colunas a grade mostra |
 | `src/Acrux.Avalonia/TableChoice.cs` | Qual aba do xlsx ou tabela do SQLite abrir, quando há mais de uma |
-| `src/Acrux.Avalonia/Grid/TableGrid.cs` | A grade desenhada: nada por linha, rolagem em linhas, teclas e seleção do `DataGridView`, Ctrl+C, colunas redimensionáveis |
-| `src/Acrux.Avalonia/Grid/Cells.cs` | O texto de cada célula pelas regras do `GridPainting` (`null`, `###`, `↵`) e o que o Ctrl+C copia |
+| `src/Acrux.Avalonia/Grid/TableGrid.cs` | A grade desenhada: nada por linha, rolagem em linhas, teclas do `DataGridView`, seleção calma, números de linha, faixa da célula atual, largura pelo conteúdo, Ctrl+C |
+| `src/Acrux.Avalonia/Grid/ValueBar.cs` | A célula atual inteira acima da grade, como a barra de fórmulas: coluna, linha, tipo e valor |
+| `src/Acrux.Avalonia/Grid/Cells.cs` | O texto de cada célula pelas regras do `GridPainting` (`null`, `###`, `↵`), os tamanhos, o alinhamento dos decimais e o que o Ctrl+C copia |
 | `src/Acrux.Avalonia/Grid/Palette.cs` | As cores da grade no claro e no escuro, as do `Theme.cs` |
 | `src/Acrux.WinForms/Program.cs` | Entrada do app: limpeza de temporários órfãos, o arquivo recebido como argumento (duplo clique, "Abrir com") e `Environment.Exit(0)` |
 | `src/Acrux.WinForms/AppIcon.cs` | Ícone das janelas, lido do `.ico` embutido |

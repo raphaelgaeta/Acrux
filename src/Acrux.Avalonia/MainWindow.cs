@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Platform;
 using Avalonia.Input;
@@ -32,6 +33,16 @@ internal sealed class MainWindow : Window
     private readonly TerminalPanel _terminal = new();
     private readonly GridSplitter _splitter = new() { ResizeDirection = GridResizeDirection.Rows, Height = 5, IsVisible = false };
     private readonly Grid _body = new() { RowDefinitions = new RowDefinitions("*,Auto,0") };
+    // The header's filter drops down under the header. A click elsewhere closes it, and
+    // goes on: a click on another header's button closes one dropdown and opens the next.
+    private readonly Popup _filterPopup = new()
+    {
+        IsLightDismissEnabled = true,
+        OverlayDismissEventPassThrough = true,
+        Placement = PlacementMode.BottomEdgeAlignedLeft,
+        WindowManagerAddShadowHint = true,
+    };
+    private (int Column, long At) _filterDismissed = (-1, 0);
     private Session? _session;
     private TableGrid? _grid;        // the file's: kept under a script's result, scroll and filters included
     private TableGrid? _resultGrid;  // a script's result, while one is shown
@@ -53,6 +64,7 @@ internal sealed class MainWindow : Window
         _body.Children.Add(_gridHost);
         _body.Children.Add(_splitter);
         _body.Children.Add(_terminal);
+        _body.Children.Add(_filterPopup);   // in the tree, so the dropdown takes the window's light or dark
         var root = new DockPanel();
         DockPanel.SetDock(bar, Dock.Top);
         root.Children.Add(bar);
@@ -157,6 +169,7 @@ internal sealed class MainWindow : Window
             grid.Status += message => _info.Text = $"{Info(session)}   ·   {message}";
             grid.HeaderClicked += async (column, header) => await HeaderFilterAsync(column, header);
             session.File.ColumnLoaded += (_, _, _) => UpdateMemory(session);
+            _filterPopup.IsOpen = false;   // a dropped file arrives without a click to close it
             _gridHost.Content = grid;
             _grid = grid;
             _resultGrid = null;
@@ -193,36 +206,65 @@ internal sealed class MainWindow : Window
     }
 
     /// <summary>
-    /// A header click: the column's values (its own filter left out, as in
-    /// Excel), the popup under the header, then the rows again.
+    /// A header click: the dropdown under the header at once, then the
+    /// column's values (its own filter left out, as in Excel) when they come,
+    /// then the rows again on OK.
     /// </summary>
     private async Task HeaderFilterAsync(int column, Rect header)
     {
         if (_session is not { } session || _grid is not { } grid) return;
+        // the click that closed this column's dropdown reaches its header too: it was meant to close it
+        if (_filterDismissed.Column == column && Environment.TickCount64 - _filterDismissed.At < 500) return;
         string name = session.File.Fields[column].Name;
+        var dropdown = new FilterDropdown(name, session.Filters.GetValueOrDefault(name)) { MinWidth = Math.Max(300, header.Width) };
+        using var reading = new CancellationTokenSource();
+        void Closed(object? sender, EventArgs e)
+        {
+            if (_filterPopup.Child != dropdown) return;
+            if (!dropdown.Done.IsCompleted) _filterDismissed = (column, Environment.TickCount64);
+            dropdown.Cancel();
+        }
+        _filterPopup.Closed += Closed;
+        _filterPopup.PlacementTarget = grid;
+        _filterPopup.PlacementRect = header;
+        _filterPopup.Child = dropdown;
+        _filterPopup.IsOpen = true;
+        grid.OpenFilterColumn = column;
+        Dispatcher.UIThread.Post(dropdown.FocusSearch, DispatcherPriority.Loaded);   // once the dropdown is on screen
         try
         {
-            _info.Text = $"Reading values of \"{name}\"...";
-            var (values, hasBlanks, capped) = await session.ValuesAsync(name);
-            if (session != _session) return;   // another file came in meanwhile
-            var popup = new FilterPopup(name, values, hasBlanks, capped, session.Filters.GetValueOrDefault(name))
+            var values = session.ValuesAsync(name, reading.Token);
+            if (await Task.WhenAny(values, dropdown.Done) != values)
             {
-                WindowStartupLocation = WindowStartupLocation.Manual,
-                Position = grid.PointToScreen(header.BottomLeft),
-            };
-            _info.Text = Info(session);
-            if (!await popup.ShowDialog<bool>(this)) return;
-            session.SetFilter(name, popup.Result);
+                reading.Cancel();   // closed before the values came: they are no one's now
+                return;
+            }
+            var (list, hasBlanks, capped) = await values;
+            if (session != _session) return;   // another file came in meanwhile
+            dropdown.SetValues(list, hasBlanks, capped);
+            if (!await dropdown.Done || session != _session) return;
+            _filterPopup.IsOpen = false;
+            session.SetFilter(name, dropdown.Result);
             await ApplyFiltersAsync();
         }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
+            if (_filterPopup.Child == dropdown) _filterPopup.IsOpen = false;
             _info.Text = Info(session);
             await ErrorDialog.ShowAsync(this, "Error", $"Error filtering column \"{name}\":\n\n{PolarsErrors.Describe(ex)}");
         }
         finally
         {
-            grid.FocusGrid();
+            _filterPopup.Closed -= Closed;
+            // a click on another header may have opened its dropdown already: that one stays
+            if (_filterPopup.Child == dropdown)
+            {
+                _filterPopup.IsOpen = false;
+                _filterPopup.Child = null;
+                grid.OpenFilterColumn = -1;
+                grid.FocusGrid();
+            }
         }
     }
 
@@ -236,10 +278,8 @@ internal sealed class MainWindow : Window
         query.Stop();
         var swap = Stopwatch.StartNew();
         grid.SetRows(session.Rows);
-        grid.FilteredColumns.Clear();
-        for (int c = 0; c < session.File.Fields.Count; c++)
-            if (session.Filters.ContainsKey(session.File.Fields[c].Name))
-                grid.FilteredColumns.Add(c);
+        grid.SetFiltered(Enumerable.Range(0, session.File.Fields.Count)
+            .Where(c => session.Filters.ContainsKey(session.File.Fields[c].Name)));
         _clearFilters.IsEnabled = session.Filters.Count > 0;
         _info.Text = $"{Info(session)}  [query {query.ElapsedMilliseconds:N0} ms | grid {swap.ElapsedMilliseconds:N0} ms]";
     }
@@ -324,7 +364,8 @@ internal sealed class MainWindow : Window
     /// </summary>
     private void ShowResult(Session session, ColumnCache result)
     {
-        var grid = new TableGrid(result);
+        _filterPopup.IsOpen = false;
+        var grid = new TableGrid(result, filterButtons: false);   // header filters are off in script mode
         grid.Status += message => _info.Text = $"{ScriptInfo(session, result)}   ·   {message}";
         grid.HeaderClicked += (_, _) => _info.Text = "Header filters are disabled in script mode — use \"Restore file\"";
         result.ColumnLoaded += (_, _, _) => UpdateMemory(session);

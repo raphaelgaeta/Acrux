@@ -65,6 +65,9 @@ public sealed class ColumnCache : IDisposable
     /// <summary>The table's columns, in order, with their Arrow types.</summary>
     public IReadOnlyList<Field> Fields { get; }
 
+    /// <summary>Each column's Polars type, as <c>acrux schema</c> prints it (<c>i64</c>, <c>datetime[μs]</c>).</summary>
+    public IReadOnlyList<string> TypeNames { get; }
+
     public int RowCount { get; }
 
     /// <summary>Bytes of the Arrow buffers in memory.</summary>
@@ -84,10 +87,13 @@ public sealed class ColumnCache : IDisposable
 
     internal bool HasPins => _pinned.Count > 0;
 
-    private ColumnCache(IReadOnlyList<Field> fields, int rowCount, MemoryBudget memory,
+    private ColumnCache(IReadOnlyList<Field> fields, IReadOnlyList<string> types, int rowCount, MemoryBudget memory,
         Func<string, RecordBatch>? load, int concurrency, IDisposable? source, RecordBatch? whole)
     {
         Fields = fields;
+        // a result computed whole takes its columns from the data: should they ever
+        // differ from the plan's schema, Arrow's names beat a type on the wrong column
+        TypeNames = types.Count == fields.Count ? types : fields.Select(f => f.DataType.Name).ToArray();
         RowCount = rowCount;
         Memory = memory;
         _loaded = new Entry?[fields.Count];
@@ -112,15 +118,16 @@ public sealed class ColumnCache : IDisposable
         if (!File.Exists(parquetPath))
             throw new FileNotFoundException("Parquet file not found.", parquetPath);
 
-        var fields = await Task.Run(() =>
+        var (fields, types) = await Task.Run(() =>
         {
             using var lf = LazyFrame.ScanParquet(parquetPath);
-            return lf.Schema.ToArrowSchema().FieldsList;   // file order
+            using var schema = lf.Schema;
+            return (schema.ToArrowSchema().FieldsList, Names(schema));   // file order
         });
         var rows = await FilterEngine.CountRowsAsync(parquetPath);
         CheckRows(rows);
 
-        return new ColumnCache(fields, (int)rows, memory,
+        return new ColumnCache(fields, types, (int)rows, memory,
             column => LoadFromFile(parquetPath, column), concurrency: 0, source: null, whole: null);
     }
 
@@ -136,10 +143,10 @@ public sealed class ColumnCache : IDisposable
     {
         try
         {
-            var (fields, unstable) = await Task.Run(() =>
+            var (fields, types, unstable) = await Task.Run(() =>
             {
                 using var schema = plan.CollectSchema();
-                return (schema.ToArrowSchema().FieldsList, PlanOrder.WhyUnstable(plan.Explain(true)));
+                return (schema.ToArrowSchema().FieldsList, Names(schema), PlanOrder.WhyUnstable(plan.Explain(true)));
             });
 
             if (unstable is null)
@@ -151,7 +158,7 @@ public sealed class ColumnCache : IDisposable
                     return Convert.ToInt64(df[0, 0]);
                 });
                 CheckRows(rows);
-                return new ColumnCache(fields, (int)rows, memory,
+                return new ColumnCache(fields, types, (int)rows, memory,
                     column => LoadFromPlan(plan, column), PlanConcurrency, source: plan, whole: null);
             }
 
@@ -171,7 +178,7 @@ public sealed class ColumnCache : IDisposable
                 return df.ToArrow();
             });
             plan.Dispose();
-            return new ColumnCache(whole.Schema.FieldsList, whole.Length, memory, load: null, concurrency: 0, source: null, whole);
+            return new ColumnCache(whole.Schema.FieldsList, types, whole.Length, memory, load: null, concurrency: 0, source: null, whole);
         }
         catch
         {
@@ -179,6 +186,8 @@ public sealed class ColumnCache : IDisposable
             throw;
         }
     }
+
+    private static string[] Names(PolarsSchema schema) => schema.ToList().Select(c => c.Type.ToString()).ToArray();
 
     /// <summary>The column if it is in memory; null while it is not.</summary>
     public IArrowArray? TryGet(int column) =>
