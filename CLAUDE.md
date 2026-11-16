@@ -1,9 +1,9 @@
 # Acrux
 
 Um núcleo de leitura de dados tabulares (parquet, CSV, xlsx e SQLite) sobre o
-Polars.NET, com duas fronteiras: o visualizador WinForms (`DataGridView` em
-modo virtual) e o CLI. Otimizado para arquivos grandes (700 colunas, milhões
-de linhas). O nome vem de α Crucis,
+Polars.NET, com duas fronteiras: o app de janela no Avalonia (uma grade
+desenhada, no Windows e no Linux) e o CLI. Otimizado para arquivos grandes
+(700 colunas, milhões de linhas). O nome vem de α Crucis,
 a estrela mais brilhante do Cruzeiro do Sul (o repositório já se chamou
 ParquetGridViewer e o projeto, PolarsGridViewer).
 
@@ -11,9 +11,8 @@ ParquetGridViewer e o projeto, PolarsGridViewer).
 
 ```
 dotnet build                              # solução inteira (Acrux.sln), da raiz
-dotnet run --project src/Acrux.WinForms
-dotnet run --project src/Acrux.Avalonia -- arquivo.parquet         # o app no Avalonia, em construção (Windows e Linux)
-dotnet run --project src/Acrux.Cli -- head arquivo.parquet -n 10   # CLI, roda no Linux
+dotnet run --project src/Acrux.Avalonia -- arquivo.parquet         # o app de janela (Windows e Linux)
+dotnet run --project src/Acrux.Cli -- head arquivo.parquet -n 10   # CLI
 ```
 
 O CLI tem os comandos `schema` (nome e tipo do Polars de cada coluna, uma
@@ -50,35 +49,40 @@ Erros saem em uma linha com código 1, sem o plano que o Polars anexa
 sai com código 2. `acrux version` diz qual commit está
 instalado (ver "Deploy de teste do CLI" abaixo).
 
-Quatro projetos sob `src/`, agregados pelo `Acrux.sln` da raiz: `Acrux.Core`
+Três projetos sob `src/`, agregados pelo `Acrux.sln` da raiz: `Acrux.Core`
 (net10.0, sem UI — `ColumnCache`, `DataFrameProvider`, `FilterEngine`,
-`MemoryBudget`, `PlanOrder`, `PolarsTableAdapter`, `ScriptHost`, `Session`,
-`SystemMemory`, `TextDates`, `TimeFilter`), `Acrux.WinForms` (net10.0-windows,
-WinForms, `AssemblyName` mantido como `Acrux`), `Acrux.Avalonia` (net10.0,
-o app de janela no Avalonia, em construção; ver "Porte multiplataforma") e
-`Acrux.Cli` (net10.0, console); os três últimos referenciam o Core. `dotnet build` na raiz basta, mas
+`MemoryBudget`, `NativeHeap`, `PlanOrder`, `PolarsTableAdapter`, `ScriptHost`,
+`Session`, `SystemMemory`, `TextDates`, `TimeFilter`), `Acrux.Avalonia`
+(net10.0, o app de janela, com `AssemblyName` `Acrux`: o executável é o
+`Acrux.exe` no Windows e o `Acrux` no Linux; ver "O app no Avalonia") e
+`Acrux.Cli` (net10.0, console); os dois últimos referenciam o Core. O app
+WinForms (`src/Acrux.WinForms`, só Windows) saiu na troca, em 2026-11-16: o
+histórico do git o guarda. `dotnet build` na raiz basta, mas
 **`dotnet run` e `dotnet publish` exigem apontar o projeto**: na raiz o `run`
 não acha projeto ("Couldn't find a project to run") e o `publish` falha com
 **NETSDK1099**, porque tenta aplicar single-file também no Acrux.Core, que é
-biblioteca. O `Directory.Build.props` da raiz liga `EnableWindowsTargeting`:
-baixa os reference assemblies do Windows e permite **compilar** contra a API do
-Windows a partir do Linux — o binário resultante continua rodando só no
-Windows.
+biblioteca.
 
-Pacotes: Polars.NET 1.0.1 (+ Native.win-x64/linux-x64/linux-arm64, Linq, ML), Apache.Arrow
+Pacotes: Polars.NET 1.0.1 (+ Native.win-x64/linux-x64/linux-arm64, Linq), Apache.Arrow
 23 (a 1.0.1 exige Arrow ≥ 23.0.0 — não fazer downgrade),
-Microsoft.CodeAnalysis.CSharp.Scripting (terminal C#) e Microsoft.Data.Sqlite
-(leitura de SQLite; traz o `e_sqlite3` nativo). Não há projeto de testes; o
+Microsoft.CodeAnalysis.CSharp.Scripting (terminal C#), Microsoft.Data.Sqlite
+(leitura de SQLite; traz o `e_sqlite3` nativo), Avalonia 12.1.6 (+ Desktop,
+Themes.Fluent) e Tmds.DBus.Protocol 0.94.1 (o cliente de D-Bus do próprio
+Avalonia, para o alto contraste do Linux; ver "O app no Avalonia"). Não há projeto de testes; o
 CLI tem um smoke test em `tests/smoke` (ver "Deploy de teste do CLI").
 
 Publicação — sempre com o caminho do `.csproj` (ver NETSDK1099 acima):
 
 ```
-dotnet publish src/Acrux.WinForms/Acrux.WinForms.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+dotnet publish src/Acrux.Avalonia/Acrux.Avalonia.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+dotnet publish src/Acrux.Avalonia/Acrux.Avalonia.csproj -c Release -r linux-x64 --self-contained true
 ```
 
-WinForms **não suporta trimming** — nunca publicar com
-`PublishTrimmed=true` (erro NETSDK1175). Single-file self-contained funciona,
+**Nunca publicar com `PublishTrimmed=true`:** o scripting do Roslyn (o
+terminal C#) precisa dos metadados que o trimming tira. (O WinForms nem
+permitia: erro NETSDK1175.) O publish traz os símbolos nativos do Skia
+(`libSkiaSharp.pdb` e `libHarfBuzzSharp.pdb`, ~105 MB): o instalador e o
+`.tar.gz` os deixam de fora, e o zip leva só o `Acrux.exe`. Single-file self-contained funciona,
 mas o terminal C# **exige** `IncludeAllContentForSelfExtract=true` (já setado
 no csproj — não remover): a API de scripting do Roslyn resolve referências,
 inclusive o corlib internamente, via `Assembly.Location`, vazio em single-file
@@ -97,10 +101,13 @@ Pelo GitHub Actions (`.github/workflows/release.yml`, desenho aprovado em
    duas vezes, cada uma na sua arquitetura: `ubuntu-latest` para o x64 e
    `ubuntu-24.04-arm` (runner ARM do GitHub, grátis em repositório público)
    para o arm64 (`acrux-cli-v0.1.0-linux-x64.tar.gz` e `…-linux-arm64.tar.gz`,
-   com um link `acrux` dentro); no
-   Windows, o instalador (`Acrux-v0.1.0-setup.exe`) e o app single-file
-   (`Acrux-v0.1.0-win-x64.zip`); os dois levam a `LICENSE` e o `NOTICE` da
-   arte.
+   com um link `acrux` dentro), e, só no x64, o app de janela
+   (`Acrux-v0.1.0-linux-x64.tar.gz`, ver "O pacote do Linux"), testado numa
+   instalação descartável; no Windows, o instalador (`Acrux-v0.1.0-setup.exe`)
+   e o app single-file (`Acrux-v0.1.0-win-x64.zip`). Os pacotes do app levam a
+   `LICENSE` e o `NOTICE` da arte. O app no arm64 fica de fora: não foi
+   testado, e o nativo arm64 do Polars pede glibc 2.39, o que deixa de fora
+   a maioria dos desktops ARM.
 3. Ele cria um release **rascunho**, com o `SHA256SUMS` e as notas (texto
    fixo de instalação + as geradas pelo GitHub). O dono confere e publica.
 
@@ -149,6 +156,31 @@ Pelo GitHub Actions (`.github/workflows/release.yml`, desenho aprovado em
   VM limpa do Windows 11, onde o zip falhava por falta do runtime (teste do
   dono, 2026-11-08).
 
+**O pacote do Linux** (`installer/linux/`, desenho aprovado em 2026-11-15:
+`.tar.gz` com `install.sh`; o RPM pelo COPR vem depois da troca). É o
+equivalente do setup por usuário do Windows, sem root:
+- **onde:** o app em `~/.local/share/acrux` (o `XDG_DATA_HOME`), o
+  `acrux.desktop` (menu e "Abrir com" para parquet, CSV, xlsx e SQLite: os
+  tipos MIME das extensões do `.iss`; mudou uma lista, mude as outras), o
+  ícone SVG da marca e o `acrux-parquet.xml`, que declara o
+  `application/vnd.apache.parquet` (IANA, 2024; o `shared-mime-info` do
+  Fedora 44 não o conhece) pela extensão e pela marca `PAR1`;
+- **os padrões:** um app em `~/.local/share/applications` passa à frente dos
+  do sistema, e sem padrão escrito o Acrux tomaria o duplo clique de todo
+  tipo que lista. Por isso o `install.sh` anota quem abre cada tipo antes
+  (`xdg-mime query default`), grava esses apps como padrão depois, e o Acrux
+  só fica com o parquet sem dono. **O LibreOffice Calc 26.2 declara o
+  parquet** (conferido no `.desktop` dele): onde ele está instalado, o
+  parquet continua com ele, e o script imprime o `xdg-mime default` para
+  trocar. O SQLite, que ninguém abria, fica com o Acrux;
+- **`uninstall.sh`** tira tudo, menos os padrões gravados no
+  `mimeapps.list` (sem o `.desktop`, o desktop os ignora), e apaga o
+  `${TMPDIR:-/tmp}/Acrux` se nenhum Acrux estiver aberto;
+- **teste:** com o `XDG_DATA_HOME` e o `XDG_CONFIG_HOME` numa pasta
+  temporária, nunca no `~` do laptop, onde o `acrux.desktop` é da Yukidama.
+  Conferido: o `desktop-file-validate`, o GIO reconhecendo o parquet com e
+  sem extensão, a remoção limpa. A CI repete isso a cada PR.
+
 Em PR, o mesmo workflow só compila e testa, sem release. A versão vem da tag
 (`-p:Version=0.1.0`); fora de release vale `0.0.0-dev`
 (`Directory.Build.props`), e na CI de PR, `0.0.0-ci.N`. O `acrux version`
@@ -170,11 +202,11 @@ SmartScreen. Os caminhos, conferidos em 2026-11-12:
   também).
 
 **Mudou o que o app transmite? Atualize a seção "Privacy" do README.** Winget
-e RPM ficam para quando houver usuários. As Actions estão nas versões
+fica para quando houver usuários; o RPM, pelo COPR, para depois da troca. As Actions estão nas versões
 conferidas em 2026-11-08 (checkout v7, setup-dotnet v6, upload-artifact v7,
 download-artifact v8, todas em Node 24).
 
-O `Acrux.WinForms.csproj` traz tuning intencional de GC para desktop
+O `Acrux.Avalonia.csproj` traz tuning intencional de GC para desktop
 (workstation concurrent + DATAS via `GarbageCollectionAdaptationMode=1`) —
 não reverter sem motivo.
 
@@ -194,7 +226,10 @@ Trecho cortado também leva selo (`edit_gif.py`, `a-b:cut`). O
 filtro de cabeçalho. Os 16 s em que o painel de Widgets do Windows ficou
 aberto (manchetes de notícia) saíram com selo. **Gravação de tela para o
 README: sem Widgets, notificação ou outro app na área gravada**, e a ação
-no canto esquerdo da janela, que é o que cabe legível em 900 px.
+no canto esquerdo da janela, que é o que cabe legível em 900 px. **O
+`open_grid.gif` e o `script_terminal.gif` ainda são do app WinForms**: a
+regravação com o app no Avalonia é da fase 6, e a legenda do README diz que
+a gravação é de antes da troca.
 O `messy_csv.gif` põe o pandas ao lado do
 Acrux, num CSV como o Excel em português salva; desenho do dono. Ele só é
 justo se três coisas continuarem valendo:
@@ -229,81 +264,68 @@ mesmo assim.
   **Por isso o ícone pede fundo neutro:** numa barra de título roxa, o urso
   fica roxo sobre a metade roxa do degradê e some (visto pelo dono na VM,
   2026-11-10). A marca na barra é o próprio ícone.
-- **`acrux.ico`:** gerado de `assets/brand/acrux-icon.svg`. A arte não é quadrada
+- **`acrux.ico`** (`src/Acrux.Avalonia/Assets/`): gerado de `assets/brand/acrux-icon.svg`. A arte não é quadrada
   (1022,4×1009,25): vai com margem transparente, sem esticar. Quadros 16 a 64 px
   em BMP e 256 em PNG, pelo `Icon` do System.Drawing.
 - **`ApplicationIcon` só marca o `.exe`.** Funciona em publish feito no Linux
   (quadros conferidos na tabela de recursos PE, sem NETSDK1074). Janela com barra
-  de título precisa de `Icon = AppIcon.Value`; o `FilterPopupForm` é tool window e
-  não mostra ícone.
+  de título precisa do ícone também, pelo `AvaloniaResource`:
+  `new WindowIcon(AssetLoader.Open(new Uri("avares://Acrux/Assets/acrux.ico")))`.
+  O `avares://` leva o nome do assembly (`Acrux`): mudou o `AssemblyName`,
+  mude as URIs. No Linux, o ícone do menu é o SVG que o `install.sh` instala.
 - **Fonte Aller: nunca embutir nem commitar.** A licença gratuita limita a 25
   usuários e só permite redistribuir o `.zip` original. O README não aceita fonte
   própria; o nome aparece só como imagem, via logo. Azul no branco dá 1,54:1 de
   contraste, por isso o README usa roxo no tema claro e gradiente no escuro.
 
-**Tema do app de janela** (`Theme.cs`, desenho aprovado em 2026-11-10): claro
-ou escuro conforme o Windows, e a marca só onde ajuda a ler. É o "tema
-mínimo": nada desenhado à mão além dos nulos, porque o que se gasta em
-aparência no WinForms se perde na troca para o Avalonia.
+**Tema do app de janela** (desenho aprovado em 2026-11-10 para o WinForms,
+levado ao Avalonia em 2026-11-15; `Grid/Palette.cs`, `Grid/Cells.cs`): claro
+ou escuro conforme o sistema, e a marca só onde ajuda a ler.
 
-- **Modo escuro:** `Application.SetColorMode(SystemColorMode.System)` no
-  `Program`, antes de qualquer janela; não é mais experimental no .NET 10.
-  Só existe no Windows 11 (o Wine fica no claro), é lido uma vez (trocar o
-  tema do Windows pede reabrir o app) e não vale em alto contraste.
-- **Nenhuma cor fixa** (`Color.White`, `Color.Black`): elas viram blocos no
-  escuro. Use `SystemColors` ou o `Theme`.
+- **Claro ou escuro:** `RequestedThemeVariant = ThemeVariant.Default` no
+  `App`: o do Windows, ou o `color-scheme` do portal no Linux. A grade se
+  repinta ao vivo (`ActualThemeVariantChanged`).
+- **Nenhuma cor fixa fora da `Palette`:** a grade, a barra de valor e o
+  texto do terminal pegam as cores dela, pelo modo.
 - **Cada cor da marca no modo em que se lê** (WCAG; texto pede 4,5:1):
-  - a barra de título fica a do sistema, e só a borda da janela é roxa
-    (`FormBorderColor`; o Windows 10 ignora). O roxo dá 4,94:1 contra o
-    branco e 3,30:1 contra `#202020`, acima do mínimo de 3:1 para o que não
-    é texto. Uma barra roxa apagava o urso do ícone (ver "O ícone é recorte",
-    acima);
-  - destaque (seleção, cabeçalho filtrado): preto sobre azul no claro,
-    13,6:1; branco sobre roxo no escuro, 4,94:1. Branco sobre azul daria
-    1,54:1;
-  - o cabeçalho filtrado mantém o " ▼": a cor não pode ser o único sinal.
-- **Em alto contraste, a marca sai** (`SystemInformation.HighContrast`): o
-  esquema do usuário vale mais.
+  - destaque (cabeçalho filtrado): preto sobre azul no claro, 13,6:1;
+    branco sobre roxo no escuro, 4,94:1. Branco sobre azul daria 1,54:1;
+  - a seleção e as faixas são a cor da marca misturada ao fundo (ver "A
+    leitura da grade"), e o filtro tem um funil: a cor nunca é o único sinal;
+  - **a barra de título é a do sistema:** numa barra roxa, o urso do ícone
+    sumia (ver "O ícone é recorte", acima).
+- **Em alto contraste, a marca sai** (ver "Alto contraste", em "O app no
+  Avalonia"): o esquema do usuário vale mais.
 - **Cinza e vermelho calculados, não do sistema:** o texto secundário
   (nulos, eco do terminal) fica a 60% entre o fundo e o texto, ~5,7:1 no
   claro e ~6,6:1 num fundo `#202020`. O erro é `Firebrick` no claro (6,7:1)
   e `#f48771` no escuro, porque o `Firebrick` daria 2,4:1.
-- **O grid desenha, mas não muda o dado** (`GridPainting.cs`, desenho
-  aprovado em 2026-11-10). O `CellPainting` muda só a pintura; a célula
-  guarda o valor, e o Ctrl+C copia o dado, não o desenho. A dica de uma
-  célula cortada mostra o valor inteiro. Quatro casos:
+- **A grade desenha, mas não muda o dado** (`Cells.Display` contra
+  `Cells.CopyText`): o Ctrl+C, a barra de valor e a dica de uma célula
+  cortada levam o dado, não o desenho. Os casos:
   - **nulo:** `null` cinza em itálico. O Ctrl+C copia vazio, e um texto vazio
     continua vazio;
   - **número que não cabe:** `###`, como no Excel. Cortado no fim, o número
-    parecia outro (`922337203685…` para um valor de 19 dígitos). A medida usa
-    a área e os flags do próprio `DataGridViewTextBoxCell` (código do
-    .NET 10: menos borda e `Padding`, 2 px em cima e 1 embaixo, `SingleLine`,
-    `NoPrefix`), então o grid nunca corta com reticências um número que a
-    regra deixou passar;
+    parecia outro (`922337203685…` para um valor de 19 dígitos);
   - **texto com quebra de linha:** uma linha só, com `↵` onde havia cada
-    quebra. Antes aparecia colado (`linha 1linha 2`). O CLI troca por espaço;
-    no grid, o símbolo mostra que havia uma quebra;
-  - **coluna filtrada:** o `▼` é desenhado na borda direita do cabeçalho, que
-    ganha `Padding` à direita para o nome não passar por baixo. O
-    `HeaderText` é sempre o nome real: com o `▼` no texto, o Ctrl+C levava
-    `bool ▼` para o dado colado.
+    quebra. O CLI troca por espaço; na grade, o símbolo mostra que havia uma
+    quebra;
+  - **o filtro é desenhado, nunca escrito no nome:** com um `▼` no texto do
+    cabeçalho, o Ctrl+C do WinForms levava `bool ▼` para o dado colado.
 - **Números à direita, pelo tipo Arrow.** Atenção: **no Arrow,
   `BooleanType` herda de `NumberType`**, e por isso o `IsNumeric` o exclui.
   Os decimais (`Decimal32Type` a `Decimal256Type`) não herdam de
-  `NumberType`. Conferido no parquet de 20 tipos.
-- **Barra do topo em `FlowLayoutPanel`**, não por pixel: texto maior (DPI,
-  fonte) empurra o vizinho em vez de sobrepor, e botão escondido não deixa
-  buraco.
-- **Aparência se confere na VM do Windows 11**, nos dois modos. Os GIFs do
-  README são anteriores ao tema, menos o `open_grid.gif` (modo claro).
+  `NumberType` e entram à parte (o porte para o Avalonia os tinha deixado à
+  esquerda, até 2026-11-15). Conferido no parquet de 20 tipos.
+- **Aparência se confere na VM do Windows 11**, nos dois modos e num tema de
+  contraste (ligue-o pelas Configurações: o atalho não chega à VM).
 
-## Porte multiplataforma (em andamento)
+## O app no Avalonia (Windows e Linux)
 
-Onde estamos:
+O app de janela era WinForms, só Windows, até 2026-11-16. A troca para o
+Avalonia passou pelos degraus abaixo; o WinForms saiu do repositório (o
+histórico do git o guarda).
 
-- `Acrux.Core` já é net10.0 puro, sem dependência de WinForms; só o
-  `Acrux.WinForms` é net10.0-windows.
-- Os quatro projetos **compilam** no Linux (`EnableWindowsTargeting`).
 - **O Core roda no Linux** pelo `Acrux.Cli` (net10.0), validado em degraus
   em 2026-11-07:
   1. o nativo carrega (`schema`, `columns`): **ok**;
@@ -330,20 +352,26 @@ Onde estamos:
   sobre um parquet de 1M × 21 de 0,5 a 1,6 s, até 74 MB. Ver a armadilha da
   glibc, abaixo.
 
+- **Por que uma grade desenhada:** o `DataGridView` do WinForms custava
+  tempo por linha e por coluna ao montar as linhas (47 s de janela branca no
+  notebook de 2017, ~9 s na VM depois do PR #24), e o indexador `Rows[i]`
+  varria a lista de linhas compartilhadas (1.745 ms de grade para filtrar
+  até 950 linhas, até o `AddCopies` do PR #26).
 - **O spike do Avalonia** (branch `spike/avalonia-grid`, `spike/AvaloniaGrid`,
   2026-11-15) mediu duas grades sobre o `ColumnCache`, no laptop e na VM. O
   `DataGrid` aberto do Avalonia percorre a lista duas vezes e cria um objeto
-  para cada uma das 5M linhas (a armadilha do `DataGridView` de novo): 5,6 s
+  para cada uma das 5M linhas (a mesma armadilha do `DataGridView`): 5,6 s
   para abrir na VM, 5,9 s para selecionar 300 linhas. A grade desenhada não
   guarda nada por linha: abriu em 1,0 s na VM (o WinForms, ~9 s), filtrou
   para 950 linhas com 8 ms de grade (1.745 ms) e selecionou 300 linhas em
   9 ms. O levantamento de alternativas (Uno, Photino + AG Grid, Dear ImGui,
   Terminal.Gui, GTK4, MAUI) e os números estão no README do spike.
 
-**O app no Avalonia** (desenho aprovado em 2026-11-15): `src/Acrux.Avalonia`,
-ao lado do WinForms até fazer tudo o que ele faz. O WinForms fica congelado,
-só com correções; na troca, o instalador aponta para o Avalonia, o executável
-passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
+**O app** (desenho aprovado em 2026-11-15): `src/Acrux.Avalonia`. Ficou ao
+lado do WinForms até fazer tudo o que ele fazia; na troca (2026-11-16), o
+instalador e a release passaram a apontar para ele, o executável ficou com o
+nome `Acrux`, e o WinForms saiu. O branch `spike/avalonia-grid` fica no
+GitHub, fora da `master`, com o levantamento e os números do spike.
 - **A lógica sem tela fica no Core** (`Session`): o arquivo aberto, a cópia
   convertida (apagada no `Dispose`) e, nas próximas fases, os filtros e a
   cadeia de scripts. O Avalonia e uma futura interface de terminal (Terminal.Gui
@@ -352,9 +380,9 @@ passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
 - **A grade é a desenhada do spike** (`Grid/TableGrid.cs`): pinta só as
   células da tela; a barra vertical conta linhas, não pixels (o Skia desenha
   em float de 32 bits, que perde pixels inteiros acima de ~16 milhões); as
-  teclas e a seleção do `DataGridView`; as regras do `GridPainting`
-  (`Grid/Cells.cs`); as cores do `Theme.cs` (`Grid/Palette.cs`); as colunas
-  carregam 100 ms depois que a rolagem para, como no WinForms.
+  teclas do `DataGridView`; as regras de desenho (`Grid/Cells.cs`, ver
+  "Tema do app de janela"); as cores (`Grid/Palette.cs`); as colunas
+  carregam 100 ms depois que a rolagem para.
 - **A leitura da grade** (desenho aprovado em 2026-11-15, depois de comparar
   com o Excel, numa página com cada proposta ligada e desligada). A grade
   copiava as linhas do Excel, mas não o conforto: a seleção era o bloco cheio
@@ -387,8 +415,7 @@ passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
   - **datas sem a meia-noite:** uma coluna `date` chegava como `DateTime` e
     mostrava `11/23/2017 12:00:00 AM` em toda linha. Agora a grade, a barra
     de valor e o Ctrl+C levam só o dia, no formato curto do sistema
-    (`11/23/2017`, `23/11/2017`), como o Excel. Vinha do WinForms, que ficou
-    como estava;
+    (`11/23/2017`, `23/11/2017`), como o Excel. Vinha do WinForms;
   - **o filtro é um dropdown** (desenho aprovado em 2026-11-15): um botão em
     cada cabeçalho, sempre visível, como as setas do AutoFiltro do Excel (num
     arquivo de 700 colunas, quem abre pela primeira vez descobre o filtro sem
@@ -410,7 +437,8 @@ passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
   `Decimal256Type`) também vão à direita, como no WinForms: o porte os tinha
   deixado à esquerda. O tempo de desenho da janela não mudou (13 ms antes e
   depois, no arquivo de 700 colunas, pelo harness).
-- **Fases**, cada uma com PR, medição no Linux e teste na VM:
+- **Fases**, cada uma com PR, medição no Linux e teste na VM (#27 a #32
+  mesclados em 2026-11-16):
   1. esqueleto: janela, abrir arquivo (qualquer formato; xlsx e SQLite pela
      primeira aba ou tabela), grade, barra com a memória, tema do sistema,
      ícone, arquivo por argumento, limpeza de temporários e
@@ -432,7 +460,10 @@ passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
      do `Main` (`NativeHeap.LimitArenas`, o `mallopt` do `MALLOC_ARENA_MAX`) e
      o `malloc_trim(0)` no mesmo ciclo de 5 s; as mensagens de erro numa
      janela, como o `MessageBox`; soltar um arquivo na janela;
-  6. entrega: `win-x64` e `linux-x64` na CI, o instalador, os GIFs.
+  6. entrega (branch `feat/avalonia-switch`): o `win-x64` e o `linux-x64`
+     na CI, o instalador apontando para o app, o pacote do Linux (ver "O
+     pacote do Linux", em Release) e o WinForms fora. Faltam os GIFs
+     regravados com o app novo.
 - **No Avalonia, o texto de uma `CheckBox` (ou de um botão) perde o primeiro
   `_`:** um `string` como conteúdo é lido como tecla de atalho, e
   `ITEM_000003` aparecia `ITEM000003` (achado por imagem na fase 3; o popup
@@ -509,15 +540,12 @@ passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
   e o Ctrl+C recusa mais de 1 milhão de células, uma trava provisória até o
   dono decidir a regra.
 
-### Testar o app de janela no Linux (Wine)
+### Testar o app de janela no Linux
 
-O WinForms não roda nativo no Linux, mas o publish self-contained roda sob o
-Wine: com a 1.0.1, abrir, escolher colunas, filtro de cabeçalho e terminal C#
-funcionaram (2026-11-08). O Wine valida funcionamento, não aparência: ícone,
-visual e os GIFs do README se conferem no Windows. **Nunca desligue o
-`mscoree`** (`WINEDLLOVERRIDES="mscoree=..."`): sem ele o runtime .NET falha
-com "Could not load file or assembly System.Runtime.dll". A montagem do
-laptop do mantenedor fica no `CLAUDE.local.md`, fora do git.
+O app roda nativo: `dotnet run --project src/Acrux.Avalonia -- arquivo`, ou
+o pacote instalado pelo `install.sh`. (O app WinForms rodava sob o Wine; com
+ele fora, o Wine não serve mais a este projeto.) Aparência e ícone ainda se
+conferem também na VM do Windows.
 
 ### Deploy de teste do CLI (opcional, por clone)
 
@@ -570,7 +598,7 @@ que compilou e passou no smoke test (desenho aprovado em 2026-11-08).
 
 #### O app de Windows no mesmo deploy (opcional, por clone)
 
-Desenho aprovado em 2026-11-08. Com `git config acrux.deployWindows true`,
+Desenho aprovado em 2026-11-08; publica o app do Avalonia desde a troca. Com `git config acrux.deployWindows true`,
 o hook roda `scripts/deploy-windows.sh` depois do CLI:
 
 - **Compila o commit do `current` do CLI**, o mais novo que passou no smoke
@@ -581,7 +609,7 @@ o hook roda `scripts/deploy-windows.sh` depois do CLI:
   `~/.local/share/acrux-windows/<commit>/`, com `COMMIT.txt` dentro e
   `current`/`previous` como no CLI. ~5 s e ~300 MB por build.
 - **Só recompila quando o app muda** (`Directory.Build.props`,
-  `src/Acrux.Core`, `src/Acrux.WinForms`): um commit de documentação, do CLI
+  `src/Acrux.Core`, `src/Acrux.Avalonia`): um commit de documentação, do CLI
   ou de teste mantém o build e registra "builds the same app as …: kept".
 - **Entrega:** se o clone tiver `git config acrux.windowsDeliver '<comando>'`,
   o `sh` roda o comando com a pasta do `current` em `$1` (por exemplo, uma
@@ -606,9 +634,10 @@ emulação; as 10 mais recentes não (2,2 s contra 1,2 s do DuckDB, onde a
 emulação dava 0,13 s de diferença). A busca linha a linha é trabalho de
 CPU, e a emulação não limita a velocidade de cada núcleo. **A primeira tela
 do benchmark são os dados, lidos pelo Core, não a janela:** no notebook, a
-janela ficou 47 s branca enquanto o grid montava as linhas (ver "Aumentar
-`RowCount`", nas Armadilhas). Depois do PR #24, ~9 s na VM; o notebook não
-foi medido de novo, e o texto público diz isso. No Windows: o
+janela do app WinForms ficou 47 s branca enquanto o `DataGridView` montava
+as linhas (~9 s na VM depois do PR #24). A grade do Avalonia não monta
+linhas: o protótipo abriu o arquivo em ~1 s na VM. O notebook não foi medido
+com ela, e o texto público diz isso. No Windows: o
 PowerShell 5.1 grava o JSON com BOM (`utf-8-sig`); o pico é o
 `PeakPagedMemorySize64` (o commit) amostrado; e uma rodada só é fria para
 quem lê o arquivo primeiro depois do boot.
@@ -644,7 +673,8 @@ quem lê o arquivo primeiro depois do boot.
 
 ## Arquitetura
 
-Fluxo: `OpenFileDialog` (parquet, CSV, xlsx ou SQLite) → **o formato é
+Fluxo: o seletor de arquivos (`StorageProvider`), o argumento da linha de
+comando ou um arquivo solto na janela (parquet, CSV, xlsx ou SQLite) → **o formato é
 decidido pelo conteúdo, não pela extensão** (`DataFrameProvider.DetectFormat`
 lê os bytes iniciais: `PAR1` = parquet, `SQLite format 3\0` = SQLite, ZIP com
 `xl/workbook.xml` = xlsx, texto sem NUL ou com BOM UTF-16 = CSV; `.xls`
@@ -652,7 +682,7 @@ antigo, outros ZIPs e binários são recusados com mensagem clara) → xlsx e
 SQLite têm "tabelas" a escolher (`GetTableNames`: abas via ZIP puro, lendo
 `xl/workbook.xml`; tabelas e views de dados via `pragma_table_list`, sem
 as virtuais e suas `shadow`; 2+ abrem o
-`SheetSelectorForm`) → xlsx: a aba escolhida vira parquet temporário por
+`TableChoice`) → xlsx: a aba escolhida vira parquet temporário por
 `DataFrame.ReadExcel` (motor calamine; materializa em RAM, limitado a ~1M
 linhas pelo formato; **números chegam como double** — representação interna
 do Excel, validado por probe) → SQLite: a tabela escolhida vira parquet
@@ -664,14 +694,14 @@ por amostra e transcodifica cp1252/UTF-16 se preciso — ver armadilha abaixo �
 detecção de separador na 1ª linha, `decimalComma` quando `;`, `ScanCsv` →
 `SinkParquet` streaming com `tryParseDates` **desligado**, e depois
 `TextDates.ConvertParquet` reconhece as datas em texto; temp em
-`%TEMP%\Acrux`, apagado na troca/fechamento) —
+`%TEMP%\Acrux` ou `/tmp/Acrux`, apagado na troca/fechamento pela `Session`) —
 o app opera **somente sobre parquet** daí em diante, preservando o re-scan
 barato → `ColumnCache.OpenAsync` (schema Arrow e número de linhas, só
-metadados) → grid virtual com **todas** as colunas, e as linhas em blocos
-(`GridRows`, ver Armadilhas) → cada coluna é lida
-quando chega à tela (ver "O cache de colunas", abaixo). O botão "Columns"
-(`ColumnSelectorForm`) esconde e mostra colunas: a escondida fica no grid com
-`Visible = false`, para o índice da coluna no grid ser sempre o do arquivo.
+metadados) → a grade desenhada com **todas** as colunas, sem nada por linha
+→ cada coluna é lida quando chega à tela (ver "O cache de colunas",
+abaixo). O botão "Columns" (`ColumnChoice`) esconde e mostra colunas: a
+escondida fica na grade no seu índice, sem largura, para o índice da coluna
+na grade ser sempre o do arquivo.
 
 **O cache de colunas** (`ColumnCache`, desenho aprovado em 2026-11-10): o
 grid abre o arquivo inteiro, de qualquer largura. Antes, abrir as 700
@@ -705,10 +735,10 @@ Armadilhas).
   pool e voltam pelo contexto de sincronização para guardar a coluna e
   descartar as velhas. Assim, uma célula nunca lê um buffer no meio de um
   `Dispose`. Uma TUI ou o Avalonia precisam do mesmo contexto.
-- **No grid:** a célula de coluna fora da memória mostra `…` cinza
-  (`CellPlaceholder`, desenhado pelo `GridPainting`), ou `error` se a
-  leitura falhou (a coluna não é tentada de novo). Cada falta reinicia um
-  timer de 100 ms, e a carga só começa quando o grid para de rolar. A
+- **Na grade:** a célula de coluna fora da memória mostra `…` cinza
+  (`Cells.Kind.Loading`), ou `error` se a leitura falhou (a coluna não é
+  tentada de novo; a barra de valor mostra o porquê). Cada rolagem reinicia
+  um timer de 100 ms, e a carga só começa quando a grade para de rolar. A
   barra de status diz quantas colunas estão na memória, contra o teto.
 - **Ctrl+C** (e Ctrl+Shift+C, Ctrl+Insert) carrega antes as colunas da
   seleção; se elas não cabem juntas no teto, avisa em vez de copiar pela
@@ -762,28 +792,31 @@ processo fantasma; relato de campo em 2026-07, não reproduzido em matriz de
 (`_pid{N}_`) e `CleanStaleTempFiles()` varre órfãos de execuções mortas na
 inicialização, pulando PIDs vivos (multi-instância seguro).
 
-Fluxo de filtro: clique no cabeçalho → `FilterEngine.GetDistinctValuesAsync`
-(dropdown limitado a `DistinctCap = 10.000`) → `FilterPopupForm` →
-`GetVisibleRowsAsync` (máscara booleana varrida em C#) → `_filteredRows`.
+Fluxo de filtro: o botão do cabeçalho (ou Alt+↓) → `Session.ValuesAsync` →
+`FilterEngine.GetDistinctValuesAsync` (lista limitada a `DistinctCap =
+10.000`) → `FilterDropdown` → `Session.SetFilter` e `ApplyFiltersAsync` →
+`GetVisibleRowsAsync` (máscara booleana varrida em C#) → `Session.Rows`, que
+a grade só troca (`TableGrid.SetRows`).
 **Toda consulta do `FilterEngine` recebe o filtro pronto, como `Expr?`**
 (desde 2026-11-09): quem chama monta com `BuildPredicate` (valores por
 coluna), `TimeFilter.Between` (tempo), ou os dois unidos por `&`. A
 semântica Excel (a lista de uma coluna ignora o filtro dela mesma) é do
-app: `BuildPredicate(_activeFilters, except: coluna)`. O CLI aplica todos.
-Filtros concorrentes são cancelados via `_filterCts`.
+app: `BuildPredicate(filtros, except: coluna)`, no `Session.ValuesAsync`. O
+CLI aplica todos. Um filtro novo cancela o que ainda estava calculando
+(`ApplyFiltersAsync` devolve `false` para o cancelado).
 
 Terminal C# (botão "C# terminal"): scripts Roslyn encadeados por **replay** —
-`MainForm._scriptChain` guarda os textos dos passos; cada execução re-roda a
+`Session.Chain` guarda os textos dos passos; cada execução (`RunAsync`) re-roda a
 cadeia inteira sobre um `ScanParquet` fresco, com o passo N recebendo em `df`
 o `LazyFrame` (plano lazy, não dados) do passo N-1. O passo 1 recebe o arquivo
-**como exibido no grid**: colunas visíveis + filtros ativos aplicados como
+**como exibido na grade**: colunas visíveis + filtros ativos aplicados como
 "passo 0" implícito (`FilterEngine.BuildPredicate` público é reutilizado), o
 filtro antes do `Select`, porque o filtro pode estar numa coluna escondida.
-Esse estado visual é **congelado no 1º passo** (`_chainBaseColumns`/
-`_chainBaseFilters`) — obrigatório, pois o replay re-executa tudo a cada
-comando e a base não pode derivar; "Restore file"/novo arquivo zeram a base.
-Os `_activeFilters` NÃO são mais limpos ao entrar em modo script: sobrevivem
-como base da cadeia e são **reaplicados ao restaurar**. Nada é coletado:
+Esse estado visual é **congelado no 1º passo** (na `Session`) —
+obrigatório, pois o replay re-executa tudo a cada comando e a base não pode
+derivar; "Restore file"/novo arquivo zeram a base. Os filtros NÃO são limpos
+ao entrar em modo script: sobrevivem como base da cadeia e voltam ao
+restaurar. Nada é coletado:
 a cadeia compõe um único plano lazy (`Limit(ScriptHost.RowCap)` opcional),
 que o `ScriptHost.BuildChainAsync` devolve e o `ColumnCache.FromPlanAsync`
 mostra coluna por coluna (ver "O cache de colunas"). Passo que
@@ -793,10 +826,11 @@ Um passo com erro não entra na cadeia. "Undo step" remove o último e
 re-executa; "Restore file" zera a cadeia e volta ao arquivo: o cache do
 arquivo continua vivo sob o resultado do script, sem colunas fixadas, e só
 relê as colunas que cederam memória ao resultado. Imports do script:
-`Polars.CSharp` + estáticos (`Col`/`Lit`). Em modo script (`_scriptMode`) os
-filtros de cabeçalho ficam desativados — o grid não espelha mais o arquivo —
-até "Restore file" (decisão V1; a V2 composável exigiria FilterEngine
-aceitar fonte lazy genérica).
+`Polars.CSharp` + estáticos (`Col`/`Lit`). Em modo script os filtros de
+cabeçalho ficam desativados — a grade do resultado nem tem o botão, porque
+não espelha mais o arquivo — até "Restore file" (decisão V1; a V2 composável
+exigiria FilterEngine aceitar fonte lazy genérica). A grade do arquivo
+espera por baixo, com rolagem, filtros e colunas.
 
 **O nome é `df`** (desenho do dono, 2026-11-11: é o nome que quem mexe com
 dados usa). Até então era `lf`, que continua como apelido do mesmo plano
@@ -829,40 +863,33 @@ o `Describe` lê a mensagem na cultura invariante.
 | `src/Acrux.Avalonia/HighContrast.cs` | O alto contraste do sistema: o tema e as cores no Windows, a chave `contrast` do portal no Linux |
 | `src/Acrux.Avalonia/ErrorDialog.cs` | O erro que interrompe o pedido, numa janela, com a mensagem selecionável |
 | `src/Acrux.Avalonia/TerminalPanel.cs` | O terminal C#: o histórico, o código, Ctrl+Enter (ouvido no tunnel: a caixa de várias linhas trata o Enter), o limite de 1M linhas e "Undo step" |
-| `src/Acrux.Avalonia/MainWindow.cs` | A janela do app no Avalonia: abrir arquivo, a barra com a memória, a grade |
+| `src/Acrux.Avalonia/Program.cs` | Entrada do app: as arenas do glibc, a limpeza de temporários órfãos, o arquivo recebido como argumento (duplo clique, "Abrir com") e `Environment.Exit(0)` |
+| `src/Acrux.Avalonia/MainWindow.cs` | A janela do app: abrir arquivo, a barra com a memória, a grade, o terminal, a costura dos filtros |
 | `src/Acrux.Avalonia/FilterDropdown.cs` | O filtro do cabeçalho, como dropdown: os valores da coluna, a busca, "(Blanks)", o aviso de lista cortada |
 | `src/Acrux.Avalonia/ColumnChoice.cs` | O diálogo do botão "Columns": quais colunas a grade mostra |
 | `src/Acrux.Avalonia/TableChoice.cs` | Qual aba do xlsx ou tabela do SQLite abrir, quando há mais de uma |
 | `src/Acrux.Avalonia/Grid/TableGrid.cs` | A grade desenhada: nada por linha, rolagem em linhas, teclas do `DataGridView`, seleção calma, números de linha, faixa da célula atual, largura pelo conteúdo, Ctrl+C |
 | `src/Acrux.Avalonia/Grid/Announcer.cs` | O que o leitor de tela diz da grade: a célula atual, a seleção, a cópia, o filtro |
 | `src/Acrux.Avalonia/Grid/ValueBar.cs` | A célula atual inteira acima da grade, como a barra de fórmulas: coluna, linha, tipo e valor |
-| `src/Acrux.Avalonia/Grid/Cells.cs` | O texto de cada célula pelas regras do `GridPainting` (`null`, `###`, `↵`), os tamanhos, o alinhamento dos decimais e o que o Ctrl+C copia |
-| `src/Acrux.Avalonia/Grid/Palette.cs` | As cores da grade no claro e no escuro, as do `Theme.cs`, e no alto contraste, as do sistema |
-| `src/Acrux.WinForms/Program.cs` | Entrada do app: limpeza de temporários órfãos, o arquivo recebido como argumento (duplo clique, "Abrir com") e `Environment.Exit(0)` |
-| `src/Acrux.WinForms/AppIcon.cs` | Ícone das janelas, lido do `.ico` embutido |
-| `src/Acrux.WinForms/GridPainting.cs` | O que o grid desenha sem mudar o dado: nulo, `###`, `↵` e o `▼` do filtro |
-| `src/Acrux.WinForms/Theme.cs` | Cores do app: a marca onde se lê, as do sistema no resto; modo claro e escuro |
-| `src/Acrux.WinForms/MainForm.cs` | Grid virtual sobre o cache de colunas, carga do arquivo, costura dos filtros, Ctrl+C |
-| `src/Acrux.WinForms/GridRows.cs` | As linhas do grid: com muitas, em blocos e com as colunas escondidas, sem congelar a janela |
-| `src/Acrux.WinForms/ColumnSelectorForm.cs` | O diálogo do botão "Columns": quais colunas o grid mostra |
-| `src/Acrux.WinForms/SheetSelectorForm.cs` | Diálogo de escolha da aba do xlsx ou da tabela do SQLite (2+) |
-| `src/Acrux.WinForms/FilterPopupForm.cs` | Popup de filtro aberto pelo cabeçalho da coluna |
-| `src/Acrux.WinForms/ScriptTerminalPanel.cs` | UI do terminal (painel inferior do MainForm) |
-| `src/Acrux.Cli/Program.cs` | CLI: rota de leitura escolhida pelo formato detectado; `head` usa o caminho do grid |
+| `src/Acrux.Avalonia/Grid/Cells.cs` | O texto de cada célula sem mudar o dado (`null`, `###`, `↵`, datas só com o dia), os tamanhos, o alinhamento dos decimais e o que o Ctrl+C copia |
+| `src/Acrux.Avalonia/Grid/Palette.cs` | As cores da grade no claro e no escuro (a marca onde se lê) e, no alto contraste, as do sistema |
+| `installer/acrux.iss` | O instalador do Windows (Inno Setup), por usuário, com o "Abrir com" |
+| `installer/linux/install.sh` | A instalação por usuário no Linux, com o `uninstall.sh`, o `.desktop` e o tipo parquet (`acrux-parquet.xml`) |
+| `src/Acrux.Cli/Program.cs` | CLI: rota de leitura escolhida pelo formato detectado; `head` usa o caminho da grade |
 
 ### Princípios de design (não violar)
 
 1. **Zero materialização**: os dados vivem só em buffers Arrow: os do
    arquivo no `ColumnCache`, uma coluna por lote, até metade da memória
    livre; o resultado de um script também, num segundo `ColumnCache`
-   (inteiro só quando a ordem pode mudar e ele cabe). Células são lidas por demanda
-   em `CellValueNeeded` via `PolarsTableAdapter.GetCellValue`. NUNCA
+   (inteiro só quando a ordem pode mudar e ele cabe). Células são lidas por demanda,
+   só as da tela, no `Render` da grade, via `PolarsTableAdapter.GetCellValue`. NUNCA
    converter colunas inteiras em `object[]` — com milhões de linhas isso
    esgota a RAM e trava a máquina. E nunca carregar todas as colunas de uma
    vez: num arquivo largo, o processo cai sem exceção (ver Armadilhas).
 2. **Indireção de índices**: filtros (e futura ordenação) produzem `int[]`
-   de índices (`_filteredRows`), nunca cópias dos dados. Recalculados sempre
-   a partir do original + conjunto de filtros ativos (`_activeFilters`),
+   de índices (`Session.Rows`), nunca cópias dos dados. Recalculados sempre
+   a partir do original + conjunto de filtros ativos (`Session.Filters`),
    nunca encadeados sobre resultado anterior.
 3. **Consultas de filtro re-escaneiam o arquivo** via `LazyFrame.ScanParquet`
    (projection pushdown; dezenas de ms em 5M de linhas). Não tentar filtrar
@@ -1184,90 +1211,6 @@ o `Describe` lê a mensagem na cultura invariante.
   tipos diferentes em duas tabelas **derruba o `ConcatDiagonal`** ("failed
   to vstack column"; validado). O contorno era converter para um tipo comum,
   e isso escondia o tipo real. Hoje tudo responde por tabela.
-
-### DataGridView (modo virtual)
-- **Diminuir `RowCount` remove linhas uma a uma** (minutos com milhões de
-  linhas). Caminho rápido: `Rows.Clear()` e então setar o novo valor. O
-  `Clear()` não é O(1): passa uma vez pelas linhas, sem evento por linha
-  (~40 ms com 5M pelo Wine), desde que elas dividam um objeto só (abaixo).
-- **Aumentar `RowCount` custa tempo por linha e por coluna** (código do
-  .NET 10; medido em 2026-11-12). Cada linha nova passa por
-  `AddCopiesPrivate` → `OnAddedRow_PostNotification` →
-  `AdjustExpandingColumns`, que percorre as colunas visíveis mesmo com
-  `AutoSizeColumnsMode.None`, e a coluna escondida ainda custa uma varredura
-  (`GetFirstColumn`). O arquivo de 5M × 700 deixou a janela branca por 47 s
-  num notebook de 2017 (i7-7500U), antes da primeira tela, e por 13 s no
-  laptop pelo Wine. O benchmark não viu, porque passa pelo Core, sem o grid.
-  Nenhuma propriedade mudou o custo: estilos de cabeçalho, linhas antes das
-  colunas (pior), grid escondido, `DoubleBuffered`, seleção. Por isso o
-  `GridRows`: a partir de 100 mil linhas, as colunas se escondem (metade do
-  custo) e as linhas entram em blocos de ~0,5 s, com a contagem na barra; a
-  primeira tela começa a carregar antes. No laptop, pelo `GridProbe`, de
-  13,4 s com a janela parada para 7,1 s com ela atendendo (uma mensagem
-  esperou no máximo 0,64 s). No app, pelo Wine, abrir levou 7,1 s, e a maior
-  espera foi de 1,4 s, uma vez, ao trocar as colunas pelo "Columns": fora dos
-  blocos, que não passam de 0,6 s. Vale para abrir, filtrar, limpar filtro,
-  "Columns", script e "Restore file". O custo continua proporcional às linhas: o remédio de vez
-  é uma grade que não tem uma linha por linha do arquivo (a do Avalonia).
-  `bench/GridProbe` mede de novo, com o próprio `GridRows.cs`.
-- **As linhas compartilhadas precisam ser um objeto só** (achado em
-  2026-11-15). No modo virtual, a lista de linhas repete um objeto
-  "compartilhado", e o `RowCount += n` clona um novo a cada chamada: os
-  blocos do `GridRows` deixavam ~15. O indexador `Rows[i]` (código do .NET
-  10) roda `SharedList.LastIndexOf(linha)` antes de descompartilhar uma
-  linha, de trás para frente até o bloco dela: ~5M comparações por linha do
-  primeiro bloco. O `Rows.Clear()` pega assim cada linha exibida
-  (`OnClearingRows`), e o filtro de 5M para 950 linhas mostrou `grid 1745 ms`
-  na VM; clique e seleção passam pelo mesmo indexador. Por isso os blocos
-  depois do primeiro entram por `Rows.AddCopies(última linha, n)`, que repete
-  o objeto da linha de origem, e o custo de montar é o mesmo (os dois
-  terminam no `AddCopiesPrivate`). Pelo `GridProbe`, no Wine, depois da
-  montagem em blocos: selecionar 300 linhas de 1,1–2,9 s para 0,31–0,43 s
-  (com um `RowCount` só, 0,22–0,27 s), e o `Rows.Clear()` de 135 ms para
-  40–49 ms.
-- **Entre um bloco e outro, `await Task.Delay(1)`, não `Task.Yield()`:** a
-  continuação do `Yield` é uma mensagem postada, que o Windows entrega
-  antes de clique e pintura, e a janela continuaria parada. E um `Timer` do
-  WinForms não mede se a janela atende: o `WM_TIMER` só sai com a fila
-  vazia, e entre os blocos ele nunca disparou. O `GridProbe` mede postando
-  uma mensagem a cada 10 ms. **A pintura também só sai com a fila vazia:**
-  no primeiro teste pelo Wine, a barra ficou em "Reading schema..." a
-  montagem inteira, com o texto trocando por baixo; e na VM, pintando só o
-  texto, o rótulo de memória andava quando a contagem crescia e deixava o
-  texto velho para trás. A cada bloco, a barra inteira se pinta na hora
-  (`PaintTopBar`: o `Update()` do painel e o de cada filho, que são janelas
-  separadas).
-- **Enquanto as linhas entram, os botões que trocariam o grid esperam**
-  ("Open file", "Columns", "Clear all filters", "Restore file" e o
-  terminal): o `MainForm` guarda o estado deles e o devolve no fim. O modo
-  script liga **antes** das linhas do resultado, para um filtro de
-  cabeçalho não cair sobre ele no meio.
-- `FillWeight` padrão é 100 com soma máxima 65535 → mais de ~655 colunas
-  estoura. Toda coluna criada recebe `FillWeight = 1`.
-- Colunas do grid: `Name` e `HeaderText` são sempre o nome real da coluna
-  do parquet. O `ClipboardCopyMode` inclui o `HeaderText` no Ctrl+C, então
-  nada de tela entra nele: o `▼` do filtro é desenhado (`GridPainting`).
-- **`Rows.Clear()` lê a célula atual antes de apagar as linhas** (o
-  `OnClearingRows` faz `CurrentCell = null`, e sair da célula pede o valor
-  dela). Por isso a indireção (`_filteredRows`) só troca **depois** do
-  `Rows.Clear()`: trocada antes, uma célula atual além do novo total lia
-  fora da lista nova (IndexOutOfRange na pintura, X vermelho e a janela de
-  erro do .NET). Achado pelo dono na VM, em 2026-11-10: filtrar o
-  `tipos.parquet` com a célula atual na linha 3. Estava assim desde
-  2026-09.
-- **O grid copia por dois caminhos** (código do .NET 10). Ctrl+C e
-  Ctrl+Insert são teclas de entrada (`IsInputKey`): passam pelo evento
-  `KeyDown`, que pode parar a cópia com `e.Handled`. O Ctrl+Shift+C não é,
-  e o `ProcessDialogKey` copia antes de qualquer `KeyDown`. Para carregar as
-  colunas da seleção antes de copiar, o app marca o Ctrl+Shift+C como tecla
-  de entrada no `PreviewKeyDown` e trata as três no `KeyDown`.
-- **O Ctrl+A seleciona célula por célula** (`SelectAll` em `CellSelect`; o
-  próprio código diz "Bonjour the scalability issues!") e desfaz o
-  compartilhamento de cada linha: num arquivo de milhões de linhas, trava.
-  Não tratado ainda.
-- **Cor de fundo no cabeçalho exige `EnableHeadersVisualStyles = false`:**
-  com os estilos visuais ligados, o cabeçalho ignora `BackColor`. Desligados,
-  ele fica plano e segue o modo escuro.
 
 ## Convenções
 

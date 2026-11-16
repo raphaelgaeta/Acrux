@@ -23,8 +23,9 @@ Measured on 2026-11-12, Acrux as of `6e77333` (Polars.NET 1.0.1).
   the first rows in 0.8 s with 41 MB, where the others take 400 to 800 MB,
   and the desktop app reads its first screen the fastest of the four. A real
   2017 notebook agreed: 0.42 s and 55 MB, where DuckDB took 0.81 s and
-  656 MB. It also showed what these numbers leave out, the window: its grid
-  took 47 s to set up the 5 million rows ([below](#on-a-real-2017-notebook)).
+  656 MB. It also showed what these numbers leave out, the window: the grid
+  of the time took 47 s to set up the 5 million rows; the current one keeps
+  nothing per row ([below](#on-a-real-2017-notebook)).
 - **A tall file is Acrux's weak spot.** With 100 million rows, the desktop
   app holds every column of the screen whole: today its first screen needs
   10 to 12 GB, where Polars and DuckDB hold the same columns in 7.3. Loading
@@ -295,8 +296,10 @@ Defender also reads the file for the first time.
   visible: the columns hide while the rows go in, in blocks of about half a
   second, with the window answering, the rows counted in the status bar and
   the first screen loading meanwhile. Opening the file took about 9 s in a Windows 11
-  virtual machine with 8 cores, on the laptop; the notebook hasn't been
-  timed again. The wait still grows with the rows.
+  virtual machine with 8 cores, on the laptop. On 2026-11-16 the desktop
+  app moved to Avalonia, with a grid that keeps nothing per row: its
+  prototype opened the same file in about a second in that virtual
+  machine. The notebook hasn't been timed with the app.
 
 The table comes from `bench/results/laptop-2026-11-12T0327Z.json` through
 `bench/windows/summary.py`.

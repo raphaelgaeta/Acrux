@@ -12,15 +12,15 @@ filter them and query them without writing a loader first.
 Underneath is one core built on [Polars.NET](https://www.nuget.org/packages/Polars.NET).
 It works out the format from the file's bytes, types every column by what the
 data actually holds, and turns each question into a lazy query that reads only
-what it needs. Two front ends sit on top: a Windows desktop grid that never
-loads the data it isn't showing, and a command line for a quick look from any
-terminal, on Linux or Windows.
+what it needs. Two front ends sit on top: a desktop grid for Windows and
+Linux that never loads the data it isn't showing, and a command line for a
+quick look from any terminal.
 
 <p align="center">
   <img src="assets/open_grid.gif" width="49%" alt="The desktop app opening the 5-million-row, 700-column parquet, counting the rows in the status bar in real time, then filtering a header down to 950 rows">
   <img src="assets/cli.gif" width="49%" alt="The acrux command line on the same parquet: row count, schema, a column, the first rows and a time filter">
 </p>
-<p align="center"><sub>The same 9 GB file, 700 columns × 5 million rows: the desktop app on Windows · the command line in a terminal (click either to enlarge)</sub></p>
+<p align="center"><sub>The same 9 GB file, 700 columns × 5 million rows: the desktop app on Windows, recorded before it moved to the grid described below · the command line in a terminal (click either to enlarge)</sub></p>
 
 ## Download
 
@@ -36,6 +36,12 @@ The latest build is on the [Releases](https://github.com/raphaelgaeta/Acrux/rele
   `Acrux.exe` (the .NET runtime is inside), or drop a file on it. It needs the
   [Microsoft Visual C++ Redistributable (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe),
   which most PCs already have.
+- **Linux app** — `Acrux-vX.Y.Z-linux-x64.tar.gz`: extract it and run
+  `acrux/install.sh`. It installs Acrux for your user, no root needed, with a
+  menu entry and **Open with** for Parquet, CSV, xlsx and SQLite files;
+  `uninstall.sh`, next to it, removes it. A Parquet file opens in Acrux with
+  a double click unless another app already claims the type (LibreOffice
+  Calc does since 26.2); the script prints how to switch.
 - **Command line, Linux** — `acrux-cli-vX.Y.Z-linux-x64.tar.gz` (Intel or AMD)
   or `acrux-cli-vX.Y.Z-linux-arm64.tar.gz` (64-bit ARM, from a Raspberry Pi to
   a cloud server): extract it and put the `acrux-cli` folder on your `PATH`;
@@ -97,7 +103,7 @@ sky, now snooping around your data.
 ## How it fits together
 
 ```
-Parquet ─┐                                          ┌─► desktop grid  (Windows)
+Parquet ─┐                                          ┌─► desktop grid  (Windows, Linux)
 CSV ─────┤   detected       typed by what the       ├─► C# terminal   (inside the app)
 Excel ───┼─► by content ──► data holds, queried ────┤
 SQLite ──┘                  as one lazy plan        └─► command line  (Linux, Windows)
@@ -147,7 +153,7 @@ nothing downstream can tell.
 </p>
 <p align="center"><sub>A CSV the way Excel saves it in Portuguese: Windows-1252, <code>;</code>, decimal commas, day/month dates. pandas reads it once you find the encoding, the separator, the decimal mark and <code>dayfirst</code>; Acrux works them out from the data. Real commands, output and run times, with the typing replayed (<a href="docs/demo">how it was recorded</a>).</sub></p>
 
-## The desktop app (Windows)
+## The desktop app (Windows and Linux)
 
 - **Open a file of any width, whole.** Every column is there from the start,
   and each one is read from disk when it scrolls into view, a screenful in a
@@ -159,21 +165,30 @@ nothing downstream can tell.
   ones you don't want to see. Height is the limit for now: each column on
   screen is held whole, so with 100 million rows the first screen needs
   10 to 12 GB ([benchmarks](docs/benchmarks.md#what-the-tall-files-first-screen-needs)).
-  Height costs time too: the Windows grid sets up every row before the
-  first screen, and a row costs more the more columns the file has. With
-  the 5-million-row, 700-column test file that takes about 9 s in a
-  Windows 11 virtual machine, and more on an older PC. The window answers
-  meanwhile, with the rows counted in the status bar, as in the animation
-  at the top.
-- **Filter like Excel.** Click a header, get the distinct values (blanks
-  included), check what you want. Filters compose across columns.
+  Height costs no setup time: the grid keeps nothing per row. In the
+  prototype that measured it, it opened the 5-million-row test file in about
+  a second in a Windows 11 virtual machine, where the previous Windows grid
+  took about 9.
+- **Read it like a spreadsheet.** Row numbers down the side, a band on the
+  current row and column to follow a row across hundreds of columns, and a
+  value bar above the grid with the current cell whole, as Excel's formula
+  bar. Each header shows the column's type under its name; columns open as
+  wide as their content; decimal separators line up.
+- **Filter like Excel.** Every header has a filter button: the distinct
+  values drop down (blanks included), you check what you want, and the
+  button turns into a funnel. Filters compose across columns.
 - **The grid never bends the data to fit the screen.** A missing value shows
   as a muted *null*, never as an empty string. A number too wide for its
   column shows `###`, as in Excel, never cut-off digits that read as another
   number. Text with line breaks stays on one line, with `↵` where each break
-  was. All of that is drawing only: copying a cell copies the data. Numbers
-  line up on the right, and on Windows 11 the app follows the light or dark
-  mode you set in Windows.
+  was. All of that is drawing only: copying a cell copies the data. Dates
+  without a time show only the day.
+- **Light, dark, high contrast, screen readers.** The app follows the
+  system's light or dark mode, and in a high contrast theme the grid takes
+  the system's colors (Windows' contrast themes; the desktop's contrast
+  setting on Linux). As you move, the grid tells a screen reader the column,
+  the row and the whole value (tested with Narrator; not yet with Orca), and
+  Alt+↓ opens the current column's filter.
 - **Drop into a C# terminal.** The full Polars expression API, with `df` as
   your table — starting from exactly what you see: the columns shown and
   the active header filters are inherited by the script as an implicit first
@@ -303,36 +318,37 @@ with Defender on): `acrux head` showed the first rows of the 9 GB file in
 app read its first screen's columns in 0.95 s (2.7 s right after the
 reboot). DuckDB took 0.8 s and 656 MB for the first rows, and was faster at
 the 10 newest rows, 1.2 s against 2.2 s. The notebook also showed what the
-benchmark misses, since it times the data and not the window: the desktop
-window stayed blank for 47 s while the Windows grid set up the 5 million
-rows. The grid now takes them in blocks, with the window answering and the
-rows counted (about 9 s in a Windows 11 virtual machine); the notebook
-hasn't been timed again.
+benchmark misses, since it times the data and not the window: the window
+of the previous, Windows-only app stayed blank for 47 s while its grid set
+up the 5 million rows. The current grid keeps nothing per row: its
+prototype opened the file in about a second in a Windows 11 virtual
+machine. The notebook hasn't been timed with it.
 [All the numbers, the method, and where Acrux loses](docs/benchmarks.md).
 
 ## Building
 
 ```
 dotnet build
-dotnet run --project src/Acrux.WinForms                       # the desktop app
+dotnet run --project src/Acrux.Avalonia -- data.parquet      # the desktop app
 dotnet run --project src/Acrux.Cli -- schema data.parquet     # the command line
 ```
 
 The repo is a three-project solution (`Acrux.sln`): `src/Acrux.Core`, the
-UI-less core; `src/Acrux.WinForms`, the desktop app; and `src/Acrux.Cli`, the
-command line. Needs the .NET 10 SDK. Everything builds on Linux
-(`EnableWindowsTargeting`); the desktop app runs only on Windows, and the
-command line builds for Linux and Windows (tested on Linux so far). Single-file publishing works for the app —
-point it at the app project:
+UI-less core; `src/Acrux.Avalonia`, the desktop app, on
+[Avalonia](https://avaloniaui.net); and `src/Acrux.Cli`, the command line.
+Needs the .NET 10 SDK. Both front ends build and run on Windows and Linux.
+Point a publish at the project you want:
 
 ```
-dotnet publish src/Acrux.WinForms/Acrux.WinForms.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+dotnet publish src/Acrux.Avalonia/Acrux.Avalonia.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+dotnet publish src/Acrux.Avalonia/Acrux.Avalonia.csproj -c Release -r linux-x64 --self-contained true
 ```
 
 Two hard-earned rules are baked into the project file — don't fight them:
-WinForms doesn't support `PublishTrimmed`, and the terminal needs
-`IncludeAllContentForSelfExtract` (Roslyn resolves references through
-`Assembly.Location`, which is empty inside a pure single-file bundle).
+never `PublishTrimmed` (the terminal's Roslyn scripting needs the metadata
+trimming removes), and the terminal needs `IncludeAllContentForSelfExtract`
+in a single file (Roslyn resolves references through `Assembly.Location`,
+which is empty inside a pure single-file bundle).
 
 `tests/smoke/run.sh <built acrux binary>` runs every CLI command over small
 fixtures and compares the output with `tests/smoke/expected.txt`. Releases are
@@ -347,10 +363,12 @@ nothing at all.
 
 | Package | Version | What it's for |
 |---|---|---|
-| [Polars.NET](https://www.nuget.org/packages/Polars.NET) (+ `Linq`, `ML`, `Native.win-x64`, `Native.linux-x64`, `Native.linux-arm64`) | 1.0.1 | The data engine — Rust Polars, reachable from C#; the native package matches the OS and the architecture |
+| [Polars.NET](https://www.nuget.org/packages/Polars.NET) (+ `Linq`, `Native.win-x64`, `Native.linux-x64`, `Native.linux-arm64`) | 1.0.1 | The data engine — Rust Polars, reachable from C#; the native package matches the OS and the architecture |
 | [Apache.Arrow](https://www.nuget.org/packages/Apache.Arrow) | 23.0.0 | The in-memory columnar format cells are read from (Polars.NET 1.0.1 requires ≥ 23) |
 | [Microsoft.Data.Sqlite](https://www.nuget.org/packages/Microsoft.Data.Sqlite) | 10.0.14 | Reads SQLite databases; brings the native SQLite for Windows and Linux |
 | [Microsoft.CodeAnalysis.CSharp.Scripting](https://www.nuget.org/packages/Microsoft.CodeAnalysis.CSharp.Scripting) | 5.6.0 | Roslyn — compiles the terminal's C# scripts at runtime |
+| [Avalonia](https://www.nuget.org/packages/Avalonia) (+ `Desktop`, `Themes.Fluent`) | 12.1.6 | The desktop app's windows, on Windows and Linux |
+| [Tmds.DBus.Protocol](https://www.nuget.org/packages/Tmds.DBus.Protocol) | 0.94.1 | Reads the Linux desktop's high contrast setting (the D-Bus client Avalonia itself uses) |
 
 ## Under the hood
 
@@ -367,15 +385,21 @@ nothing at all.
 | `src/Acrux.Core/SystemMemory.cs` | The physical memory free right now, on Windows and Linux |
 | `src/Acrux.Core/PolarsTableAdapter.cs` | O(1) per-cell reads from Arrow arrays, for every column type |
 | `src/Acrux.Core/ScriptHost.cs` | Roslyn evaluation of chained Polars scripts into one lazy plan |
-| `src/Acrux.WinForms/Program.cs` | Entry point: stale temp sweep and guaranteed process exit |
-| `src/Acrux.WinForms/AppIcon.cs` | Window icon, loaded from the embedded `.ico` |
-| `src/Acrux.WinForms/GridPainting.cs` | What the grid draws without changing the data: null, `###`, `↵`, the filter's `▼` |
-| `src/Acrux.WinForms/Theme.cs` | The app's colors: the brand where it reads, the system's everywhere else |
-| `src/Acrux.WinForms/MainForm.cs` | Virtual grid, file loading, filter orchestration |
-| `src/Acrux.WinForms/ColumnSelectorForm.cs` | The Columns dialog: which columns the grid shows |
-| `src/Acrux.WinForms/SheetSelectorForm.cs` | Sheet or table picker for .xlsx and SQLite |
-| `src/Acrux.WinForms/FilterPopupForm.cs` | Distinct-values popup |
-| `src/Acrux.WinForms/ScriptTerminalPanel.cs` | Terminal UI (bottom dock) |
+| `src/Acrux.Core/Session.cs` | An open file without a screen: its parquet copy, column cache, filters, hidden columns and script chain |
+| `src/Acrux.Core/NativeHeap.cs` | On Linux, gives the memory Polars freed back to the system |
+| `src/Acrux.Avalonia/Program.cs` | Entry point: heap limits, stale temp sweep and guaranteed process exit |
+| `src/Acrux.Avalonia/MainWindow.cs` | The window: opening files, the bar with the memory, the terminal, filter orchestration |
+| `src/Acrux.Avalonia/Grid/TableGrid.cs` | The drawn grid: nothing kept per row, selection, row numbers, keys, Ctrl+C |
+| `src/Acrux.Avalonia/Grid/Cells.cs` | What a cell shows without changing the data: null, `###`, `↵`, aligned decimals |
+| `src/Acrux.Avalonia/Grid/Palette.cs` | The grid's colors: the brand where it reads, the system's in high contrast |
+| `src/Acrux.Avalonia/Grid/ValueBar.cs` | The current cell whole, above the grid |
+| `src/Acrux.Avalonia/Grid/Announcer.cs` | What a screen reader hears as you move around the grid |
+| `src/Acrux.Avalonia/HighContrast.cs` | The system's high contrast, on Windows and Linux |
+| `src/Acrux.Avalonia/FilterDropdown.cs` | The header's filter: distinct values, search, blanks |
+| `src/Acrux.Avalonia/ColumnChoice.cs` | The Columns dialog: which columns the grid shows |
+| `src/Acrux.Avalonia/TableChoice.cs` | Sheet or table picker for .xlsx and SQLite |
+| `src/Acrux.Avalonia/TerminalPanel.cs` | The C# terminal, under the grid |
+| `installer/` | The Windows installer (Inno Setup) and the Linux `install.sh` |
 | `src/Acrux.Cli/Program.cs` | The command line: one reading route per detected format |
 
 The deeper docs live in [CLAUDE.md](CLAUDE.md): the design principles above in
@@ -386,9 +410,8 @@ file was validated in an isolated probe before the app relied on it.
 ## Status
 
 Personal project, maintained in my free time. Issues and PRs are welcome —
-just don't expect an SLA. The desktop app is Windows-only (WinForms); the core
-and the command line run on Linux today and build for Windows too, and a
-cross-platform desktop front end is the next step being explored.
+just don't expect an SLA. The desktop app runs on Windows and Linux; the
+command line runs on Linux, and builds for Windows too.
 
 ## Privacy
 
