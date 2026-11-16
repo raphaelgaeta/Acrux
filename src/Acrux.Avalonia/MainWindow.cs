@@ -3,7 +3,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Platform;
+using Avalonia.Input;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 
 namespace Acrux;
 
@@ -18,6 +20,7 @@ internal sealed class MainWindow : Window
     private static readonly string[] Extensions = ["*.parquet", "*.csv", "*.xlsx", "*.db", "*.sqlite", "*.sqlite3"];
 
     private readonly MemoryBudget _memory = new();
+    private readonly DispatcherTimer _trimTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly Button _open = new() { Content = "Open file", Margin = new Thickness(6, 4, 0, 4) };
     private readonly Button _columns = new() { Content = "Columns", IsEnabled = false, Margin = new Thickness(6, 4, 0, 4) };
     private readonly Button _clearFilters = new() { Content = "Clear all filters", IsEnabled = false, Margin = new Thickness(6, 4, 0, 4) };
@@ -74,9 +77,32 @@ internal sealed class MainWindow : Window
         };
         Closed += (_, _) =>
         {
+            _trimTimer.Stop();
             _session?.Dispose();   // frees the columns and deletes a converted copy
             _session = null;
         };
+
+        // Every 5 s, as the WinForms app: the cap follows the free memory, so
+        // when another program takes memory the cache lets go of the columns
+        // off screen; then, on Linux, the C heap gives back what was freed
+        // (NativeHeap: ~0.8 GB less at rest on the 700-column file).
+        _trimTimer.Tick += (_, _) =>
+        {
+            _memory.Trim();
+            NativeHeap.Trim();
+            if (_session is { } session) UpdateMemory(session);
+        };
+        _trimTimer.Start();
+
+        // a file dropped on the window opens, as from "Open file"
+        DragDrop.SetAllowDrop(this, true);
+        AddHandler(DragDrop.DragOverEvent, (_, e) =>
+            e.DragEffects = _open.IsEnabled && e.DataTransfer.TryGetFiles() is { Length: > 0 } ? DragDropEffects.Copy : DragDropEffects.None);
+        AddHandler(DragDrop.DropEvent, async (_, e) =>
+        {
+            if (_open.IsEnabled && e.DataTransfer.TryGetFiles()?.FirstOrDefault()?.TryGetLocalPath() is { } path)
+                await LoadAsync(path);
+        });
     }
 
     private async Task ChooseFileAsync()
@@ -147,7 +173,8 @@ internal sealed class MainWindow : Window
         }
         catch (Exception ex)
         {
-            _info.Text = $"Error opening {Path.GetFileName(path)}: {PolarsErrors.Brief(ex)}";
+            _info.Text = _session is { } shown ? Info(shown) : "No data loaded";
+            await ErrorDialog.ShowAsync(this, "Error", $"Error opening {Path.GetFileName(path)}:\n\n{PolarsErrors.Describe(ex)}");
         }
         finally
         {
@@ -190,7 +217,8 @@ internal sealed class MainWindow : Window
         }
         catch (Exception ex)
         {
-            _info.Text = $"Error filtering \"{name}\": {PolarsErrors.Brief(ex)}";
+            _info.Text = Info(session);
+            await ErrorDialog.ShowAsync(this, "Error", $"Error filtering column \"{name}\":\n\n{PolarsErrors.Describe(ex)}");
         }
         finally
         {

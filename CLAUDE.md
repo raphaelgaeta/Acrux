@@ -367,14 +367,16 @@ passa a se chamar `Acrux`, e o WinForms e o `spike/` saem.
      (**feita**, PR #29): os filtros, as linhas e as colunas escondidas na
      `Session`; a grade só troca a lista de linhas, e a coluna escondida fica
      no seu índice, sem largura;
-  4. o terminal C# (**feita**, branch `feat/avalonia-terminal`): a cadeia, a
+  4. o terminal C# (**feita**, PR #30): a cadeia, a
      base congelada no 1º passo, o resultado e "Undo step"/"Restore file" na
      `Session`; o resultado numa grade própria, a do arquivo esperando por
      baixo com rolagem, filtros e colunas; os filtros de cabeçalho desligados
      no modo script, como no WinForms;
-  5. acabamento: o `Trim` da memória a cada 5 s, `MALLOC_ARENA_MAX` e
-     `malloc_trim` no Linux (ver "O heap do Windows devolve a memória"),
-     mensagens de erro, soltar um arquivo na janela;
+  5. acabamento (**feita**, branch `feat/avalonia-finish`): o `Trim` da
+     memória a cada 5 s; no Linux, as arenas do glibc limitadas a 4 no início
+     do `Main` (`NativeHeap.LimitArenas`, o `mallopt` do `MALLOC_ARENA_MAX`) e
+     o `malloc_trim(0)` no mesmo ciclo de 5 s; as mensagens de erro numa
+     janela, como o `MessageBox`; soltar um arquivo na janela;
   6. entrega: `win-x64` e `linux-x64` na CI, o instalador, os GIFs.
 - **No Avalonia, o texto de uma `CheckBox` (ou de um botão) perde o primeiro
   `_`:** um `string` como conteúdo é lido como tecla de atalho, e
@@ -701,6 +703,8 @@ o `Describe` lê a mensagem na cultura invariante.
 | `src/Acrux.Core/PolarsErrors.cs` | Erros do Polars para gente: a mensagem sem o plano que ele anexa (CLI e app) |
 | `src/Acrux.Core/TimeFilter.cs` | Filtro de tempo relativo: lê períodos no padrão do systemd, monta o predicado por tipo de coluna e acha as posições das N linhas mais recentes |
 | `src/Acrux.Core/Session.cs` | O arquivo aberto, sem tela: a cópia em parquet (apagada no fim), o cache de colunas, os filtros com as linhas que mantêm, as colunas escondidas e a cadeia do terminal com o resultado |
+| `src/Acrux.Core/NativeHeap.cs` | O heap C do Linux: as arenas do glibc limitadas e o `malloc_trim`, que devolve ao sistema a memória que o Polars liberou |
+| `src/Acrux.Avalonia/ErrorDialog.cs` | O erro que interrompe o pedido, numa janela, com a mensagem selecionável |
 | `src/Acrux.Avalonia/TerminalPanel.cs` | O terminal C#: o histórico, o código, Ctrl+Enter (ouvido no tunnel: a caixa de várias linhas trata o Enter), o limite de 1M linhas e "Undo step" |
 | `src/Acrux.Avalonia/MainWindow.cs` | A janela do app no Avalonia: abrir arquivo, a barra com a memória, a grade |
 | `src/Acrux.Avalonia/FilterPopup.cs` | O filtro do cabeçalho: os valores da coluna, a busca, "(Blanks)", o aviso de lista cortada |
@@ -758,8 +762,10 @@ o `Describe` lê a mensagem na cultura invariante.
   depois do `Dispose`, o processo voltou a ~12 MB. No laptop (32 threads),
   o glibc segurou ~1 GB a mais (uma arena por thread): com o teto de 1 GB,
   o pico de `RssAnon` foi 2,3 GB; com `MALLOC_ARENA_MAX=4`, 1,9 GB, e o
-  `malloc_trim(0)` volta ao tamanho do cache. Uma tela de Linux (TUI,
-  Avalonia) vai precisar dos dois.
+  `malloc_trim(0)` volta ao tamanho do cache. O app no Avalonia usa os dois
+  (`NativeHeap`, 2026-11-15): no arquivo de 700 colunas, teto de 3 GB e 60
+  telas roladas, o pico de `RssAnon` caiu de 4,3 para 3,9 GB, e o app parado,
+  de 4,2 para 3,4 GB.
 - **Memória no Windows se mede pelos bytes privados**
   (`Process.PrivateMemorySize64`), o equivalente do `RssAnon`.
 - **Filtrar ou ordenar com todas as colunas estoura, mesmo com `Limit` no
