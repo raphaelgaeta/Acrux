@@ -423,5 +423,7 @@ Microsoft, and only when it is missing
 
 ## License
 
-[MIT](LICENSE) for the code. The logo and icon are not covered by it — see
+[MIT](LICENSE) for the code. The logo and icon, by Kat Ribeiro, are under
+[CC BY-ND 4.0](https://creativecommons.org/licenses/by-nd/4.0/): share them
+unchanged, with credit. A fork goes by its own name and icon. Details in
 [assets/brand/NOTICE.md](assets/brand/NOTICE.md).

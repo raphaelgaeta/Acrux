@@ -200,7 +200,7 @@ SmartScreen. Os caminhos, conferidos em 2026-11-12:
   projeto já conhecido (estrelas, contribuidores, artigos, discussões fora do
   GitHub); dá para pedir de novo quando houver esses sinais. Os termos deles
   também pedem licença aprovada pela OSI em todos os componentes, e o ícone
-  está fora da MIT;
+  está sob a CC BY-ND 4.0, que não é uma licença da OSI;
 - **Azure Artifact Signing:** pessoa física só nos EUA e no Canadá (Microsoft
   Learn), então não serve;
 - **Microsoft Store com MSIX:** a conta individual é grátis, e a Microsoft
@@ -253,8 +253,16 @@ gravação dá o mesmo GIF, byte a byte.
 
 ## Identidade visual
 
-Logo de Kat Ribeiro (design), propriedade do dono do projeto e **fora da MIT**
-(`assets/brand/NOTICE.md`). Paleta: `#8c5ea4` e `#acd7e7`. No repositório só
+Logo de Kat Ribeiro (design), propriedade do dono do projeto, **sob a CC BY-ND
+4.0, fora da MIT** (`assets/brand/NOTICE.md`; decisão do dono em 2026-11-17):
+qualquer um pode redistribuir sem alterar, com crédito. Converter o formato ou
+o tamanho (os PNG de um desktop, por exemplo) a própria licença permite, e não
+conta como alteração. A licença não dá direito de marca: um fork usa outro
+nome e outro ícone. **Por que essa licença:** o Copr só aceita material sob
+licença da lista do Fedora, onde a CC BY-ND 4.0 é `allowed-content`
+(fedora-license-data, conferido em 2026-11-17). O "todos os direitos
+reservados" de antes barrava o RPM, e o ícone vai dentro do próprio app (o
+`acrux.ico` no `Acrux.dll`). Paleta: `#8c5ea4` e `#acd7e7`. No repositório só
 entra a arte em uso; o kit completo (`.ai`, `.eps`, JPGs, PDFs com contato dela)
 fica fora.
 
