@@ -427,3 +427,7 @@ Microsoft, and only when it is missing
 [CC BY-ND 4.0](https://creativecommons.org/licenses/by-nd/4.0/): share them
 unchanged, with credit. A fork goes by its own name and icon. Details in
 [assets/brand/NOTICE.md](assets/brand/NOTICE.md).
+
+Every download also carries `THIRD-PARTY-NOTICES.txt` and
+`THIRD-PARTY-NOTICES-polars.html`: the licenses of what Acrux includes (.NET,
+Avalonia, Skia, Apache Arrow, SQLite, Roslyn, Polars and its Rust crates).

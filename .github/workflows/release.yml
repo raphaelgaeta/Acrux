@@ -63,6 +63,7 @@ jobs:
         run: |
           dotnet publish src/Acrux.Cli/Acrux.Cli.csproj -c Release -r ${{ matrix.rid }} \
             --self-contained true -p:Version=${{ needs.version.outputs.version }} -o out/acrux-cli
+          python3 scripts/third_party_notices.py out/acrux-cli
           ln -s Acrux.Cli out/acrux-cli/acrux
           cp LICENSE out/acrux-cli/
           out/acrux-cli/acrux version
@@ -75,6 +76,7 @@ jobs:
           dotnet publish src/Acrux.Avalonia/Acrux.Avalonia.csproj -c Release -r linux-x64 \
             --self-contained true -p:Version=${{ needs.version.outputs.version }} -o out/acrux
           find out/acrux -name '*.pdb' -delete
+          python3 scripts/third_party_notices.py out/acrux
           mkdir -p out/acrux/share
           cp installer/linux/install.sh installer/linux/uninstall.sh out/acrux/
           cp installer/linux/acrux-parquet.xml out/acrux/share/
@@ -91,6 +93,7 @@ jobs:
           $RUNNER_TEMP/x/acrux/install.sh
           desktop-file-validate $XDG_DATA_HOME/applications/acrux.desktop
           test -x $XDG_DATA_HOME/acrux/Acrux
+          test -s $XDG_DATA_HOME/acrux/THIRD-PARTY-NOTICES.txt
           cp tests/smoke/fixtures/tipos.parquet $RUNNER_TEMP/t.parquet
           gio info -a standard::content-type $RUNNER_TEMP/t.parquet | grep -q vnd.apache.parquet \
             || { echo "the parquet type is not registered"; exit 1; }
@@ -112,6 +115,16 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
+      # first, because the single file has no .deps.json to read the
+      # third-party notices from: the zip takes them from this folder
+      - name: "Publish the desktop app as a folder (the installer's), with the third-party notices"
+        shell: pwsh
+        run: |
+          dotnet publish src/Acrux.Avalonia/Acrux.Avalonia.csproj -c Release -r win-x64 `
+            --self-contained true -p:Version=${{ needs.version.outputs.version }} -o out-setup
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python scripts/third_party_notices.py out-setup
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Publish the desktop app (single file, self-contained)
         shell: pwsh
         run: |
@@ -121,12 +134,11 @@ jobs:
           New-Item -ItemType Directory -Force pkg | Out-Null
           Copy-Item out/Acrux.exe, LICENSE pkg/
           Copy-Item assets/brand/NOTICE.md pkg/NOTICE-logo.md
+          Copy-Item out-setup/THIRD-PARTY-NOTICES.txt, out-setup/THIRD-PARTY-NOTICES-polars.html pkg/
           Compress-Archive -Path pkg/* -DestinationPath Acrux-${{ needs.version.outputs.label }}-win-x64.zip
-      - name: "Installer (Inno Setup: a folder publish, plus the VC++ runtime if missing)"
+      - name: "Installer (Inno Setup: the folder publish, plus the VC++ runtime if missing)"
         shell: pwsh
         run: |
-          dotnet publish src/Acrux.Avalonia/Acrux.Avalonia.csproj -c Release -r win-x64 `
-            --self-contained true -p:Version=${{ needs.version.outputs.version }} -o out-setup
           choco install innosetup --version 6.7.1 -y --no-progress --allow-downgrade | Out-Null
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $version = '${{ needs.version.outputs.version }}'
