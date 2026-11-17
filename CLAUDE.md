@@ -104,12 +104,48 @@ Pelo GitHub Actions (`.github/workflows/release.yml`, desenho aprovado em
    com um link `acrux` dentro), e, só no x64, o app de janela
    (`Acrux-v0.1.0-linux-x64.tar.gz`, ver "O pacote do Linux"), testado numa
    instalação descartável; no Windows, o instalador (`Acrux-v0.1.0-setup.exe`)
-   e o app single-file (`Acrux-v0.1.0-win-x64.zip`). Os pacotes do app levam a
-   `LICENSE` e o `NOTICE` da arte. O app no arm64 fica de fora: não foi
+   e o app single-file (`Acrux-v0.1.0-win-x64.zip`). Todos os pacotes levam a
+   `LICENSE` e os avisos de terceiros (abaixo); os do app, também o `NOTICE`
+   da arte. O app no arm64 fica de fora: não foi
    testado, e o nativo arm64 do Polars pede glibc 2.39, o que deixa de fora
    a maioria dos desktops ARM.
 3. Ele cria um release **rascunho**, com o `SHA256SUMS` e as notas (texto
    fixo de instalação + as geradas pelo GitHub). O dono confere e publica.
+
+**Os avisos de terceiros** (`scripts/third_party_notices.py`, desenho aprovado
+em 2026-11-17). Antes, os pacotes levavam só a `LICENSE` do Acrux, sem o texto
+das licenças do que vai dentro deles: o runtime do .NET, o Avalonia, o Skia,
+o Arrow, o SQLite, o Roslyn e os ~500 crates Rust do nativo do Polars. A CI
+roda o script depois de cada `dotnet publish` em pasta, sem rede:
+- **o que entra:** o que o `*.deps.json` do publish lista, ou seja, só o que
+  foi para a pasta (o app do Linux não leva os nativos do Windows). Os
+  pacotes vêm do cache do NuGet que o restore encheu. O zip single-file não
+  tem `.deps.json`, por isso o job do Windows publica a pasta do setup
+  primeiro e o zip copia os avisos dela;
+- **dois arquivos:** o `THIRD-PARTY-NOTICES.txt` (pacote, versão, licença e
+  copyright, depois os textos, cada texto igual uma vez só) e o
+  `THIRD-PARTY-NOTICES-polars.html`, a lista de crates que o autor do
+  Polars.NET gera com o `cargo-about`, igual nas três plataformas;
+- **os textos:** o arquivo de licença ou de avisos do próprio pacote, como
+  está (o RTF do Roslyn vira texto); se o pacote só declara a licença, o
+  texto padrão (`installer/third-party/MIT.txt` e `Apache-2.0.txt`, do
+  `spdx/license-list-data`) com o copyright do `.nuspec`. Os pacotes do
+  Polars.NET não trazem a licença do wrapper: ela está em
+  `installer/third-party/Polars.NET-LICENSE.txt`, copiada do GitHub do autor;
+- **a trava:** o build falha se um pacote tem licença fora do `ALLOWED`, se
+  não tem texto de licença nem copyright, ou se um crate do Polars tem
+  licença fora da lista. O `ALLOWED` são as licenças que o Fedora aceita para
+  código (status `allowed` no fedora-license-data), porque o Copr só aceita
+  material sob a lista do Fedora. A exceção é o `tiny-keccak` (CC0-1.0), que
+  o próprio Fedora empacota pela regra de antes de 2022. **A CI parou numa
+  dependência nova?** Leia a licença dela. Se o Fedora a aceita, acrescente
+  o id ao `ALLOWED`, ou o pacote ao `OVERRIDES`; se não aceita, a dependência
+  não entra;
+- `--spdx` imprime as licenças de terceiros numa expressão SPDX, para o campo
+  `License:` do RPM;
+- os avisos do Skia e do HarfBuzz trazem o texto da LGPL, do `libmicrohttpd`
+  (que oferece a opção da licença eCos), entre o material de terceiros que a
+  Microsoft lista para o Skia. Eles vão como a Microsoft os escreveu.
 
 **O instalador** (`installer/acrux.iss`, Inno Setup 6.7.1 instalado na CI pelo
 `choco`, com a versão fixa; desenho aprovado em 2026-11-08):
