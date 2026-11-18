@@ -36,6 +36,10 @@ The latest build is on the [Releases](https://github.com/raphaelgaeta/Acrux/rele
   `Acrux.exe` (the .NET runtime is inside), or drop a file on it. It needs the
   [Microsoft Visual C++ Redistributable (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe),
   which most PCs already have.
+- **Command line, Windows** — in the setup, check **Install the acrux command
+  and add it to PATH** (it comes unchecked), then open a new terminal and run
+  `acrux`. Or extract `acrux-cli-vX.Y.Z-win-x64.zip` and put the `acrux-cli`
+  folder on your `PATH`; like the app's zip, it needs the Visual C++ runtime.
 - **Linux app** — `Acrux-vX.Y.Z-linux-x64.tar.gz`: extract it and run
   `acrux/install.sh`. It installs Acrux for your user, no root needed, with a
   menu entry and **Open with** for Parquet, CSV, xlsx and SQLite files;
@@ -438,8 +442,8 @@ file was validated in an isolated probe before the app relied on it.
 ## Status
 
 Personal project, maintained in my free time. Issues and PRs are welcome —
-just don't expect an SLA. The desktop app runs on Windows and Linux; the
-command line runs on Linux, and builds for Windows too.
+just don't expect an SLA. The desktop app and the command line run on
+Windows and Linux; the command line also on 64-bit ARM Linux.
 
 ## Privacy
 

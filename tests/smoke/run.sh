@@ -20,15 +20,22 @@ printf 'cidade;valor\nS\xe3o Paulo;1,5\nA\xe7ail\xe2ndia;2\n' > "$work/ansi.csv"
 cp "$work/vendas.csv" "$work/sem_extensao"
 cp "$work/banco.db" "$work/dados.csv"
 
-export TZ=America/Sao_Paulo   # zoned times are shown in the local zone
+# zoned times are shown in the local zone. .NET on Windows ignores TZ: there
+# the system zone must be E. South America Standard Time (CI sets it, tzutil)
+export TZ=America/Sao_Paulo
 unset ACRUX_DEBUG
 cd "$work" || exit 1
 
 # Masked: the filter header (holds the current time) and the temp folder in
-# error messages. Everything else must match.
+# error messages, also in its Windows form under Git Bash (C:\…\tmp.x\file),
+# found by the folder's own name: the runner's TEMP is an 8.3 short path
+# (RUNNER~1) and .NET prints the long one. Everything else must match.
+base=$(basename "$work" | sed 's/[.]/\\./g')
+masks=(-e 's/^from .* to .* \(--last/from <since> to <now> (--last/' -e "s|$work|<work>|g"
+       -e "s|[A-Za-z]:\\\\[^']*\\\\$base\\\\|<work>/|g")
 run() {
     printf '$ acrux %s\n' "$*"
-    "$acrux" "$@" 2>&1 | sed -E -e 's/^from .* to .* \(--last/from <since> to <now> (--last/' -e "s|$work|<work>|g"
+    "$acrux" "$@" 2>&1 | tr -d '\r' | sed -E "${masks[@]}"
     printf '[exit %d]\n\n' "${PIPESTATUS[0]}"
 }
 

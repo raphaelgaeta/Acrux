@@ -1,0 +1,4 @@
+# The smoke test compares bytes, and bash reads scripts with LF only: keep
+# them as committed on every OS (a Windows checkout would add CR to each line).
+tests/smoke/** -text
+*.sh text eol=lf

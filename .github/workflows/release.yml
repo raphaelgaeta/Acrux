@@ -156,6 +156,32 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python scripts/third_party_notices.py out-setup
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      # its own folder lets the command be acrux.exe: next to the app's
+      # Acrux.exe it would collide, since Windows ignores case
+      - name: "Command line: a folder publish, acrux.exe, and its zip"
+        shell: pwsh
+        run: |
+          dotnet publish src/Acrux.Cli/Acrux.Cli.csproj -c Release -r win-x64 `
+            --self-contained true -p:Version=${{ needs.version.outputs.version }} -o out-cli
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Remove-Item out-cli/*.pdb -ErrorAction SilentlyContinue
+          Rename-Item out-cli/Acrux.Cli.exe acrux.exe
+          python scripts/third_party_notices.py out-cli
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Copy-Item LICENSE out-cli/
+          & ./out-cli/acrux.exe version
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force pkg-cli/acrux-cli | Out-Null
+          Copy-Item -Recurse out-cli/* pkg-cli/acrux-cli/
+          Compress-Archive -Path pkg-cli/acrux-cli -DestinationPath acrux-cli-${{ needs.version.outputs.label }}-win-x64.zip
+      # .NET on Windows ignores TZ, so the runner's own zone stands in for the
+      # one the expected output was written in (the runner is disposable)
+      - name: "Command line: the smoke test, on Windows"
+        shell: bash
+        run: |
+          tzutil //s "E. South America Standard Time"   # //: Git Bash turns /s into a path
+          choco install sqlite -y --no-progress > /dev/null
+          bash tests/smoke/run.sh out-cli/acrux.exe
       - name: Publish the desktop app (single file, self-contained)
         shell: pwsh
         run: |
@@ -172,18 +198,58 @@ jobs:
         run: |
           choco install innosetup --version 6.7.1 -y --no-progress --allow-downgrade | Out-Null
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $clifiles = "$env:RUNNER_TEMP\cli-files.iss"
+          python installer/cli_files.py out-setup out-cli $clifiles
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $version = '${{ needs.version.outputs.version }}'
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Qp `
             "/DAppVersion=$version" "/DNumericVersion=$(($version -split '-')[0])" `
             "/DLabel=${{ needs.version.outputs.label }}" "/DPublishDir=$PWD\out-setup" `
+            "/DCliDir=$PWD\out-cli" "/DCliFiles=$clifiles" `
             "/O$PWD" installer\acrux.iss
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      # the setup on the runner, which is disposable: installed with the
+      # command line option, acrux found through the user's PATH, the smoke
+      # test through it, then uninstalled with nothing left behind
+      - name: "Installer: install with the command line, find acrux on PATH"
+        shell: pwsh
+        run: |
+          $setup = (Get-Item Acrux-*-setup.exe).FullName
+          Start-Process $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS=cli', '/LOG=setup.log' -Wait
+          $app = "$env:LOCALAPPDATA\Programs\Acrux"
+          if (-not (Test-Path "$app\Acrux.exe")) { Get-Content setup.log -Tail 40; throw "the app isn't installed in $app" }
+          $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+          if (($userPath -split ';') -notcontains "$app\cli") { throw "the user's PATH lacks $app\cli: $userPath" }
+          # what a new terminal gets: the machine's PATH, then the user's
+          $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + $userPath
+          $found = (Get-Command acrux).Source
+          if ($found -ne "$app\cli\acrux.exe") { throw "acrux resolves to $found" }
+          acrux version
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: "Installer: the smoke test through the installed acrux"
+        shell: bash
+        run: bash tests/smoke/run.sh "$(cygpath -u "$LOCALAPPDATA")/Programs/Acrux/cli/acrux.exe"
+      - name: "Installer: uninstall, and nothing left"
+        shell: pwsh
+        run: |
+          $app = "$env:LOCALAPPDATA\Programs\Acrux"
+          Start-Process "$app\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+          # the uninstaller hands over to a copy of itself in %TEMP% and returns
+          for ($i = 0; $i -lt 90; $i++) {
+            $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+            if (-not (Test-Path "$app\cli") -and (($userPath -split ';') -notcontains "$app\cli")) { break }
+            Start-Sleep 1
+          }
+          if (Test-Path "$app\cli") { throw "$app\cli is still there" }
+          if (($userPath -split ';') -contains "$app\cli") { throw "the user's PATH still has $app\cli: $userPath" }
+          if (Test-Path "$app\Acrux.exe") { throw "the app is still there" }
       - uses: actions/upload-artifact@v7
         with:
           name: windows
           path: |
             Acrux-*.zip
             Acrux-*-setup.exe
+            acrux-cli-*.zip
           retention-days: 7
 
   release:
@@ -200,7 +266,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha256sum Acrux-*-setup.exe Acrux-*.zip Acrux-*.tar.gz acrux-cli-*.tar.gz *.deb > SHA256SUMS
+          sha256sum Acrux-*-setup.exe Acrux-*.zip Acrux-*.tar.gz acrux-cli-*.tar.gz acrux-cli-*.zip *.deb > SHA256SUMS
           cat > notes.md <<'EOF'
           **Windows app** — run `Acrux-…-setup.exe`: it installs Acrux for your user,
           without admin rights. If the Microsoft Visual C++ runtime that Acrux needs
@@ -215,6 +281,12 @@ jobs:
 
           Neither file is code-signed, so Windows SmartScreen warns about an
           unknown publisher: **More info → Run anyway**.
+
+          **Command line, Windows** — in the setup, check "Install the acrux
+          command and add it to PATH" (it comes unchecked), then open a new
+          terminal and run `acrux`. Or, without installing: extract
+          `acrux-cli-…-win-x64.zip` and put the `acrux-cli` folder on your `PATH`;
+          like the zip above, it needs the Visual C++ runtime.
 
           **Linux app** — extract `Acrux-…-linux-x64.tar.gz` and run
           `acrux/install.sh`: it installs Acrux for your user (no root) in
@@ -247,4 +319,4 @@ jobs:
           EOF
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
             --title "Acrux $GITHUB_REF_NAME" --notes-file notes.md --generate-notes \
-            Acrux-*-setup.exe Acrux-*.zip Acrux-*.tar.gz acrux-cli-*.tar.gz *.deb SHA256SUMS
+            Acrux-*-setup.exe Acrux-*.zip Acrux-*.tar.gz acrux-cli-*.tar.gz acrux-cli-*.zip *.deb SHA256SUMS

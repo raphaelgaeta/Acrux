@@ -103,8 +103,9 @@ Pelo GitHub Actions (`.github/workflows/release.yml`, desenho aprovado em
    para o arm64 (`acrux-cli-v0.1.0-linux-x64.tar.gz` e `…-linux-arm64.tar.gz`,
    com um link `acrux` dentro), e, só no x64, o app de janela
    (`Acrux-v0.1.0-linux-x64.tar.gz`, ver "O pacote do Linux"), testado numa
-   instalação descartável; no Windows, o instalador (`Acrux-v0.1.0-setup.exe`)
-   e o app single-file (`Acrux-v0.1.0-win-x64.zip`). Dos mesmos arquivos do
+   instalação descartável; no Windows, o instalador (`Acrux-v0.1.0-setup.exe`,
+   com o CLI como opção), o app single-file (`Acrux-v0.1.0-win-x64.zip`) e o
+   CLI em pasta (`acrux-cli-v0.1.0-win-x64.zip`). Dos mesmos arquivos do
    Linux saem os `.deb` (`acrux_0.1.0_amd64.deb`, `…_arm64.deb` e
    `acrux-desktop_0.1.0_amd64.deb`), instalados e testados em contêineres do
    Debian e do Ubuntu (ver "Os .deb"). Todos os pacotes levam a
@@ -203,6 +204,51 @@ roda o script depois de cada `dotnet publish` em pasta, sem rede:
   deixaria 85 DLLs do WinForms (42 MB), todas nesses lugares. Não foi
   testado na VM (decisão do dono): a instalação do v0.3.0 lá foi numa pasta
   nova. Mudou o que o publish põe fora da raiz? Mude a lista.
+- **O CLI é uma opção do setup, desmarcada** (desenho aprovado em
+  2026-11-18): "Install the acrux command and add it to PATH". Desmarcada
+  porque quem abre arquivos pela janela não precisa de 267 MB de terminal.
+  - **Onde:** `{app}\cli\acrux.exe`, numa pasta própria. Na mesma pasta do
+    `Acrux.exe` ele colidiria, porque o Windows não diferencia maiúsculas. O
+    executável é o `Acrux.Cli.exe` renomeado: o apphost do .NET acha a DLL
+    pelo nome que leva dentro, não pelo próprio nome.
+  - **O download quase não cresce:** dos 275 arquivos do CLI, 270 são byte a
+    byte os do app (o runtime, o Polars, o SQLite; o `Acrux.Core.dll` difere
+    só na identidade de compilação). O `installer/cli_files.py` gera as
+    entradas do `[Files]` (o `.iss` as inclui por `#include`): as iguais
+    apontam para o publish do app, e o Inno guarda uma vez só a mesma origem
+    (`MergeDuplicateFiles`). No disco, a opção marcada ocupa 267 MB.
+  - **O PATH:** o do usuário (`HKCU\Environment`, sem admin), gravado como
+    `REG_EXPAND_SZ` para não quebrar as entradas com `%VARIÁVEL%`, e
+    conferido como entrada inteira, sem diferenciar maiúsculas.
+    `ChangesEnvironment=yes` avisa o Windows: só os terminais abertos
+    depois acham o `acrux`. O desinstalador tira a entrada.
+  - **Atualizar:** o setup lembra a escolha anterior. O `[InstallDelete]`
+    apaga a pasta `cli\` a cada instalação, e ela só volta com a opção
+    marcada. Desmarcada, o setup tira a entrada do PATH.
+  - **O zip `acrux-cli-…-win-x64.zip`**, para quem não quer instalar: a
+    pasta `acrux-cli\` com o `acrux.exe`, como o `.tar.gz` do Linux. Precisa
+    do runtime do Visual C++, como o zip do app.
+  - **Testado na CI a cada PR, no runner do Windows, que é descartável:** o
+    smoke test do CLI publicado; o setup instalado em silêncio com
+    `/TASKS=cli`; o `acrux` achado pelo PATH do usuário, como um terminal
+    novo o veria; o smoke test pelo `acrux` instalado; a desinstalação, com
+    a pasta e a entrada do PATH conferidas fora. A tela de opções do setup
+    só se vê na VM, com o dono.
+- **O smoke test no Windows** (medido num experimento em 2026-11-18): das
+  354 linhas esperadas, só a pasta temporária na mensagem "Could not find
+  file" saía diferente, em formato Windows (`C:\…\Temp\tmp.x\arquivo`). O
+  `run.sh` a reconhece pelo nome da própria pasta (`tmp.xxxx`, único a cada
+  execução), depois de qualquer caminho com letra de unidade. O `cygpath -w`
+  não serviu: o `TEMP` do runner é um caminho curto do Windows (`RUNNER~1`),
+  e a mensagem do .NET traz o nome longo (`runneradmin`). O smoke test
+  também pede três coisas do runner:
+  - **o fuso:** o .NET no Windows ignora o `TZ`, então a CI muda o fuso do
+    sistema (`tzutil //s "E. South America Standard Time"`; o `//` porque o
+    Git Bash trocaria o `/s` por um caminho);
+  - **o `sqlite3`:** pelo choco;
+  - **o fim de linha:** o `.gitattributes` mantém os arquivos do teste e os
+    `.sh` como estão no repositório. Num checkout do Windows, o git poria
+    `CR` em cada linha, e o bash não roda script assim.
 - O `.iss` só compila no Windows (na CI). Para testar, baixe o artefato
   `windows` do PR com `gh run download`. O primeiro, de 70 MB, funcionou na
   VM limpa do Windows 11, onde o zip falhava por falta do runtime (teste do
@@ -1050,6 +1096,7 @@ o `Describe` lê a mensagem na cultura invariante.
 | `src/Acrux.Avalonia/Grid/Cells.cs` | O texto de cada célula sem mudar o dado (`null`, `###`, `↵`, datas só com o dia), os tamanhos, o alinhamento dos decimais e o que o Ctrl+C copia |
 | `src/Acrux.Avalonia/Grid/Palette.cs` | As cores da grade no claro e no escuro (a marca onde se lê) e, no alto contraste, as do sistema |
 | `installer/acrux.iss` | O instalador do Windows (Inno Setup), por usuário, com o "Abrir com" |
+| `installer/cli_files.py` | As entradas do `[Files]` que põem o CLI em `{app}\cli`, apontando para os arquivos do app quando são iguais |
 | `installer/linux/install.sh` | A instalação por usuário no Linux, com o `uninstall.sh`, o `.desktop` e o tipo parquet (`acrux-parquet.xml`) |
 | `installer/rpm/acrux.spec` | O RPM do Copr: reempacota o release em `acrux` (CLI) e `acrux-desktop` (app); o `.copr/Makefile` baixa o release e monta o pacote fonte |
 | `installer/deb/build-deb.sh` | Os `.deb` do Debian e do Ubuntu, dos mesmos arquivos do release; o `test-deb.sh` os instala e testa num contêiner |
