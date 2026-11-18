@@ -2,7 +2,7 @@
 """Writes the third-party notices of a `dotnet publish` folder, and fails on a
 license that could keep Acrux out of Fedora's Copr.
 
-    python3 scripts/third_party_notices.py <publish-dir> [--spdx]
+    python3 scripts/third_party_notices.py <publish-dir> [--spdx] [--check-spec <rpm spec>]
 
 Reads the folder's *.deps.json, the exact list of NuGet packages (and the .NET
 runtime pack) whose files went into it, and the packages themselves from the
@@ -20,9 +20,14 @@ Every license must be on ALLOWED, the licenses Fedora accepts for code (Copr
 only takes material under a license on Fedora's list). A package with a license
 outside it, without a license text, or a Polars crate under another license
 stops the build, so a new dependency is caught in the pull request instead of
-at release time. --spdx prints the third-party licenses as one SPDX expression
-(the RPM's License: field adds Acrux's own MIT and the logo's CC-BY-ND-4.0).
+at release time. --spdx prints the third-party licenses as one SPDX expression.
+--check-spec also stops it when the RPM's License: field (installer/rpm/
+acrux.spec: the first for the command line, the second for the desktop app)
+doesn't list exactly these licenses, plus Acrux's own MIT and, for the app,
+the logo's CC-BY-ND-4.0.
 """
+
+import argparse
 
 import hashlib
 import html
@@ -151,10 +156,13 @@ def polars_crates(page):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    if len(args) != 1:
-        raise SystemExit(__doc__)
-    publish = Path(args[0])
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("publish", type=Path, help="a dotnet publish folder (not single-file)")
+    parser.add_argument("--spdx", action="store_true", help="print the licenses as one SPDX expression")
+    parser.add_argument("--check-spec", type=Path, metavar="SPEC",
+                        help="fail when this RPM spec's License: field doesn't match")
+    args = parser.parse_args()
+    publish = args.publish
     deps = list(publish.glob("*.deps.json"))
     if len(deps) != 1:
         raise SystemExit(f"{publish}: expected one *.deps.json (a folder publish, not single-file); found {len(deps)}")
@@ -224,6 +232,18 @@ def main():
                 problems.append(f"Polars crate {crate}: license {spdx_id} is not on ALLOWED (Fedora's list)")
             spdx.add(spdx_id)
 
+    desktop = any(name == "Avalonia" for name, _, _ in packages)
+    if args.check_spec:
+        fields = re.findall(r"^License:\s*(.+?)\s*$", args.check_spec.read_text(encoding="utf-8"), re.M)
+        want = spdx | {"MIT"} | ({"CC-BY-ND-4.0"} if desktop else set())
+        which = 1 if desktop else 0
+        have = set(license_ids(fields[which])[0]) if len(fields) > which else set()
+        if have != want:
+            problems.append(
+                f"{args.check_spec}: License: of the {'desktop app' if desktop else 'command line'} "
+                f"should be: {' AND '.join(['MIT'] + sorted(want - {'MIT'}))}"
+                f" (missing: {' '.join(sorted(want - have)) or '-'}; extra: {' '.join(sorted(have - want)) or '-'})")
+
     if problems:
         print("third-party notices: " + str(len(problems)) + " problem(s)", file=sys.stderr)
         for p in problems:
@@ -232,7 +252,6 @@ def main():
 
     width = max(len(r[0]) for r in rows)
     vwidth = max(len(r[1]) for r in rows)
-    desktop = any(r[0] == "Avalonia" for r in rows)
     lines = [
         "Third-party software in Acrux",
         "=============================",
@@ -255,7 +274,7 @@ def main():
 
     print(f"third-party notices: {len(rows)} packages, {len({c for c, _ in crates})} Polars crates, "
           f"{len(blocks)} license texts -> {publish}", file=sys.stderr)
-    if "--spdx" in sys.argv:
+    if args.spdx:
         print(" AND ".join(sorted(spdx)))
 
 
