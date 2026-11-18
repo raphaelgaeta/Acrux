@@ -10,7 +10,8 @@ replayed, and each output appears after its command's real run time.
 | `assets/cli.gif` | `capture_cli.py`, on the 9 GB test file (not in the repository) | `cli.json` |
 | `assets/messy_csv.gif` | `make_messy_csv.py`, then `capture_analyst.py` | `analyst.json` |
 | `assets/open_grid.gif` | a screen recording in a Windows 11 virtual machine, re-timed by `edit_gif.py` ([below](#opening-the-wide-file)) | — |
-| `assets/script_terminal.gif` | a screen recording on Windows, re-timed by `edit_gif.py`, which marks every sped-up stretch | — |
+| `assets/header_filter.gif` | the same kind of recording, re-timed by `edit_gif.py` ([below](#a-header-filter-and-the-c-terminal)) | — |
+| `assets/script_terminal.gif` | the same recording as `header_filter.gif`, a later stretch ([below](#a-header-filter-and-the-c-terminal)) | — |
 
 Drawing needs Pillow, ffmpeg and, for the same look, the JetBrains Mono font.
 
@@ -72,3 +73,42 @@ The GIF it replaced came from the Windows-only app before the move to
 Avalonia (commit `b8e1d23`, 2026-11-12), in the same virtual machine and on
 the same file: reading the file and setting up the rows took 8.3 s there,
 counted in the status bar, before a header filter took 2.7 s more.
+
+## A header filter and the C# terminal
+
+`header_filter.gif` and `script_terminal.gif` come from one recording of the
+desktop app window, at its first size (1280×800, not maximized, so the
+terminal fits under the grid), in the same virtual machine, at commit
+`8de5db3` (v0.3.0), on 2026-11-17, with the 9 GB test file open. Both crop
+the window's left side and keep the same 10 frames a second without repeats.
+
+```
+ffmpeg -ss 17.6 -to 28.6 -i recording.mp4 -an -vf "crop=1060:650:0:0,scale=900:-2:flags=lanczos,fps=10,mpdecimate,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -fps_mode vfr filter_src.gif
+python3 edit_gif.py filter_src.gif ../../assets/header_filter.gif "0-24:2,25-27:1,hold:3"
+
+ffmpeg -ss 57 -to 103.5 -i recording.mp4 -an -vf "crop=1060:812:0:0,scale=900:-2:flags=lanczos,fps=10,mpdecimate,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -fps_mode vfr term_src.gif
+python3 edit_gif.py term_src.gif ../../assets/script_terminal.gif "0-12:3,13-19:1,20-40:3,41-45:1,46-63:4,64-71:3,72-75:1,76-86:3,87-91:1,92-100:3,101-106:1,hold:3"
+```
+
+`header_filter.gif`:
+
+- **At real speed:** from OK to the filtered grid. The status bar says
+  2,545,975 of 5,000,000 rows, the query in 200 ms and the grid in 0 ms.
+- **Sped up and marked:** opening the filter, "Uncheck all" and checking
+  `false` (2×). "(Blanks)" stays checked, as in Excel, so the count includes
+  the column's 96,700 nulls.
+
+`script_terminal.gif`, three steps chained on the whole file (the header
+filter was cleared before them), then "Undo step" and "Restore file":
+
+- **At real speed:** every wait from a click to its result. The terminal
+  prints each time: step 1, `df.Filter(Col("c004_f32") > 90)`, 495,275 rows
+  × 700 columns in 1,890 ms; step 2, a `GroupBy` with `Mean` and `Len`, 21
+  rows × 3 columns in 231 ms; step 3, `df.Sort("rows", descending: true)`,
+  in 283 ms; the undo back to step 2, in 162 ms; and the file back.
+- **Sped up and marked:** pasting each step, reading the results and
+  going to the buttons (3×, and 4× for the 11 s before step 3).
+- **Held:** the last frame stays 3 s more.
+
+The terminal GIF it replaced was a Windows-only app recording, with the
+earlier name `lf` for the plan.

@@ -202,6 +202,9 @@ nothing downstream can tell.
 - **Filter like Excel.** Every header has a filter button: the distinct
   values drop down (blanks included), you check what you want, and the
   button turns into a funnel. Filters compose across columns.
+
+  ![A header filter on the 5-million-row file: false and the blanks checked, 2,545,975 rows in 0.2 seconds](assets/header_filter.gif)
+
 - **The grid never bends the data to fit the screen.** A missing value shows
   as a muted *null*, never as an empty string. A number too wide for its
   column shows `###`, as in Excel, never cut-off digits that read as another
@@ -230,7 +233,7 @@ nothing downstream can tell.
   as you scroll, like the file, so a filter over all 700 columns still fits
   in memory; an optional 1M-row cap keeps results bounded.
 
-  ![Chaining Polars queries in the C# terminal](assets/script_terminal.gif)
+  ![The C# terminal on the 700-column file: a filter, a group-by and a sort, chained, then undo and restore](assets/script_terminal.gif)
 
 ## The command line
 

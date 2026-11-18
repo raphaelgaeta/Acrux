@@ -386,13 +386,16 @@ Trecho cortado também leva selo (`edit_gif.py`, `a-b:cut`). O
 v0.3.0, 2026-11-17): abrir o 5M × 700 com o app no Avalonia, 0,9 s do
 clique em Open à primeira tela inteira. O GIF anterior, do WinForms (build
 `b8e1d23`), levava 8,3 s na mesma etapa, na mesma VM, e terminava num
-filtro de cabeçalho; o vídeo novo mostra só a abertura. **Gravação de tela
+filtro de cabeçalho; o vídeo novo mostra só a abertura. O filtro voltou no
+`header_filter.gif`, e o `script_terminal.gif` (três passos encadeados,
+"Undo step" e "Restore file") saiu de outra gravação do dono na mesma VM e
+no mesmo dia, com a janela em 1280×800; os comandos estão no
+`docs/demo/README.md`. **Gravação de tela
 para o README: sem Widgets, notificação ou outro app na área gravada**, e a
 ação no canto esquerdo da janela, que é o que cabe legível em 900 px. Com o
 terminal C# aberto, ele ocupa os 300 px de baixo da janela: grave com a
 janela no tamanho inicial (1280×800), não maximizada, para o recorte pegar a
-grade e o terminal. **O `script_terminal.gif` ainda é do app WinForms** (e
-usa o nome antigo, `lf`).
+grade e o terminal. Nenhum GIF do README é mais do app WinForms.
 O `messy_csv.gif` põe o pandas ao lado do
 Acrux, num CSV como o Excel em português salva; desenho do dono. Ele só é
 justo se três coisas continuarem valendo:
