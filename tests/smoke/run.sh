@@ -27,13 +27,12 @@ unset ACRUX_DEBUG
 cd "$work" || exit 1
 
 # Masked: the filter header (holds the current time) and the temp folder in
-# error messages, also in its Windows form (C:\…\tmp.x\file) under Git Bash.
-# Everything else must match.
-masks=(-e 's/^from .* to .* \(--last/from <since> to <now> (--last/' -e "s|$work|<work>|g")
-if command -v cygpath > /dev/null; then
-    winwork=$(cygpath -w "$work" | sed 's/[][\\.*^$|]/\\&/g')
-    masks+=(-e "s|$winwork\\\\|<work>/|g")
-fi
+# error messages, also in its Windows form under Git Bash (C:\…\tmp.x\file),
+# found by the folder's own name: the runner's TEMP is an 8.3 short path
+# (RUNNER~1) and .NET prints the long one. Everything else must match.
+base=$(basename "$work" | sed 's/[.]/\\./g')
+masks=(-e 's/^from .* to .* \(--last/from <since> to <now> (--last/' -e "s|$work|<work>|g"
+       -e "s|[A-Za-z]:\\\\[^']*\\\\$base\\\\|<work>/|g")
 run() {
     printf '$ acrux %s\n' "$*"
     "$acrux" "$@" 2>&1 | tr -d '\r' | sed -E "${masks[@]}"
