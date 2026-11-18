@@ -11,7 +11,9 @@
 #   podman run --rm -v .:/repo:ro,Z -v <debs>:/debs:ro,Z debian:13 /repo/installer/deb/test-deb.sh /debs
 set -uo pipefail
 
-debs=${1:?folder with the .deb files}
+# absolute: apt reads "debs/acrux_….deb" as package "debs" from release
+# "acrux_….deb"; only a path starting with / or ./ is a file to it
+debs=$(cd "${1:?folder with the .deb files}" && pwd)
 here=$(cd "$(dirname "$0")/../.." && pwd)
 export DEBIAN_FRONTEND=noninteractive
 . /etc/os-release
