@@ -20,8 +20,8 @@ if [[ ! -x $here/Acrux ]]; then
     exit 1
 fi
 
-# the formats installer/acrux.iss registers; installer/rpm/acrux.spec writes
-# the same list into its own acrux.desktop
+# the formats installer/acrux.iss registers; installer/rpm/acrux.spec and
+# installer/deb/build-deb.sh write the same list into their acrux.desktop
 types=(application/vnd.apache.parquet text/csv
     application/vnd.openxmlformats-officedocument.spreadsheetml.sheet application/vnd.sqlite3)
 declare -A before   # who opens each type now, before Acrux is in the list

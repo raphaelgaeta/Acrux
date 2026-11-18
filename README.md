@@ -47,6 +47,19 @@ The latest build is on the [Releases](https://github.com/raphaelgaeta/Acrux/rele
   a cloud server): extract it and put the `acrux-cli` folder on your `PATH`;
   no .NET needed.
 
+On **Debian and Ubuntu**, the release also has `.deb` packages, installed for
+the whole system with a menu entry and **Open with**; apt brings what they
+need:
+
+```
+sudo apt install ./acrux_X.Y.Z_amd64.deb ./acrux-desktop_X.Y.Z_amd64.deb
+```
+
+`acrux` is the command line and `acrux-desktop` the desktop app. On 64-bit
+ARM there's the command line only, `acrux_X.Y.Z_arm64.deb`, for Debian 13,
+Ubuntu 24.04 and later. They're tested on Debian 12 and 13 and Ubuntu 22.04
+and 24.04; to update, install the next release's files the same way.
+
 On **Fedora** (43 and later, Intel/AMD or 64-bit ARM), install from
 [Copr](https://copr.fedorainfracloud.org/coprs/raphaelgaeta/Acrux/), Fedora's
 community package service, and `dnf` keeps it updated:
