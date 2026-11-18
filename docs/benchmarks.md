@@ -297,9 +297,10 @@ Defender also reads the file for the first time.
   second, with the window answering, the rows counted in the status bar and
   the first screen loading meanwhile. Opening the file took about 9 s in a Windows 11
   virtual machine with 8 cores, on the laptop. On 2026-11-16 the desktop
-  app moved to Avalonia, with a grid that keeps nothing per row: its
-  prototype opened the same file in about a second in that virtual
-  machine. The notebook hasn't been timed with the app.
+  app moved to Avalonia, with a grid that keeps nothing per row: in that
+  virtual machine, it shows the same file's first screen 0.9 s after Open
+  (recorded with v0.3.0 on 2026-11-17). The notebook hasn't been timed with
+  the app.
 
 The table comes from `bench/results/laptop-2026-11-12T0327Z.json` through
 `bench/windows/summary.py`.
