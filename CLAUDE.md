@@ -382,15 +382,20 @@ comando, a saída e o tempo são de verdade, e só a digitação é encenada. Os
 da janela são gravações do Windows re-temporizadas pelo `edit_gif.py`, que
 marca cada trecho acelerado; a espera do próprio app nunca é acelerada.
 Trecho cortado também leva selo (`edit_gif.py`, `a-b:cut`). O
-`open_grid.gif` do topo é a gravação do dono na VM (build `b8e1d23`,
-2026-11-12): abrir o 5M × 700, a contagem das linhas em tempo real e um
-filtro de cabeçalho. Os 16 s em que o painel de Widgets do Windows ficou
-aberto (manchetes de notícia) saíram com selo. **Gravação de tela para o
-README: sem Widgets, notificação ou outro app na área gravada**, e a ação
-no canto esquerdo da janela, que é o que cabe legível em 900 px. **O
-`open_grid.gif` e o `script_terminal.gif` ainda são do app WinForms**: a
-regravação com o app no Avalonia é da fase 6, e a legenda do README diz que
-a gravação é de antes da troca.
+`open_grid.gif` do topo é a gravação do dono na VM (build `8de5db3`, o
+v0.3.0, 2026-11-17): abrir o 5M × 700 com o app no Avalonia, 0,9 s do
+clique em Open à primeira tela inteira. O GIF anterior, do WinForms (build
+`b8e1d23`), levava 8,3 s na mesma etapa, na mesma VM, e terminava num
+filtro de cabeçalho; o vídeo novo mostra só a abertura. O filtro voltou no
+`header_filter.gif`, e o `script_terminal.gif` (três passos encadeados,
+"Undo step" e "Restore file") saiu de outra gravação do dono na mesma VM e
+no mesmo dia, com a janela em 1280×800; os comandos estão no
+`docs/demo/README.md`. **Gravação de tela
+para o README: sem Widgets, notificação ou outro app na área gravada**, e a
+ação no canto esquerdo da janela, que é o que cabe legível em 900 px. Com o
+terminal C# aberto, ele ocupa os 300 px de baixo da janela: grave com a
+janela no tamanho inicial (1280×800), não maximizada, para o recorte pegar a
+grade e o terminal. Nenhum GIF do README é mais do app WinForms.
 O `messy_csv.gif` põe o pandas ao lado do
 Acrux, num CSV como o Excel em português salva; desenho do dono. Ele só é
 justo se três coisas continuarem valendo:
@@ -806,7 +811,8 @@ CPU, e a emulação não limita a velocidade de cada núcleo. **A primeira tela
 do benchmark são os dados, lidos pelo Core, não a janela:** no notebook, a
 janela do app WinForms ficou 47 s branca enquanto o `DataGridView` montava
 as linhas (~9 s na VM depois do PR #24). A grade do Avalonia não monta
-linhas: o protótipo abriu o arquivo em ~1 s na VM. O notebook não foi medido
+linhas: o v0.3.0 mostra a primeira tela 0,9 s depois do Open na VM
+(gravação do dono, 2026-11-17, o `open_grid.gif`). O notebook não foi medido
 com ela, e o texto público diz isso. No Windows: o
 PowerShell 5.1 grava o JSON com BOM (`utf-8-sig`); o pico é o
 `PeakPagedMemorySize64` (o commit) amostrado; e uma rodada só é fria para

@@ -17,10 +17,10 @@ Linux that never loads the data it isn't showing, and a command line for a
 quick look from any terminal.
 
 <p align="center">
-  <img src="assets/open_grid.gif" width="49%" alt="The desktop app opening the 5-million-row, 700-column parquet, counting the rows in the status bar in real time, then filtering a header down to 950 rows">
+  <img src="assets/open_grid.gif" width="49%" alt="The desktop app opening the 5-million-row, 700-column parquet: the whole first screen of columns 0.9 seconds after Open">
   <img src="assets/cli.gif" width="49%" alt="The acrux command line on the same parquet: row count, schema, a column, the first rows and a time filter">
 </p>
-<p align="center"><sub>The same 9 GB file, 700 columns × 5 million rows: the desktop app on Windows, recorded before it moved to the grid described below · the command line in a terminal (click either to enlarge)</sub></p>
+<p align="center"><sub>The same 9 GB file, 700 columns × 5 million rows: the desktop app on Windows, the first screen 0.9 s after Open · the command line in a terminal (click either to enlarge)</sub></p>
 
 ## Download
 
@@ -190,10 +190,10 @@ nothing downstream can tell.
   ones you don't want to see. Height is the limit for now: each column on
   screen is held whole, so with 100 million rows the first screen needs
   10 to 12 GB ([benchmarks](docs/benchmarks.md#what-the-tall-files-first-screen-needs)).
-  Height costs no setup time: the grid keeps nothing per row. In the
-  prototype that measured it, it opened the 5-million-row test file in about
-  a second in a Windows 11 virtual machine, where the previous Windows grid
-  took about 9.
+  Height costs no setup time: the grid keeps nothing per row. In a Windows 11
+  virtual machine, the 5-million-row test file shows its whole first screen
+  0.9 s after Open (the recording at the top), where the previous Windows
+  grid took about 9 s.
 - **Read it like a spreadsheet.** Row numbers down the side, a band on the
   current row and column to follow a row across hundreds of columns, and a
   value bar above the grid with the current cell whole, as Excel's formula
@@ -202,6 +202,9 @@ nothing downstream can tell.
 - **Filter like Excel.** Every header has a filter button: the distinct
   values drop down (blanks included), you check what you want, and the
   button turns into a funnel. Filters compose across columns.
+
+  ![A header filter on the 5-million-row file: false and the blanks checked, 2,545,975 rows in 0.2 seconds](assets/header_filter.gif)
+
 - **The grid never bends the data to fit the screen.** A missing value shows
   as a muted *null*, never as an empty string. A number too wide for its
   column shows `###`, as in Excel, never cut-off digits that read as another
@@ -230,7 +233,7 @@ nothing downstream can tell.
   as you scroll, like the file, so a filter over all 700 columns still fits
   in memory; an optional 1M-row cap keeps results bounded.
 
-  ![Chaining Polars queries in the C# terminal](assets/script_terminal.gif)
+  ![The C# terminal on the 700-column file: a filter, a group-by and a sort, chained, then undo and restore](assets/script_terminal.gif)
 
 ## The command line
 
@@ -345,9 +348,9 @@ reboot). DuckDB took 0.8 s and 656 MB for the first rows, and was faster at
 the 10 newest rows, 1.2 s against 2.2 s. The notebook also showed what the
 benchmark misses, since it times the data and not the window: the window
 of the previous, Windows-only app stayed blank for 47 s while its grid set
-up the 5 million rows. The current grid keeps nothing per row: its
-prototype opened the file in about a second in a Windows 11 virtual
-machine. The notebook hasn't been timed with it.
+up the 5 million rows. The current grid keeps nothing per row: in a
+Windows 11 virtual machine it shows the file's first screen 0.9 s after
+Open. The notebook hasn't been timed with it.
 [All the numbers, the method, and where Acrux loses](docs/benchmarks.md).
 
 ## Building
