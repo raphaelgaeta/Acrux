@@ -260,7 +260,12 @@ Fedora: quem usa Fedora instala com `dnf copr enable` e `dnf install`.
 - **a versão:** o `Makefile` do Copr usa o `VERSION=` dado, a tag em que o
   Copr compilou, ou, compilando a `master`, o último release **publicado**
   no GitHub (rascunho não conta). Ele baixa os três `.tar.gz` do release,
-  confere pelo `SHA256SUMS` e monta o pacote fonte, de ~281 MB. Mudou só o
+  confere pelo `SHA256SUMS` e monta o pacote fonte, de ~281 MB. **A versão
+  vai dentro do `.spec` do pacote fonte** (um `%global acrux_version` no
+  topo de uma cópia): o Copr importa esse `.spec` e roda o `rpmbuild` de
+  novo, sem o `--define` do `Makefile`. O primeiro build no Copr
+  (2026-11-18) falhou nos oito chroots por isso, e o teste no laptop não
+  pegou porque passava o `--define` também no rebuild. Mudou só o
   empacotamento, sem release novo? Suba o `Release:` do `.spec` (`2%{?dist}`);
 - **testado em 2026-11-17** com o v0.3.1, no laptop: o pacote fonte pelo
   `Makefile`; os RPMs pelo `rpmbuild --rebuild` (o `%check` roda o CLI, o
@@ -270,9 +275,10 @@ Fedora: quem usa Fedora instala com `dnf copr enable` e `dnf install`.
   `--target aarch64 --nocheck` (o `%check` não roda binário arm64 no x86_64)
   e testado num contêiner Fedora 44 arm64 pelo qemu: smoke test inteiro em
   2,5 min;
-- **para testar de novo:** `make -f .copr/Makefile srpm outdir=<pasta>
-  VERSION=X.Y.Z`, depois `rpmbuild --rebuild --define "_topdir <pasta>"
-  --define "acrux_version X.Y.Z" <src.rpm>`, e o contêiner
+- **para testar de novo, como o Copr faz:** `make -f .copr/Makefile srpm
+  outdir=<pasta> VERSION=X.Y.Z`, depois `rpmbuild --rebuild --define
+  "_topdir <pasta>" <src.rpm>`, **sem `--define` da versão** (com ele, o
+  teste esconde um `.spec` que não se sustenta sozinho), e o contêiner
   (`podman run --rm -v <RPMS>:/rpms:ro,Z registry.fedoraproject.org/fedora:44`,
   com `dnf install /rpms/*.rpm sqlite tzdata diffutils`). Nunca instale o RPM
   no laptop: o `~/.local` e o menu dele são da Yukidama.

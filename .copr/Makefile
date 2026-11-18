@@ -11,9 +11,12 @@
 # - the tag, when the committish is a release tag (v0.3.1);
 # - otherwise the latest published release on GitHub (drafts don't count),
 #   so Copr can build from master with nothing to edit at each release.
-# To try it locally:
+# The version goes into the spec itself (a %global line on top of a copy):
+# Copr imports the source RPM's spec and runs rpmbuild on it again, with no
+# --define from here. To try it locally, the way Copr will:
 #
 #   make -f .copr/Makefile srpm outdir=/tmp/srpm VERSION=0.3.1
+#   rpmbuild --rebuild /tmp/srpm/acrux-0.3.1-1.*.src.rpm    (no --define)
 
 top := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))..)
 specfile := $(top)/installer/rpm/acrux.spec
@@ -37,7 +40,8 @@ srpm:
 		|| { echo "no release version (got '$$version'): pass VERSION=X.Y.Z" >&2; exit 1; }; \
 	echo "building the source RPM of Acrux $$version"; \
 	src=$$(mktemp -d); \
-	spectool -g -C "$$src" --define "acrux_version $$version" '$(specfile)'; \
+	{ printf '%%global acrux_version %s\n' "$$version"; cat '$(specfile)'; } > "$$src/acrux.spec"; \
+	spectool -g -C "$$src" "$$src/acrux.spec"; \
 	curl -fsSL -o "$$src/SHA256SUMS" "https://github.com/raphaelgaeta/Acrux/releases/download/v$$version/SHA256SUMS"; \
 	files="acrux-cli-v$$version-linux-x64.tar.gz acrux-cli-v$$version-linux-arm64.tar.gz Acrux-v$$version-linux-x64.tar.gz"; \
 	for f in $$files; do \
@@ -45,8 +49,7 @@ srpm:
 	done; \
 	(cd "$$src" && for f in $$files; do grep " $$f$$" SHA256SUMS; done | sha256sum -c -); \
 	mkdir -p '$(outdir)'; \
-	rpmbuild -bs --define "_sourcedir $$src" --define "_srcrpmdir $(outdir)" \
-		--define "acrux_version $$version" '$(specfile)'; \
+	rpmbuild -bs --define "_sourcedir $$src" --define "_srcrpmdir $(outdir)" "$$src/acrux.spec"; \
 	rm -rf "$$src"
 
 .PHONY: srpm
