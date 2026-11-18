@@ -47,6 +47,18 @@ The latest build is on the [Releases](https://github.com/raphaelgaeta/Acrux/rele
   a cloud server): extract it and put the `acrux-cli` folder on your `PATH`;
   no .NET needed.
 
+On **Fedora** (43 and later, Intel/AMD or 64-bit ARM), install from
+[Copr](https://copr.fedorainfracloud.org/coprs/raphaelgaeta/Acrux/), Fedora's
+community package service, and `dnf` keeps it updated:
+
+```
+sudo dnf copr enable raphaelgaeta/Acrux
+sudo dnf install acrux acrux-desktop    # the command line and the desktop app
+```
+
+`acrux-desktop` is for Intel and AMD, like the Linux app above; on 64-bit ARM,
+install `acrux` alone. The packages are the release's own files, repackaged.
+
 The x64 builds, Windows and Linux, need a CPU with AVX2: Intel since 2013, AMD
 since 2015, though some Celeron and Pentium models lack it. The Linux arm64
 build needs glibc 2.39 or newer (Ubuntu 24.04, Debian 13, Fedora 40 and

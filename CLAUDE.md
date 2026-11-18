@@ -111,6 +111,10 @@ Pelo GitHub Actions (`.github/workflows/release.yml`, desenho aprovado em
    a maioria dos desktops ARM.
 3. Ele cria um release **rascunho**, com o `SHA256SUMS` e as notas (texto
    fixo de instalação + as geradas pelo GitHub). O dono confere e publica.
+4. Publicado o release, o dono roda o **Rebuild** do pacote `acrux` no Copr
+   (ver "O RPM pelo Copr", abaixo). Por enquanto é à mão: o `Makefile` pega o
+   último release publicado, então basta o clique. O rascunho não conta,
+   então rodar antes de publicar remonta o release anterior.
 
 **Os avisos de terceiros** (`scripts/third_party_notices.py`, desenho aprovado
 em 2026-11-17). Antes, os pacotes levavam só a `LICENSE` do Acrux, sem o texto
@@ -230,6 +234,20 @@ equivalente do setup por usuário do Windows, sem root:
 **O RPM pelo Copr** (`installer/rpm/acrux.spec` e `.copr/Makefile`, desenho
 aprovado em 2026-11-17). O Copr é o serviço de pacotes da comunidade do
 Fedora: quem usa Fedora instala com `dnf copr enable` e `dnf install`.
+- **O projeto:** `raphaelgaeta/Acrux`
+  (copr.fedorainfracloud.org/coprs/raphaelgaeta/Acrux), criado pelo dono em
+  2026-11-17. Chroots: `fedora-43`, `-44`, `-45` e `-rawhide`, em `x86_64` e
+  `aarch64`, com "Follow Fedora branching" ligado (o Fedora novo entra
+  sozinho). O resto ficou no padrão: sem rede no build, sem AppStream, sem
+  `fedora-review`. Ficaram de fora: o `fedora-eln`, o EPEL e os derivados do
+  RHEL (no RHEL 9, a glibc 2.34 não roda o CLI arm64; não testados) e o
+  `ppc64le`, o `s390x` e o `riscv64` (sem nativo do Polars). O pacote
+  `acrux` é SCM: o clone do GitHub, committish vazio (a `master`), o spec
+  `installer/rpm/acrux.spec` e o método `make srpm`. O primeiro build que
+  passou nos oito chroots foi o 11346404 (2026-11-18, v0.3.1), e a
+  instalação pelo `dnf copr enable` foi conferida num contêiner Fedora 44 x86_64
+  (os dois pacotes, smoke test e app no Xvfb) e num arm64 pelo qemu (o CLI,
+  smoke test);
 - **Reempacota o release, não recompila:** o RPM leva os `.tar.gz` do
   release, os mesmos arquivos que a CI testou e o `SHA256SUMS` confere. O
   Copr não exige as regras de empacotamento do Fedora (binário pronto pode),
