@@ -236,9 +236,12 @@ roda o script depois de cada `dotnet publish` em pasta, sem rede:
     só se vê na VM, com o dono.
 - **O smoke test no Windows** (medido num experimento em 2026-11-18): das
   354 linhas esperadas, só a pasta temporária na mensagem "Could not find
-  file" saía diferente, em formato Windows (`C:\…\Temp\tmp.x\arquivo`); o
-  `run.sh` a mascara pelo `cygpath -w`. Ele também pede três coisas do
-  runner:
+  file" saía diferente, em formato Windows (`C:\…\Temp\tmp.x\arquivo`). O
+  `run.sh` a reconhece pelo nome da própria pasta (`tmp.xxxx`, único a cada
+  execução), depois de qualquer caminho com letra de unidade. O `cygpath -w`
+  não serviu: o `TEMP` do runner é um caminho curto do Windows (`RUNNER~1`),
+  e a mensagem do .NET traz o nome longo (`runneradmin`). O smoke test
+  também pede três coisas do runner:
   - **o fuso:** o .NET no Windows ignora o `TZ`, então a CI muda o fuso do
     sistema (`tzutil //s "E. South America Standard Time"`; o `//` porque o
     Git Bash trocaria o `/s` por um caminho);
