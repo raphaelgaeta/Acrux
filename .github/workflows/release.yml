@@ -63,7 +63,7 @@ jobs:
         run: |
           dotnet publish src/Acrux.Cli/Acrux.Cli.csproj -c Release -r ${{ matrix.rid }} \
             --self-contained true -p:Version=${{ needs.version.outputs.version }} -o out/acrux-cli
-          python3 scripts/third_party_notices.py out/acrux-cli
+          python3 scripts/third_party_notices.py out/acrux-cli --check-spec installer/rpm/acrux.spec
           ln -s Acrux.Cli out/acrux-cli/acrux
           cp LICENSE out/acrux-cli/
           out/acrux-cli/acrux version
@@ -76,7 +76,7 @@ jobs:
           dotnet publish src/Acrux.Avalonia/Acrux.Avalonia.csproj -c Release -r linux-x64 \
             --self-contained true -p:Version=${{ needs.version.outputs.version }} -o out/acrux
           find out/acrux -name '*.pdb' -delete
-          python3 scripts/third_party_notices.py out/acrux
+          python3 scripts/third_party_notices.py out/acrux --check-spec installer/rpm/acrux.spec
           mkdir -p out/acrux/share
           cp installer/linux/install.sh installer/linux/uninstall.sh out/acrux/
           cp installer/linux/acrux-parquet.xml out/acrux/share/

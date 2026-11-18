@@ -202,11 +202,12 @@ roda o script depois de cada `dotnet publish` em pasta, sem rede:
   dono, 2026-11-08).
 
 **O pacote do Linux** (`installer/linux/`, desenho aprovado em 2026-11-15:
-`.tar.gz` com `install.sh`; o RPM pelo COPR vem depois da troca). É o
+`.tar.gz` com `install.sh`; o RPM está mais abaixo). É o
 equivalente do setup por usuário do Windows, sem root:
 - **onde:** o app em `~/.local/share/acrux` (o `XDG_DATA_HOME`), o
   `acrux.desktop` (menu e "Abrir com" para parquet, CSV, xlsx e SQLite: os
-  tipos MIME das extensões do `.iss`; mudou uma lista, mude as outras), o
+  tipos MIME das extensões do `.iss`, os mesmos do `.desktop` do RPM; mudou
+  uma lista, mude as outras), o
   ícone SVG da marca e o `acrux-parquet.xml`, que declara o
   `application/vnd.apache.parquet` (IANA, 2024; o `shared-mime-info` do
   Fedora 44 não o conhece) pela extensão e pela marca `PAR1`;
@@ -225,6 +226,56 @@ equivalente do setup por usuário do Windows, sem root:
   temporária, nunca no `~` do laptop, onde o `acrux.desktop` é da Yukidama.
   Conferido: o `desktop-file-validate`, o GIO reconhecendo o parquet com e
   sem extensão, a remoção limpa. A CI repete isso a cada PR.
+
+**O RPM pelo Copr** (`installer/rpm/acrux.spec` e `.copr/Makefile`, desenho
+aprovado em 2026-11-17). O Copr é o serviço de pacotes da comunidade do
+Fedora: quem usa Fedora instala com `dnf copr enable` e `dnf install`.
+- **Reempacota o release, não recompila:** o RPM leva os `.tar.gz` do
+  release, os mesmos arquivos que a CI testou e o `SHA256SUMS` confere. O
+  Copr não exige as regras de empacotamento do Fedora (binário pronto pode),
+  mas exige que todo o material esteja sob licença da lista do Fedora (ver
+  "Os avisos de terceiros" e a licença do logo, em "Identidade visual").
+  Compilar no Copr com o .NET do Fedora (`dotnet-sdk-10.0`) daria um pacote
+  menor, mas seria um terceiro build que ninguém testou, e o NuGet pediria
+  rede no build;
+- **dois pacotes de um `.spec`:** o `acrux` (o CLI, em x86_64 e aarch64:
+  todo Fedora desde o 40 tem a glibc 2.39 que o nativo arm64 do Polars pede)
+  em `/usr/lib64/acrux-cli`, com `/usr/bin/acrux`; e o `acrux-desktop` (o
+  app, só x86_64, como no release) em `/usr/lib64/acrux`, com
+  `/usr/bin/acrux-desktop`, o `acrux.desktop`, o ícone e o tipo parquet. O
+  `.desktop` tem o mesmo nome do `install.sh`: a instalação por usuário em
+  `~/.local` passa à frente e o menu não mostra dois. Os dois pacotes são
+  self-contained, sem depender do .NET do Fedora;
+- **o que o `.spec` precisa dizer à mão:** nada de símbolos de depuração
+  nem de `strip` (binários prontos), e sem os links de build-id, que
+  colidiriam entre o CLI e o app, porque os dois levam as mesmas bibliotecas
+  nativas. As bibliotecas embutidas não são anunciadas ao sistema, e o RPM
+  não pede o `liblttng-ust` (o rastreamento opcional do .NET). O que o
+  `rpm` não vê, porque é carregado em tempo de execução, entra como
+  `Requires`: o `libicu` do .NET e as bibliotecas do X11 que o Avalonia
+  carrega;
+- **o `License:`** lista as licenças de terceiros que o
+  `third_party_notices.py --spdx` imprime, mais a MIT do Acrux e, no app, a
+  CC BY-ND 4.0 do logo. A CI confere (`--check-spec`) e para se divergir;
+- **a versão:** o `Makefile` do Copr usa o `VERSION=` dado, a tag em que o
+  Copr compilou, ou, compilando a `master`, o último release **publicado**
+  no GitHub (rascunho não conta). Ele baixa os três `.tar.gz` do release,
+  confere pelo `SHA256SUMS` e monta o pacote fonte, de ~281 MB. Mudou só o
+  empacotamento, sem release novo? Suba o `Release:` do `.spec` (`2%{?dist}`);
+- **testado em 2026-11-17** com o v0.3.1, no laptop: o pacote fonte pelo
+  `Makefile`; os RPMs pelo `rpmbuild --rebuild` (o `%check` roda o CLI, o
+  nativo do Polars incluído); e, num contêiner Fedora 44 limpo, o `dnf
+  install` dos dois RPMs, o smoke test inteiro contra o `/usr/bin/acrux` e o
+  app aberto 10 s num Xvfb, sem erro. O aarch64 foi montado com
+  `--target aarch64 --nocheck` (o `%check` não roda binário arm64 no x86_64)
+  e testado num contêiner Fedora 44 arm64 pelo qemu: smoke test inteiro em
+  2,5 min;
+- **para testar de novo:** `make -f .copr/Makefile srpm outdir=<pasta>
+  VERSION=X.Y.Z`, depois `rpmbuild --rebuild --define "_topdir <pasta>"
+  --define "acrux_version X.Y.Z" <src.rpm>`, e o contêiner
+  (`podman run --rm -v <RPMS>:/rpms:ro,Z registry.fedoraproject.org/fedora:44`,
+  com `dnf install /rpms/*.rpm sqlite tzdata diffutils`). Nunca instale o RPM
+  no laptop: o `~/.local` e o menu dele são da Yukidama.
 
 Em PR, o mesmo workflow só compila e testa, sem release. A versão vem da tag
 (`-p:Version=0.1.0`); fora de release vale `0.0.0-dev`
@@ -247,7 +298,7 @@ SmartScreen. Os caminhos, conferidos em 2026-11-12:
   também).
 
 **Mudou o que o app transmite? Atualize a seção "Privacy" do README.** Winget
-fica para quando houver usuários; o RPM, pelo COPR, para depois da troca. As Actions estão nas versões
+fica para quando houver usuários. As Actions estão nas versões
 conferidas em 2026-11-08 (checkout v7, setup-dotnet v6, upload-artifact v7,
 download-artifact v8, todas em Node 24).
 
@@ -929,6 +980,7 @@ o `Describe` lê a mensagem na cultura invariante.
 | `src/Acrux.Avalonia/Grid/Palette.cs` | As cores da grade no claro e no escuro (a marca onde se lê) e, no alto contraste, as do sistema |
 | `installer/acrux.iss` | O instalador do Windows (Inno Setup), por usuário, com o "Abrir com" |
 | `installer/linux/install.sh` | A instalação por usuário no Linux, com o `uninstall.sh`, o `.desktop` e o tipo parquet (`acrux-parquet.xml`) |
+| `installer/rpm/acrux.spec` | O RPM do Copr: reempacota o release em `acrux` (CLI) e `acrux-desktop` (app); o `.copr/Makefile` baixa o release e monta o pacote fonte |
 | `src/Acrux.Cli/Program.cs` | CLI: rota de leitura escolhida pelo formato detectado; `head` usa o caminho da grade |
 
 ### Princípios de design (não violar)
