@@ -104,7 +104,10 @@ Pelo GitHub Actions (`.github/workflows/release.yml`, desenho aprovado em
    com um link `acrux` dentro), e, só no x64, o app de janela
    (`Acrux-v0.1.0-linux-x64.tar.gz`, ver "O pacote do Linux"), testado numa
    instalação descartável; no Windows, o instalador (`Acrux-v0.1.0-setup.exe`)
-   e o app single-file (`Acrux-v0.1.0-win-x64.zip`). Todos os pacotes levam a
+   e o app single-file (`Acrux-v0.1.0-win-x64.zip`). Dos mesmos arquivos do
+   Linux saem os `.deb` (`acrux_0.1.0_amd64.deb`, `…_arm64.deb` e
+   `acrux-desktop_0.1.0_amd64.deb`), instalados e testados em contêineres do
+   Debian e do Ubuntu (ver "Os .deb"). Todos os pacotes levam a
    `LICENSE` e os avisos de terceiros (abaixo); os do app, também o `NOTICE`
    da arte. O app no arm64 fica de fora: não foi
    testado, e o nativo arm64 do Polars pede glibc 2.39, o que deixa de fora
@@ -210,8 +213,8 @@ roda o script depois de cada `dotnet publish` em pasta, sem rede:
 equivalente do setup por usuário do Windows, sem root:
 - **onde:** o app em `~/.local/share/acrux` (o `XDG_DATA_HOME`), o
   `acrux.desktop` (menu e "Abrir com" para parquet, CSV, xlsx e SQLite: os
-  tipos MIME das extensões do `.iss`, os mesmos do `.desktop` do RPM; mudou
-  uma lista, mude as outras), o
+  tipos MIME das extensões do `.iss`, os mesmos do `.desktop` do RPM e do
+  `.deb`; mudou uma lista, mude as outras), o
   ícone SVG da marca e o `acrux-parquet.xml`, que declara o
   `application/vnd.apache.parquet` (IANA, 2024; o `shared-mime-info` do
   Fedora 44 não o conhece) pela extensão e pela marca `PAR1`;
@@ -300,6 +303,44 @@ Fedora: quem usa Fedora instala com `dnf copr enable` e `dnf install`.
   (`podman run --rm -v <RPMS>:/rpms:ro,Z registry.fedoraproject.org/fedora:44`,
   com `dnf install /rpms/*.rpm sqlite tzdata diffutils`). Nunca instale o RPM
   no laptop: o `~/.local` e o menu dele são da Yukidama.
+
+**Os .deb** (`installer/deb/build-deb.sh` e `test-deb.sh`, desenho aprovado
+em 2026-11-18). O Debian oficial não serve: a política dele exige que tudo
+possa ser modificado (a CC BY-ND do logo, embutido no app, iria para o
+non-free) e compila tudo do código-fonte, sem rede, com dependências que já
+estejam no Debian, e o .NET não está lá (conferido no packages.debian.org;
+o Ubuntu tem o `dotnet10`). Por isso, a mesma ideia do RPM, sem
+repositório:
+- **o que sai:** o `acrux` (o CLI, amd64 e arm64) em `/usr/lib/acrux-cli`,
+  com `/usr/bin/acrux`; o `acrux-desktop` (o app, só amd64) em
+  `/usr/lib/acrux`, com `/usr/bin/acrux-desktop`, o `acrux.desktop`, o ícone
+  e o tipo parquet. As licenças em `/usr/share/doc/<pacote>/`, com o
+  `copyright` que o Debian exige. Comprimidos com xz: o `dpkg-deb` do Ubuntu
+  usa zstd, que o Debian 11 não abre. Os gatilhos do `dpkg`
+  (`shared-mime-info`, `desktop-file-utils`, o cache de ícones) atualizam o
+  sistema sozinhos, sem scripts de instalação;
+- **o `Depends`:** a glibc que o nativo do Polars pede (2.28 no amd64, 2.39
+  no arm64: no Debian 12 arm64, o `apt` recusa com "acrux : Depends: libc6
+  (>= 2.39) but 2.36-9 is to be installed", em vez do erro do Polars na
+  primeira consulta); o ICU do .NET, cujo nome muda a cada versão do
+  sistema (`libicu70` no Ubuntu 22.04, 72 no Debian 12, 74 no Ubuntu 24.04,
+  76 no Debian 13), numa lista de alternativas de 70 a 80 (sistema novo com
+  ICU mais novo: acrescente o nome); e, no app, o fontconfig e as
+  bibliotecas do X11 que o Avalonia carrega em tempo de execução;
+- **a versão:** a do release; a de CI (`0.0.0-ci.42`) vira `0.0.0~ci.42`,
+  porque com o hífen o `dpkg` leria `ci.42` como revisão;
+- **testado na CI, a cada PR:** o job `deb` instala os `.deb` com o `apt`
+  em contêineres limpos do Debian 12 e 13 e do Ubuntu 22.04 e 24.04 (amd64,
+  com o smoke test e o app aberto 10 s num Xvfb) e do Debian 13 e do Ubuntu
+  24.04 (arm64, smoke test), e confere que o Debian 12 arm64 recusa. O
+  release só sai com todos verdes. O mesmo teste roda no laptop:
+  `podman run --rm -v .:/repo:ro,Z -v <debs>:/debs:ro,Z debian:13
+  /repo/installer/deb/test-deb.sh /debs` (conferido em 2026-11-18 com o
+  v0.3.1, nos seis sistemas, o arm64 pelo qemu);
+- **atualizar:** não há repositório, então o `apt upgrade` não acha versão
+  nova; a pessoa instala os arquivos do release seguinte. Um repositório
+  APT (o OBS, build.opensuse.org, é o equivalente do Copr para o Debian e o
+  Ubuntu) fica para quando alguém pedir.
 
 Em PR, o mesmo workflow só compila e testa, sem release. A versão vem da tag
 (`-p:Version=0.1.0`); fora de release vale `0.0.0-dev`
@@ -1005,6 +1046,7 @@ o `Describe` lê a mensagem na cultura invariante.
 | `installer/acrux.iss` | O instalador do Windows (Inno Setup), por usuário, com o "Abrir com" |
 | `installer/linux/install.sh` | A instalação por usuário no Linux, com o `uninstall.sh`, o `.desktop` e o tipo parquet (`acrux-parquet.xml`) |
 | `installer/rpm/acrux.spec` | O RPM do Copr: reempacota o release em `acrux` (CLI) e `acrux-desktop` (app); o `.copr/Makefile` baixa o release e monta o pacote fonte |
+| `installer/deb/build-deb.sh` | Os `.deb` do Debian e do Ubuntu, dos mesmos arquivos do release; o `test-deb.sh` os instala e testa num contêiner |
 | `src/Acrux.Cli/Program.cs` | CLI: rota de leitura escolhida pelo formato detectado; `head` usa o caminho da grade |
 
 ### Princípios de design (não violar)

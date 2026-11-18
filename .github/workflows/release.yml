@@ -68,6 +68,8 @@ jobs:
           cp LICENSE out/acrux-cli/
           out/acrux-cli/acrux version
           tar -czf acrux-cli-${{ needs.version.outputs.label }}-${{ matrix.rid }}.tar.gz -C out acrux-cli
+          installer/deb/build-deb.sh acrux out/acrux-cli ${{ needs.version.outputs.version }} \
+            ${{ matrix.rid == 'linux-x64' && 'amd64' || 'arm64' }} .
       # x64 only: the desktop app on 64-bit ARM is untested, and Polars' arm64
       # native needs glibc 2.39, which leaves most ARM desktops out
       - name: "Desktop app: a folder with install.sh (self-contained)"
@@ -84,6 +86,7 @@ jobs:
           cp LICENSE out/acrux/
           cp assets/brand/NOTICE.md out/acrux/NOTICE-logo.md
           tar -czf Acrux-${{ needs.version.outputs.label }}-linux-x64.tar.gz -C out acrux
+          installer/deb/build-deb.sh acrux-desktop out/acrux ${{ needs.version.outputs.version }} amd64 .
       - name: "Desktop app: install and uninstall in a throwaway home"
         if: matrix.rid == 'linux-x64'
         run: |
@@ -105,7 +108,35 @@ jobs:
           path: |
             acrux-cli-*.tar.gz
             Acrux-*-linux-x64.tar.gz
+            *.deb
           retention-days: 7
+
+  # each .deb installed with apt in a clean Debian or Ubuntu, then the smoke
+  # test and, on amd64, the desktop app on Xvfb; Debian 12 must refuse the
+  # arm64 build, whose Polars native needs glibc 2.39
+  deb:
+    name: deb (${{ matrix.image }}, ${{ matrix.artifact }})
+    needs: linux
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: "debian:12", runner: ubuntu-latest, artifact: linux-x64 }
+          - { image: "debian:13", runner: ubuntu-latest, artifact: linux-x64 }
+          - { image: "ubuntu:22.04", runner: ubuntu-latest, artifact: linux-x64 }
+          - { image: "ubuntu:24.04", runner: ubuntu-latest, artifact: linux-x64 }
+          - { image: "debian:13", runner: ubuntu-24.04-arm, artifact: linux-arm64 }
+          - { image: "ubuntu:24.04", runner: ubuntu-24.04-arm, artifact: linux-arm64 }
+          - { image: "debian:12", runner: ubuntu-24.04-arm, artifact: linux-arm64, expect: --expect-refused }
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.artifact }}
+          path: debs
+      - run: bash installer/deb/test-deb.sh debs ${{ matrix.expect }}
 
   windows:
     needs: version
@@ -157,7 +188,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [version, linux, windows]
+    needs: [version, linux, deb, windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -169,7 +200,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha256sum Acrux-*-setup.exe Acrux-*.zip Acrux-*.tar.gz acrux-cli-*.tar.gz > SHA256SUMS
+          sha256sum Acrux-*-setup.exe Acrux-*.zip Acrux-*.tar.gz acrux-cli-*.tar.gz *.deb > SHA256SUMS
           cat > notes.md <<'EOF'
           **Windows app** — run `Acrux-…-setup.exe`: it installs Acrux for your user,
           without admin rights. If the Microsoft Visual C++ runtime that Acrux needs
@@ -193,6 +224,16 @@ jobs:
           already claims it (LibreOffice Calc does since 26.2: the script says how
           to switch). It needs a CPU with AVX2, like the command line below.
 
+          **Debian and Ubuntu** — `sudo apt install ./acrux_…_amd64.deb
+          ./acrux-desktop_…_amd64.deb` installs the command line (`acrux`) and the
+          desktop app (`acrux-desktop`) for the whole system, with a menu entry and
+          "Open with"; apt brings what they need. On 64-bit ARM there's the command
+          line only, `acrux_…_arm64.deb`, for Debian 13, Ubuntu 24.04 and later.
+          Tested on Debian 12 and 13 and Ubuntu 22.04 and 24.04.
+
+          **Fedora** — `sudo dnf copr enable raphaelgaeta/Acrux`, then `sudo dnf
+          install acrux acrux-desktop`.
+
           **Command line, Linux** — extract `acrux-cli-…-linux-x64.tar.gz` (Intel or
           AMD) or `acrux-cli-…-linux-arm64.tar.gz` (64-bit ARM) and put the
           `acrux-cli` folder on your `PATH` (the `acrux` link inside starts it); no
@@ -206,4 +247,4 @@ jobs:
           EOF
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
             --title "Acrux $GITHUB_REF_NAME" --notes-file notes.md --generate-notes \
-            Acrux-*-setup.exe Acrux-*.zip Acrux-*.tar.gz acrux-cli-*.tar.gz SHA256SUMS
+            Acrux-*-setup.exe Acrux-*.zip Acrux-*.tar.gz acrux-cli-*.tar.gz *.deb SHA256SUMS
